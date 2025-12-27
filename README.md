@@ -23,6 +23,10 @@ npx serve
 
 Then visit `http://localhost:8080`
 
+## Live Demo
+
+View the live site: https://nan-gogh.github.io/Metroid-Prime-4-Routing-Tool/
+
 ## Controls
 
 | Input | Action |
