@@ -178,6 +178,10 @@ class InteractiveMap {
         this.isDragging = false;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
+        // Pointer/touch state
+        this.pointers = new Map(); // pointerId -> {x,y,clientX,clientY,downTime}
+        this.pinch = null; // {startDistance, startZoom}
+        this.lastTap = 0;
         
         // Images cache
         this.images = {};
@@ -237,20 +241,65 @@ class InteractiveMap {
             this.updateResolution();
             this.render();
         });
-        
-        // Pan with mouse drag
-        this.canvas.addEventListener('mousedown', (e) => {
-            this.isDragging = true;
-            this.lastMouseX = e.clientX;
-            this.lastMouseY = e.clientY;
-            this.canvas.style.cursor = 'grabbing';
-        });
-        
-        this.canvas.addEventListener('mousemove', (e) => {
+        // Pointer events (unified for mouse + touch + pen)
+        this.canvas.addEventListener('pointerdown', (e) => {
+            this.canvas.setPointerCapture(e.pointerId);
             const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
+            const localX = e.clientX - rect.left;
+            const localY = e.clientY - rect.top;
+            this.pointers.set(e.pointerId, { x: localX, y: localY, clientX: e.clientX, clientY: e.clientY, downTime: Date.now() });
+
+            if (this.pointers.size === 1) {
+                // start single-pointer pan
+                this.isDragging = true;
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+                this.canvas.style.cursor = 'grabbing';
+            } else if (this.pointers.size === 2) {
+                // begin pinch
+                const pts = Array.from(this.pointers.values());
+                const dx = pts[0].clientX - pts[1].clientX;
+                const dy = pts[0].clientY - pts[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                this.pinch = { startDistance: dist, startZoom: this.zoom };
+                this.isDragging = false;
+            }
+        });
+
+        this.canvas.addEventListener('pointermove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const localX = e.clientX - rect.left;
+            const localY = e.clientY - rect.top;
+
+            if (this.pointers.has(e.pointerId)) {
+                const p = this.pointers.get(e.pointerId);
+                p.x = localX; p.y = localY; p.clientX = e.clientX; p.clientY = e.clientY;
+            }
+
+            if (this.pointers.size === 2 && this.pinch) {
+                // handle pinch-to-zoom
+                const pts = Array.from(this.pointers.values());
+                const dx = pts[0].clientX - pts[1].clientX;
+                const dy = pts[0].clientY - pts[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                const factor = dist / this.pinch.startDistance;
+                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.pinch.startZoom * factor));
+
+                // zoom towards midpoint
+                const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+                const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+                const worldX = (midClientX - rect.left - this.panX) / this.zoom;
+                const worldY = (midClientY - rect.top - this.panY) / this.zoom;
+
+                this.zoom = newZoom;
+                this.panX = midClientX - rect.left - worldX * this.zoom;
+                this.panY = midClientY - rect.top - worldY * this.zoom;
+
+                this.updateResolution();
+                this.render();
+                return;
+            }
+
             if (this.isDragging) {
                 this.panX += e.clientX - this.lastMouseX;
                 this.panY += e.clientY - this.lastMouseY;
@@ -258,16 +307,69 @@ class InteractiveMap {
                 this.lastMouseY = e.clientY;
                 this.render();
             } else {
-                // Check for marker hover
-                this.checkMarkerHover(mouseX, mouseY);
+                // pointer hover (or mouse move) - check markers
+                this.checkMarkerHover(localX, localY);
             }
         });
-        
-        this.canvas.addEventListener('mouseup', () => {
-            this.isDragging = false;
-            this.canvas.style.cursor = this.hoveredMarker ? 'pointer' : 'grab';
+
+        this.canvas.addEventListener('pointerup', (e) => {
+            this.canvas.releasePointerCapture && this.canvas.releasePointerCapture(e.pointerId);
+            const rect = this.canvas.getBoundingClientRect();
+            const localX = e.clientX - rect.left;
+            const localY = e.clientY - rect.top;
+
+            const p = this.pointers.get(e.pointerId);
+            const downTime = p ? p.downTime : 0;
+            const dt = Date.now() - downTime;
+            const moved = p ? (Math.hypot(p.clientX - e.clientX, p.clientY - e.clientY) > 8) : true;
+
+            this.pointers.delete(e.pointerId);
+
+            if (this.pointers.size < 2) this.pinch = null;
+
+            if (this.pointers.size === 0) {
+                // finalize drag
+                this.isDragging = false;
+                this.canvas.style.cursor = this.hoveredMarker ? 'pointer' : 'grab';
+
+                // treat short tap (no movement, short press) as click/tap
+                if (!moved && dt < 300) {
+                    const now = Date.now();
+                    if (now - this.lastTap < 300) {
+                        // double-tap -> zoom in centered
+                        const centerX = localX;
+                        const centerY = localY;
+                        const worldX = (centerX - this.panX) / this.zoom;
+                        const worldY = (centerY - this.panY) / this.zoom;
+                        this.zoom = Math.min(MAX_ZOOM, this.zoom * 1.6);
+                        this.panX = centerX - worldX * this.zoom;
+                        this.panY = centerY - worldY * this.zoom;
+                        this.updateResolution();
+                        this.render();
+                        this.lastTap = 0;
+                    } else {
+                        // single tap: check markers and show tooltip or click
+                        this.checkMarkerHover(localX, localY);
+                        if (this.hoveredMarker) {
+                            console.log('Marker tapped:', this.hoveredMarker);
+                            this.showTooltip(this.hoveredMarker, localX, localY);
+                        }
+                        this.lastTap = now;
+                    }
+                }
+            }
         });
-        
+
+        this.canvas.addEventListener('pointercancel', (e) => {
+            this.pointers.delete(e.pointerId);
+            if (this.pointers.size === 0) {
+                this.isDragging = false;
+                this.pinch = null;
+                this.canvas.style.cursor = 'grab';
+            }
+        });
+
+        // pointerleave similar to mouseleave
         this.canvas.addEventListener('mouseleave', () => {
             this.isDragging = false;
             this.canvas.style.cursor = 'grab';

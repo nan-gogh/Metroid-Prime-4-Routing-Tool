@@ -138,6 +138,7 @@ body {
 #mapCanvas {
     display: block;
     cursor: grab;
+    touch-action: none;
 }
 
 #mapCanvas:active {
