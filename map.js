@@ -680,26 +680,31 @@ async function init() {
 
     // Sidebar toggle logic
     const app = document.querySelector('.app-container');
-    const handle = document.getElementById('sidebarHandle');
+    // Support multiple possible handle IDs for backwards compatibility
+    const handle = document.getElementById('sidebarHandle') || document.getElementById('sidebarToggle');
     const SIDEBAR_KEY = 'mp4_sidebar_collapsed';
 
     function setSidebarCollapsed(collapsed, persist = true) {
         if (collapsed) {
             app.classList.add('sidebar-collapsed');
-            handle.setAttribute('aria-expanded', 'false');
+            handle && handle.setAttribute('aria-expanded', 'false');
         } else {
             app.classList.remove('sidebar-collapsed');
-            handle.setAttribute('aria-expanded', 'true');
+            handle && handle.setAttribute('aria-expanded', 'true');
         }
         if (persist) localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
         // Resize map after sidebar animation
         setTimeout(() => map.resize(), 300);
     }
 
-    handle.addEventListener('click', () => {
-        const collapsed = app.classList.contains('sidebar-collapsed');
-        setSidebarCollapsed(!collapsed);
-    });
+    if (handle) {
+        handle.addEventListener('click', () => {
+            const collapsed = app.classList.contains('sidebar-collapsed');
+            setSidebarCollapsed(!collapsed);
+        });
+    } else {
+        console.warn('Sidebar handle element not found; collapsing unavailable');
+    }
 
     // Restore saved preference; default collapsed on mobile
     const saved = localStorage.getItem(SIDEBAR_KEY);

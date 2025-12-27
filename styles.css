@@ -46,6 +46,7 @@ body {
     left: 280px;
     width: 24px;
     background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
+    background-color: #0b2236; /* fallback for clients that render default button */
     border: none;
     border-left: 1px solid #0e4a6e;
     border-right: 1px solid #0e4a6e;
@@ -56,6 +57,8 @@ body {
     justify-content: center;
     transition: left 280ms ease, background 150ms ease;
     padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
 .sidebar-handle:hover {
