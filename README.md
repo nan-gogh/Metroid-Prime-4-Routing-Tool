@@ -47,4 +47,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ## Disclaimer
 
-This is a fan-made tool for personal use. Metroid Prime 4: Beyond and all related assets are property of Nintendo. Map imagery is not included in this repository.
+This is a fan-made tool for personal use. Metroid Prime 4: Beyond and all related assets are property of Nintendo.
