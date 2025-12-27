@@ -207,15 +207,29 @@ class InteractiveMap {
     
     resize() {
         const container = this.canvas.parentElement;
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = container.clientHeight;
+        const cssWidth = container.clientWidth;
+        const cssHeight = container.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        this.dpr = dpr;
+
+        // Set CSS size and backing store size for high-DPI displays
+        this.canvas.style.width = cssWidth + 'px';
+        this.canvas.style.height = cssHeight + 'px';
+        this.canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+        this.canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
+
+        // Scale drawing so we can use CSS pixels in drawing code
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.updateResolution();
     }
     
     centerMap() {
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
         const mapWidth = MAP_SIZE * this.zoom;
         const mapHeight = MAP_SIZE * this.zoom;
-        this.panX = (this.canvas.width - mapWidth) / 2;
-        this.panY = (this.canvas.height - mapHeight) / 2;
+        this.panX = (cssWidth - mapWidth) / 2;
+        this.panY = (cssHeight - mapHeight) / 2;
     }
     
     bindEvents() {
@@ -478,12 +492,14 @@ class InteractiveMap {
     }
     
     getNeededResolution() {
-        // Calculate displayed size of the map on screen
-        const displayedSize = MAP_SIZE * this.zoom;
-        
-        // Find the smallest resolution that covers the displayed size
+        // Calculate displayed size of the map on screen in CSS pixels
+        const displayedCss = MAP_SIZE * this.zoom;
+        const dpr = window.devicePixelRatio || 1;
+        const displayedPx = displayedCss * dpr;
+
+        // Find the smallest resolution that covers the displayed size in device pixels
         for (let i = 0; i < RESOLUTIONS.length; i++) {
-            if (RESOLUTIONS[i] >= displayedSize) {
+            if (RESOLUTIONS[i] >= displayedPx) {
                 return i;
             }
         }
@@ -500,7 +516,8 @@ class InteractiveMap {
         // Update status display
         const status = document.getElementById('resolutionStatus');
         if (status) {
-            status.textContent = `${RESOLUTIONS[this.currentResolution]}px`;
+            const res = RESOLUTIONS[this.currentResolution] || RESOLUTIONS[0];
+            status.textContent = `${res}px`;
         }
         
         const zoomStatus = document.getElementById('zoomStatus');
@@ -574,10 +591,12 @@ class InteractiveMap {
     
     render() {
         const ctx = this.ctx;
-        
-        // Clear canvas
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
+
+        // Clear canvas (using CSS pixel sizes since context is scaled)
         ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillRect(0, 0, cssWidth, cssHeight);
         
         // Draw map image
         if (this.currentImage) {
@@ -596,14 +615,16 @@ class InteractiveMap {
     renderMarkers() {
         const ctx = this.ctx;
         const baseSize = Math.max(6, Math.min(16, 10 * this.zoom));
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
         
         this.markers.forEach((marker, index) => {
             const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
             const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
             
             // Skip if off-screen
-            if (screenX < -20 || screenX > this.canvas.width + 20 ||
-                screenY < -20 || screenY > this.canvas.height + 20) {
+            if (screenX < -20 || screenX > cssWidth + 20 ||
+                screenY < -20 || screenY > cssHeight + 20) {
                 return;
             }
             
