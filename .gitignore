@@ -1,0 +1,5 @@
+# Ignore workspace file containing local/machine-specific settings
+Metroid-Prime-4-Routing-Tool.code-workspace
+
+# Common editor folders
+.vscode/
