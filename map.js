@@ -702,6 +702,16 @@ async function init() {
             const collapsed = app.classList.contains('sidebar-collapsed');
             setSidebarCollapsed(!collapsed);
         });
+        // Pointer feedback for short press state (avoid sticky hover on mobile)
+        handle.addEventListener('pointerdown', (e) => {
+            handle.classList.add('pressed');
+        });
+        handle.addEventListener('pointerup', (e) => {
+            handle.classList.remove('pressed');
+        });
+        handle.addEventListener('pointercancel', (e) => {
+            handle.classList.remove('pressed');
+        });
     } else {
         console.warn('Sidebar handle element not found; collapsing unavailable');
     }
