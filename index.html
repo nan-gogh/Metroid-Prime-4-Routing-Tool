@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metroid Prime 4 Routing Tool Beta</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="header">
+                <h1>Metroid Prime 4: Beyond</h1>
+                <h2>Sol Valley</h2>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Layers</h3>
+                    <label class="layer-toggle">
+                        <input type="checkbox" id="toggleCrystals" checked>
+                        <div class="layer-icon">💎</div>
+                        <div class="layer-info">
+                            <div class="layer-name">Green Crystals</div>
+                            <div class="layer-count"><span id="crystalCount">0</span> markers</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="hints">
+                <kbd>+</kbd> / <kbd>-</kbd> Zoom &nbsp;
+                <kbd>0</kbd> Reset &nbsp;
+                <kbd>Drag</kbd> Pan
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-item">
+                    Zoom: <span class="status-value" id="zoomStatus">10%</span>
+                </div>
+                <div class="status-item">
+                    Res: <span class="status-value" id="resolutionStatus">256px</span>
+                </div>
+            </div>
+        </aside>
+        
+        <main class="map-container">
+            <canvas id="mapCanvas"></canvas>
+            
+            <div class="zoom-controls">
+                <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
+                <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
+                <button class="zoom-btn" id="resetView" title="Reset View">⌂</button>
+            </div>
+        </main>
+    </div>
+    
+    <div id="tooltip"></div>
+    
+    <script src="map.js"></script>
+</body>
+</html>
