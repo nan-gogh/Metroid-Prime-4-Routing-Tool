@@ -221,6 +221,7 @@ class InteractiveMap {
         // Scale drawing so we can use CSS pixels in drawing code
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.updateResolution();
+        this.render();
     }
     
     centerMap() {
@@ -676,6 +677,37 @@ async function init() {
     document.getElementById('toggleCrystals').addEventListener('change', (e) => {
         map.toggleMarkers(e.target.checked);
     });
+
+    // Sidebar toggle logic
+    const app = document.querySelector('.app-container');
+    const handle = document.getElementById('sidebarHandle');
+    const SIDEBAR_KEY = 'mp4_sidebar_collapsed';
+
+    function setSidebarCollapsed(collapsed, persist = true) {
+        if (collapsed) {
+            app.classList.add('sidebar-collapsed');
+            handle.setAttribute('aria-expanded', 'false');
+        } else {
+            app.classList.remove('sidebar-collapsed');
+            handle.setAttribute('aria-expanded', 'true');
+        }
+        if (persist) localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+        // Resize map after sidebar animation
+        setTimeout(() => map.resize(), 300);
+    }
+
+    handle.addEventListener('click', () => {
+        const collapsed = app.classList.contains('sidebar-collapsed');
+        setSidebarCollapsed(!collapsed);
+    });
+
+    // Restore saved preference; default collapsed on mobile
+    const saved = localStorage.getItem(SIDEBAR_KEY);
+    if (window.innerWidth <= 720) {
+        setSidebarCollapsed(saved !== '0', false);
+    } else {
+        if (saved === '1') setSidebarCollapsed(true, false);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', init);
