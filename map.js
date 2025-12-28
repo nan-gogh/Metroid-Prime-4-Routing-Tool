@@ -418,8 +418,8 @@ class InteractiveMap {
     }
     
     zoomIn() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
+        const centerX = this.canvas.clientWidth / 2;
+        const centerY = this.canvas.clientHeight / 2;
         const worldX = (centerX - this.panX) / this.zoom;
         const worldY = (centerY - this.panY) / this.zoom;
         
@@ -433,8 +433,8 @@ class InteractiveMap {
     }
     
     zoomOut() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
+        const centerX = this.canvas.clientWidth / 2;
+        const centerY = this.canvas.clientHeight / 2;
         const worldX = (centerX - this.panX) / this.zoom;
         const worldY = (centerY - this.panY) / this.zoom;
         
