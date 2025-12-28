@@ -48,15 +48,14 @@ body {
     height: 48px;
     background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
     background-color: #0b2236; /* fallback */
-    border: none;
-    border-left: 1px solid #0e4a6e;
+    border: 1px solid #0e4a6e;
     border-radius: 8px;
     cursor: pointer;
     z-index: 250;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: left 240ms ease, transform 240ms ease, background 150ms ease, opacity 200ms;
+    transition: left 240ms ease, transform 240ms ease, background 150ms ease, border-color 150ms;
     padding: 0;
     appearance: none;
     -webkit-appearance: none;
@@ -64,7 +63,8 @@ body {
 
 .sidebar-handle:active,
 .sidebar-handle.pressed {
-    background: linear-gradient(180deg, #066b86 0%, #054f3f 100%);
+    background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
+    border-color: #0891b2;
     transform: translateY(-50%) scale(0.985);
 }
 
@@ -217,21 +217,26 @@ body {
 .zoom-btn {
     width: 40px;
     height: 40px;
-    background: rgba(10, 25, 41, 0.95);
+    background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
+    background-color: #0b2236;
     border: 1px solid #0e4a6e;
     border-radius: 8px;
-    color: #e2e2e2;
+    color: #22d3ee;
     font-size: 20px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: background 150ms ease, transform 120ms ease, border-color 150ms;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
-.zoom-btn:hover {
-    background: #0891b2;
+.zoom-btn:active,
+.zoom-btn.pressed {
+    background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
     border-color: #0891b2;
+    transform: scale(0.95);
 }
 
 /* Tooltip */
