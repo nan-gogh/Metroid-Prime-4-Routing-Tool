@@ -72,6 +72,8 @@ body {
     color: #22d3ee;
     font-size: 12px;
     transition: transform 280ms ease;
+    transform-origin: center center;
+    display: inline-block;
 }
 
 .app-container.sidebar-collapsed .sidebar-handle {
@@ -277,6 +279,6 @@ body {
 
     .app-container.sidebar-collapsed .sidebar-handle {
         left: 12px;
-        transform: translateY(-50%) rotate(180deg);
+        transform: translateY(-50%);
     }
 }
