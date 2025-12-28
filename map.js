@@ -630,33 +630,16 @@ class InteractiveMap {
             }
             
             const isHovered = this.hoveredMarker && this.hoveredMarker.index === index;
-            const size = isHovered ? baseSize * 1.4 : baseSize;
+            const size = isHovered ? baseSize * 1.3 : baseSize;
             
-            // Outer glow
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size + 3, 0, Math.PI * 2);
-            ctx.fillStyle = isHovered ? 'rgba(74, 222, 128, 0.4)' : 'rgba(74, 222, 128, 0.2)';
-            ctx.fill();
-            
-            // Main circle
+            // Single circle with solid fill and border
             ctx.beginPath();
             ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-            const gradient = ctx.createRadialGradient(screenX - size/3, screenY - size/3, 0, screenX, screenY, size);
-            gradient.addColorStop(0, '#86efac');
-            gradient.addColorStop(1, '#22c55e');
-            ctx.fillStyle = gradient;
+            ctx.fillStyle = isHovered ? '#4ade80' : '#22c55e';
             ctx.fill();
-            
-            // Border
-            ctx.strokeStyle = isHovered ? '#ffffff' : '#166534';
+            ctx.strokeStyle = isHovered ? '#86efac' : '#166534';
             ctx.lineWidth = isHovered ? 2 : 1.5;
             ctx.stroke();
-            
-            // Highlight
-            ctx.beginPath();
-            ctx.arc(screenX - size/3, screenY - size/3, size/4, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.fill();
         });
     }
 }
