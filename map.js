@@ -504,8 +504,17 @@ let map;
 async function init() {
     // Create map
     map = new InteractiveMap('mapCanvas');
-    // GREEN_CRYSTALS is loaded from data.js
-    map.setMarkers(GREEN_CRYSTALS);
+    
+    // GREEN_CRYSTALS is loaded from data/greenCrystals.js
+    if (typeof GREEN_CRYSTALS !== 'undefined') {
+        map.setMarkers(GREEN_CRYSTALS);
+        console.log('✓ Loaded GREEN_CRYSTALS:', GREEN_CRYSTALS.length, 'markers');
+    } else if (typeof LAYERS !== 'undefined' && LAYERS.greenCrystals) {
+        map.setMarkers(LAYERS.greenCrystals.markers);
+        console.log('✓ Loaded from LAYERS.greenCrystals:', LAYERS.greenCrystals.markers.length, 'markers');
+    } else {
+        console.error('✗ GREEN_CRYSTALS data not loaded. Check data/greenCrystals.js is loaded.');
+    }
     
     // Setup controls
     const zoomInBtn = document.getElementById('zoomIn');
