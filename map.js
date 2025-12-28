@@ -670,9 +670,20 @@ async function init() {
     map.setMarkers(GREEN_CRYSTALS);
     
     // Setup controls
-    document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
-    document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
-    document.getElementById('resetView').addEventListener('click', () => map.resetView());
+    const zoomInBtn = document.getElementById('zoomIn');
+    const zoomOutBtn = document.getElementById('zoomOut');
+    const resetViewBtn = document.getElementById('resetView');
+    
+    zoomInBtn.addEventListener('click', () => map.zoomIn());
+    zoomOutBtn.addEventListener('click', () => map.zoomOut());
+    resetViewBtn.addEventListener('click', () => map.resetView());
+    
+    // Add pressed state feedback to all buttons
+    [zoomInBtn, zoomOutBtn, resetViewBtn].forEach(btn => {
+        btn.addEventListener('pointerdown', () => btn.classList.add('pressed'));
+        btn.addEventListener('pointerup', () => btn.classList.remove('pressed'));
+        btn.addEventListener('pointercancel', () => btn.classList.remove('pressed'));
+    });
     
     document.getElementById('toggleCrystals').addEventListener('change', (e) => {
         map.toggleMarkers(e.target.checked);
