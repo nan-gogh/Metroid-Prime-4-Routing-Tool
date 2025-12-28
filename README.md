@@ -37,10 +37,11 @@ View the live site: https://nan-gogh.github.io/Metroid-Prime-4-Routing-Tool/
 | Input | Action |
 |-------|--------|
 | **Scroll wheel** | Zoom in/out |
-| **Click + drag** | Pan map |
+| **Drag** | Pan map |
 | **Double-click** | Zoom in (centered) |
-| **Quick tap (empty space)** | Place custom marker |
-| **Quick tap (custom marker)** | Delete custom marker |
+| **Click (marker)** | Toggle marker tooltip |
+| **Click (empty space)** | Place custom marker |
+| **Click (custom marker)** | Delete custom marker |
 | `+` or `=` | Zoom in |
 | `-` | Zoom out |
 | `0` | Reset view |
@@ -49,8 +50,9 @@ View the live site: https://nan-gogh.github.io/Metroid-Prime-4-Routing-Tool/
 | Gesture | Action |
 |---------|--------|
 | **Drag** | Pan map |
-| **Pinch** | Zoom in/out |
+| **Pinch** | Zoom in/out + pan map |
 | **Double-tap** | Zoom in (centered) |
+| **Tap (marker)** | Toggle marker tooltip |
 | **Tap (empty space)** | Place custom marker |
 | **Tap (custom marker)** | Delete custom marker |
 
