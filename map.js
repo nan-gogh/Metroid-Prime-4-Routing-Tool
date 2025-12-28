@@ -276,7 +276,9 @@ class InteractiveMap {
                 const dx = pts[0].clientX - pts[1].clientX;
                 const dy = pts[0].clientY - pts[1].clientY;
                 const dist = Math.hypot(dx, dy);
-                this.pinch = { startDistance: dist, startZoom: this.zoom };
+                const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+                const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+                this.pinch = { startDistance: dist, startZoom: this.zoom, lastMidX: midClientX, lastMidY: midClientY };
                 this.isDragging = false;
             }
         });
@@ -292,7 +294,7 @@ class InteractiveMap {
             }
 
             if (this.pointers.size === 2 && this.pinch) {
-                // handle pinch-to-zoom
+                // handle pinch-to-zoom and pan
                 const pts = Array.from(this.pointers.values());
                 const dx = pts[0].clientX - pts[1].clientX;
                 const dy = pts[0].clientY - pts[1].clientY;
@@ -300,15 +302,25 @@ class InteractiveMap {
                 const factor = dist / this.pinch.startDistance;
                 const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.pinch.startZoom * factor));
 
-                // zoom towards midpoint
+                // current pinch center
                 const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
                 const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+                
+                // calculate pan from center movement
+                const panDX = midClientX - this.pinch.lastMidX;
+                const panDY = midClientY - this.pinch.lastMidY;
+                
+                // zoom towards current midpoint
                 const worldX = (midClientX - rect.left - this.panX) / this.zoom;
                 const worldY = (midClientY - rect.top - this.panY) / this.zoom;
 
                 this.zoom = newZoom;
-                this.panX = midClientX - rect.left - worldX * this.zoom;
-                this.panY = midClientY - rect.top - worldY * this.zoom;
+                this.panX = midClientX - rect.left - worldX * this.zoom + panDX;
+                this.panY = midClientY - rect.top - worldY * this.zoom + panDY;
+                
+                // update last midpoint for next frame
+                this.pinch.lastMidX = midClientX;
+                this.pinch.lastMidY = midClientY;
 
                 this.updateResolution();
                 this.render();
