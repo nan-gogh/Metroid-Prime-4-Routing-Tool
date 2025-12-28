@@ -1,7 +1,7 @@
 // Custom Markers layer
 // User-placed markers with "cm" prefix UIDs
 LAYERS.customMarkers = {
-    name: "Custom Markers",
+    name: "Custom Marker",
     icon: "📍",
     color: "#ff6b6b",
     markers: []

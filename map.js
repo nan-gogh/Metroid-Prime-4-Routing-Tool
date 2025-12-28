@@ -55,7 +55,7 @@ class InteractiveMap {
             }
         };
         // Touch hit padding (CSS pixels) to make tapping easier on mobile
-        this.touchPadding = 6;
+        this.touchPadding = 0;
         
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
@@ -573,8 +573,18 @@ class InteractiveMap {
             layerName = LAYERS[key].name;
         }
 
-        // Display layer name with marker UID
-        this.tooltip.textContent = `${layerName} - ${marker.uid}`;
+        // Try to find the marker index in the layer (1-based for display)
+        let displayIndex = null;
+        if (key && LAYERS[key] && Array.isArray(LAYERS[key].markers)) {
+            const arr = LAYERS[key].markers;
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i].uid === marker.uid) { displayIndex = i + 1; break; }
+            }
+        }
+
+        // Display layer name, optional index, then marker UID
+        const idxPart = (displayIndex !== null) ? ` ${displayIndex}` : '';
+        this.tooltip.textContent = `${layerName}${idxPart} - ${marker.uid}`;
         this.tooltip.style.left = `${x + 15}px`;
         this.tooltip.style.top = `${y - 10}px`;
         this.tooltip.style.display = 'block';
