@@ -20,6 +20,9 @@ class InteractiveMap {
         this.isDragging = false;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
+        this.pointerStartX = 0;
+        this.pointerStartY = 0;
+        this.minClickDistance = 5; // pixels - threshold for drag vs click
         // Pointer/touch state
         this.pointers = new Map(); // pointerId -> {x,y,clientX,clientY,downTime}
         this.pinch = null; // {startDistance, startZoom}
@@ -33,8 +36,11 @@ class InteractiveMap {
         
         // Markers
         this.markers = [];
+        this.customMarkers = [];
         this.showMarkers = true;
+        this.showCustomMarkers = true;
         this.hoveredMarker = null;
+        this.hoveredMarkerLayer = null; // 'crystals' or 'custom'
         
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
@@ -111,6 +117,9 @@ class InteractiveMap {
                 this.isDragging = true;
                 this.lastMouseX = e.clientX;
                 this.lastMouseY = e.clientY;
+                // Track starting position for click detection
+                this.pointerStartX = e.clientX;
+                this.pointerStartY = e.clientY;
                 this.canvas.style.cursor = 'grabbing';
             } else if (this.pointers.size === 2) {
                 // begin pinch
@@ -245,11 +254,54 @@ class InteractiveMap {
             this.hideTooltip();
         });
         
-        // Click on markers
+        // Click handler - place custom markers or interact with existing markers
         this.canvas.addEventListener('click', (e) => {
+            // Check if this was a genuine click (minimal movement) or a drag release
+            const distanceMoved = Math.hypot(
+                e.clientX - this.pointerStartX,
+                e.clientY - this.pointerStartY
+            );
+            
+            // Ignore clicks that were part of a drag operation
+            if (distanceMoved > this.minClickDistance) {
+                return;
+            }
+            
             if (this.hoveredMarker) {
                 console.log('Marker clicked:', this.hoveredMarker);
                 // Could open a popup, mark as collected, etc.
+            } else if (e.button === 0) {
+                // Left click on empty space - place custom marker
+                const rect = this.canvas.getBoundingClientRect();
+                const clientX = e.clientX - rect.left;
+                const clientY = e.clientY - rect.top;
+                
+                // Convert to world coordinates (0-1 normalized)
+                const worldX = (clientX - this.panX) / this.zoom / MAP_SIZE;
+                const worldY = (clientY - this.panY) / this.zoom / MAP_SIZE;
+                
+                // Only place if within map bounds
+                if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
+                    if (typeof MarkerUtils !== 'undefined') {
+                        MarkerUtils.addCustomMarker(worldX, worldY);
+                        this.customMarkers = LAYERS.customMarkers.markers;
+                        this.updateCustomMarkerCount();
+                        this.render();
+                    }
+                }
+            }
+        });
+        
+        // Right-click handler - delete custom markers
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (this.hoveredMarker && this.hoveredMarkerLayer === 'custom') {
+                if (typeof MarkerUtils !== 'undefined') {
+                    MarkerUtils.deleteCustomMarker(this.hoveredMarker.uid);
+                    this.customMarkers = LAYERS.customMarkers.markers;
+                    this.updateCustomMarkerCount();
+                    this.render();
+                }
             }
         });
         
@@ -383,14 +435,27 @@ class InteractiveMap {
     
     setMarkers(markers) {
         this.markers = markers;
+        this.customMarkers = LAYERS.customMarkers.markers;
         this.render();
         
         const count = document.getElementById('crystalCount');
         if (count) count.textContent = markers.length;
+        
+        this.updateCustomMarkerCount();
+    }
+    
+    updateCustomMarkerCount() {
+        const count = document.getElementById('customCount');
+        if (count) count.textContent = `${this.customMarkers.length} / 50`;
     }
     
     toggleMarkers(show) {
         this.showMarkers = show;
+        this.render();
+    }
+    
+    toggleCustomMarkers(show) {
+        this.showCustomMarkers = show;
         this.render();
     }
     
@@ -403,21 +468,43 @@ class InteractiveMap {
         
         const markerRadius = Math.max(8, 12 * this.zoom);
         let found = null;
+        let foundLayer = null;
         
-        for (let i = this.markers.length - 1; i >= 0; i--) {
-            const marker = this.markers[i];
-            const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
-            const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-            
-            const dist = Math.hypot(mouseX - screenX, mouseY - screenY);
-            if (dist < markerRadius) {
-                found = { ...marker, index: i };
-                break;
+        // Check custom markers first (rendered on top)
+        if (this.showCustomMarkers) {
+            for (let i = this.customMarkers.length - 1; i >= 0; i--) {
+                const marker = this.customMarkers[i];
+                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
+                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
+                
+                const dist = Math.hypot(mouseX - screenX, mouseY - screenY);
+                if (dist < markerRadius) {
+                    found = { ...marker, index: i };
+                    foundLayer = 'custom';
+                    break;
+                }
+            }
+        }
+        
+        // Check green crystals
+        if (!found && this.showMarkers) {
+            for (let i = this.markers.length - 1; i >= 0; i--) {
+                const marker = this.markers[i];
+                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
+                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
+                
+                const dist = Math.hypot(mouseX - screenX, mouseY - screenY);
+                if (dist < markerRadius) {
+                    found = { ...marker, index: i };
+                    foundLayer = 'crystals';
+                    break;
+                }
             }
         }
         
         if (found !== this.hoveredMarker) {
             this.hoveredMarker = found;
+            this.hoveredMarkerLayer = foundLayer;
             this.canvas.style.cursor = found ? 'pointer' : 'grab';
             
             if (found) {
@@ -473,6 +560,7 @@ class InteractiveMap {
         const cssWidth = this.canvas.clientWidth;
         const cssHeight = this.canvas.clientHeight;
         
+        // Render green crystals
         this.markers.forEach((marker, index) => {
             const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
             const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
@@ -483,7 +571,7 @@ class InteractiveMap {
                 return;
             }
             
-            const isHovered = this.hoveredMarker && this.hoveredMarker.index === index;
+            const isHovered = this.hoveredMarker && this.hoveredMarker.index === index && this.hoveredMarkerLayer === 'crystals';
             const size = isHovered ? baseSize * 1.3 : baseSize;
             
             // Single circle with solid fill and border
@@ -495,6 +583,32 @@ class InteractiveMap {
             ctx.lineWidth = isHovered ? 2 : 1.5;
             ctx.stroke();
         });
+        
+        // Render custom markers
+        if (this.showCustomMarkers) {
+            this.customMarkers.forEach((marker, index) => {
+                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
+                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
+                
+                // Skip if off-screen
+                if (screenX < -20 || screenX > cssWidth + 20 ||
+                    screenY < -20 || screenY > cssHeight + 20) {
+                    return;
+                }
+                
+                const isHovered = this.hoveredMarker && this.hoveredMarker.index === index && this.hoveredMarkerLayer === 'custom';
+                const size = isHovered ? baseSize * 1.3 : baseSize;
+                
+                // Custom markers in red/orange with slightly different style
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fillStyle = isHovered ? '#ff8787' : '#ff6b6b';
+                ctx.fill();
+                ctx.strokeStyle = isHovered ? '#ffa8a8' : '#c92a2a';
+                ctx.lineWidth = isHovered ? 2 : 1.5;
+                ctx.stroke();
+            });
+        }
     }
 }
 
@@ -534,6 +648,48 @@ async function init() {
     
     document.getElementById('toggleCrystals').addEventListener('change', (e) => {
         map.toggleMarkers(e.target.checked);
+    });
+    
+    document.getElementById('toggleCustom').addEventListener('change', (e) => {
+        map.toggleCustomMarkers(e.target.checked);
+    });
+    
+    // Custom marker controls
+    document.getElementById('exportCustom').addEventListener('click', () => {
+        if (typeof MarkerUtils !== 'undefined') {
+            MarkerUtils.exportCustomMarkers();
+        }
+    });
+    
+    document.getElementById('importCustom').addEventListener('click', () => {
+        document.getElementById('importFile').click();
+    });
+    
+    document.getElementById('importFile').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file && typeof MarkerUtils !== 'undefined') {
+            MarkerUtils.importCustomMarkers(file).then(() => {
+                map.customMarkers = LAYERS.customMarkers.markers;
+                map.updateCustomMarkerCount();
+                map.render();
+                // Reset file input
+                e.target.value = '';
+            }).catch(error => {
+                alert('Import failed: ' + error.message);
+                e.target.value = '';
+            });
+        }
+    });
+    
+    document.getElementById('clearCustom').addEventListener('click', () => {
+        if (confirm('Clear all custom markers? This cannot be undone.')) {
+            if (typeof MarkerUtils !== 'undefined') {
+                MarkerUtils.clearCustomMarkers();
+                map.customMarkers = LAYERS.customMarkers.markers;
+                map.updateCustomMarkerCount();
+                map.render();
+            }
+        }
     });
 
     // Sidebar toggle logic
