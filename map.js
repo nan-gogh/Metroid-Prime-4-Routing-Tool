@@ -293,6 +293,8 @@ class InteractiveMap {
                         this.customMarkers = LAYERS.customMarkers.markers;
                         this.updateCustomMarkerCount();
                         this.render();
+                        // Update cursor/hit state at the click location after deletion
+                        this.checkMarkerHover(localX, localY);
                     }
                 } else if (hit.layerKey === 'greenCrystals') {
                     // Toggle selection for canonical markers -> show/hide persistent tooltip
@@ -331,6 +333,8 @@ class InteractiveMap {
                         this.customMarkers = LAYERS.customMarkers.markers;
                         this.updateCustomMarkerCount();
                         this.render();
+                        // Update cursor/hit state at the click location after placement
+                        this.checkMarkerHover(localX, localY);
                     }
                 }
             }
