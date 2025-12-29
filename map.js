@@ -26,7 +26,7 @@ class InteractiveMap {
         // Pointer/touch state
         this.pointers = new Map(); // pointerId -> {x,y,clientX,clientY,downTime}
         this.pinch = null; // {startDistance, startZoom}
-        this.lastTap = 0;
+        
         
         // Images cache
         this.images = {};
@@ -291,26 +291,7 @@ class InteractiveMap {
                 const under = this.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
 
-                // treat short tap (no movement, short press) as click/tap for double-tap detection
-                if (!moved && dt < 300) {
-                    const now = Date.now();
-                    if (now - this.lastTap < 300) {
-                        // double-tap -> zoom in centered
-                        const centerX = localX;
-                        const centerY = localY;
-                        const worldX = (centerX - this.panX) / this.zoom;
-                        const worldY = (centerY - this.panY) / this.zoom;
-                        this.zoom = Math.min(MAX_ZOOM, this.zoom * 1.6);
-                        this.panX = centerX - worldX * this.zoom;
-                        this.panY = centerY - worldY * this.zoom;
-                        this.updateResolution();
-                        this.render();
-                        this.lastTap = 0;
-                    } else {
-                        // single tap: record time only — selection/tooltip handled on `click` event
-                        this.lastTap = now;
-                    }
-                }
+                // short tap (no movement, short press) — let `click` handler manage selection/placement
             }
         });
 
