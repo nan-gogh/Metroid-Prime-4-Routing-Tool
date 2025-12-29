@@ -72,6 +72,7 @@ class InteractiveMap {
     // Preload map images at all resolutions to reduce hiccups during zoom/pan
     preloadAllMapImages() {
         const head = document.head || document.getElementsByTagName('head')[0];
+        const initial = this.getNeededResolution();
         for (let i = 0; i < RESOLUTIONS.length; i++) {
             const size = RESOLUTIONS[i];
             const href = `tiles/${size}.avif`;
@@ -79,7 +80,8 @@ class InteractiveMap {
             // Hint browser to fetch early
             try {
                 const link = document.createElement('link');
-                link.rel = 'preload';
+                // Only aggressively preload the initially-needed resolution; prefetch others
+                link.rel = (i === initial) ? 'preload' : 'prefetch';
                 link.as = 'image';
                 link.href = href;
                 head.appendChild(link);
