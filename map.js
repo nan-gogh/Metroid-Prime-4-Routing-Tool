@@ -64,8 +64,58 @@ class InteractiveMap {
         this.resize();
         this.bindEvents();
         this.centerMap();
+        this.preloadAllMapImages();
         this.loadInitialImage();
         this.render();
+    }
+
+    // Preload map images at all resolutions to reduce hiccups during zoom/pan
+    preloadAllMapImages() {
+        const head = document.head || document.getElementsByTagName('head')[0];
+        for (let i = 0; i < RESOLUTIONS.length; i++) {
+            const size = RESOLUTIONS[i];
+            const href = `tiles/${size}.avif`;
+
+            // Hint browser to fetch early
+            try {
+                const link = document.createElement('link');
+                link.rel = 'preload';
+                link.as = 'image';
+                link.href = href;
+                head.appendChild(link);
+            } catch (e) {}
+
+            // Stagger fetches to avoid a burst of work on load
+            setTimeout(async () => {
+                if (this.images[i]) return;
+                try {
+                    if (window.fetch && window.createImageBitmap) {
+                        const resp = await fetch(href);
+                        if (resp.ok) {
+                            const blob = await resp.blob();
+                            const bmp = await createImageBitmap(blob);
+                            this.images[i] = bmp;
+                            return;
+                        }
+                    }
+                } catch (err) {
+                    // fall through to image element fallback
+                }
+
+                try {
+                    const img = new Image();
+                    img.src = href;
+                    if (img.decode) {
+                        await img.decode();
+                    }
+                    this.images[i] = img;
+                } catch (e) {
+                    const img = new Image();
+                    img.onload = () => { this.images[i] = img; };
+                    img.src = href;
+                }
+            }, i * 150);
+        }
     }
     
     resize() {
