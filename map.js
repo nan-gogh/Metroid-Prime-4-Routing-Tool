@@ -64,6 +64,11 @@ class InteractiveMap {
         // Setup
         this.resize();
         this.bindEvents();
+        // Fit the full map into the container on initial load so we pick a sensible resolution
+        const cssWidth = this.canvas.parentElement.clientWidth;
+        const cssHeight = this.canvas.parentElement.clientHeight;
+        const fitZoom = Math.min(cssWidth / MAP_SIZE, cssHeight / MAP_SIZE);
+        this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
         this.centerMap();
         this.preloadAllMapImages();
         this.loadInitialImage();
