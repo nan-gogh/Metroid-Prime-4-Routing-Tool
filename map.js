@@ -37,6 +37,9 @@ class InteractiveMap {
         // Markers
         this.markers = [];
         this.customMarkers = [];
+        // Current route: array of marker indices in `this.markers` order (or null)
+        this.currentRoute = null;
+        this.currentRouteLength = 0;
         this.hoveredMarker = null;
         this.hoveredMarkerLayer = null; // layer key like 'greenCrystals' or 'customMarkers'
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
@@ -663,6 +666,9 @@ class InteractiveMap {
         // Draw markers from all visible layers
         this.renderMarkers();
 
+        // Draw computed route on top of the map but beneath markers (so markers remain visible)
+        this.renderRoute();
+
         // If a marker is selected, ensure tooltip is positioned at its current screen coords
         if (this.selectedMarker && this.selectedMarkerLayer) {
             const m = this.selectedMarker;
@@ -759,6 +765,66 @@ class InteractiveMap {
                 ctx.stroke();
             });
         }
+    }
+
+    // Render a polyline route stored in `this.currentRoute` (array of indices)
+    renderRoute() {
+        if (!this.currentRoute || !Array.isArray(this.currentRoute) || this.currentRoute.length === 0) return;
+        if (!this._routeSources || !Array.isArray(this._routeSources)) return;
+        const ctx = this.ctx;
+        const n = this.currentRoute.length;
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(0, 255, 208, 0.9)'; // orange
+        ctx.lineWidth = Math.max(2, 3 * this.zoom);
+
+        // Draw path
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+            const idx = this.currentRoute[i];
+            const src = this._routeSources[idx];
+            const m = src && src.marker;
+            if (!m) continue;
+            const x = m.x * MAP_SIZE * this.zoom + this.panX;
+            const y = m.y * MAP_SIZE * this.zoom + this.panY;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        // close loop
+        const firstSrc = this._routeSources[this.currentRoute[0]];
+        if (firstSrc && firstSrc.marker) ctx.lineTo(firstSrc.marker.x * MAP_SIZE * this.zoom + this.panX, firstSrc.marker.y * MAP_SIZE * this.zoom + this.panY);
+        ctx.stroke();
+
+        // Draw small circles at nodes
+        ctx.fillStyle = 'rgba(100, 255, 193, 0.95)';
+        const dotSize = Math.max(3, 4 * this.zoom);
+        for (let i = 0; i < n; i++) {
+            const idx = this.currentRoute[i];
+            const src = this._routeSources[idx];
+            const m = src && src.marker;
+            if (!m) continue;
+            const x = m.x * MAP_SIZE * this.zoom + this.panX;
+            const y = m.y * MAP_SIZE * this.zoom + this.panY;
+            ctx.beginPath();
+            ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    setRoute(routeIndices, lengthNormalized, routeSources) {
+        this.currentRoute = routeIndices ? routeIndices.slice() : null;
+        this._routeSources = Array.isArray(routeSources) ? routeSources.slice() : null;
+        // lengthNormalized is in normalized map units (0..~sqrt(2) * n), convert to MAP pixels for display if needed
+        this.currentRouteLength = typeof lengthNormalized === 'number' ? lengthNormalized * MAP_SIZE : 0;
+        this.render();
+    }
+
+    clearRoute() {
+        this.currentRoute = null;
+        this.currentRouteLength = 0;
+        this.render();
     }
 }
 
@@ -890,6 +956,64 @@ async function init() {
             }
         }
     });
+
+    // Routing controls
+    const computeBtn = document.getElementById('computeRouteBtn');
+    const clearRouteBtn = document.getElementById('clearRouteBtn');
+    if (computeBtn) {
+        computeBtn.addEventListener('click', () => {
+                // Gather visible markers from all layers (green crystals + custom markers when visible)
+                const sources = [];
+                if (map.layerVisibility.greenCrystals && Array.isArray(map.markers)) {
+                    for (let i = 0; i < map.markers.length; i++) {
+                        sources.push({ marker: map.markers[i], layerKey: 'greenCrystals', layerIndex: i });
+                    }
+                }
+                if (map.layerVisibility.customMarkers && Array.isArray(map.customMarkers)) {
+                    for (let i = 0; i < map.customMarkers.length; i++) {
+                        sources.push({ marker: map.customMarkers[i], layerKey: 'customMarkers', layerIndex: i });
+                    }
+                }
+                if (sources.length === 0) {
+                    alert('No visible markers available to route.');
+                    return;
+                }
+            if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSP !== 'function') {
+                alert('TSP solver not available.');
+                return;
+            }
+
+            computeBtn.disabled = true;
+            const oldText = computeBtn.textContent;
+            computeBtn.textContent = 'Computing...';
+
+            // Allow UI state to update before heavy compute
+            setTimeout(() => {
+                try {
+                    const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
+                    const result = TSPEuclid.solveTSP(points, { restarts: 12 });
+                    if (result && Array.isArray(result.tour)) {
+                        map.setRoute(result.tour, result.length, sources);
+                        console.log('Route length (normalized):', result.length, 'tour size:', result.tour.length);
+                    } else {
+                        alert('Solver returned no route.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Error computing route: ' + err.message);
+                } finally {
+                    computeBtn.disabled = false;
+                    computeBtn.textContent = oldText;
+                }
+            }, 50);
+        });
+    }
+
+    if (clearRouteBtn) {
+        clearRouteBtn.addEventListener('click', () => {
+            map.clearRoute();
+        });
+    }
 
     // Sidebar toggle logic
     const app = document.querySelector('.app-container');
