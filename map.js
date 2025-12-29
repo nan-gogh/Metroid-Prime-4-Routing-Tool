@@ -2,7 +2,8 @@
 
 const MAP_SIZE = 8192;
 const RESOLUTIONS = [256, 512, 1024, 2048, 4096, 8192];
-const MIN_ZOOM = 0.05;
+// Default zoom limits; `minZoom` is computed per-device in `resize()`
+const DEFAULT_MIN_ZOOM = 0.05;
 const MAX_ZOOM = 4;
 const DEFAULT_ZOOM = 0.1;
 
@@ -135,6 +136,10 @@ class InteractiveMap {
 
         // Scale drawing so we can use CSS pixels in drawing code
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // compute a device-aware minimum zoom so smallest resolution can be reached
+        const minRes = RESOLUTIONS[0];
+        // minZoom such that minRes >= MAP_SIZE * minZoom * dpr => minZoom = minRes / (MAP_SIZE * dpr)
+        this.minZoom = Math.max(0.005, Math.min(DEFAULT_MIN_ZOOM, minRes / (MAP_SIZE * dpr)));
         this.updateResolution();
         this.render();
     }
@@ -157,7 +162,7 @@ class InteractiveMap {
             const mouseY = e.clientY - rect.top;
             
             const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * zoomFactor));
+            const newZoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * zoomFactor));
             
             // Zoom towards mouse position
             const worldX = (mouseX - this.panX) / this.zoom;
@@ -220,7 +225,7 @@ class InteractiveMap {
                 const dy = pts[0].clientY - pts[1].clientY;
                 const dist = Math.hypot(dx, dy);
                 const factor = dist / this.pinch.startDistance;
-                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.pinch.startZoom * factor));
+                const newZoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, this.pinch.startZoom * factor));
 
                 // current pinch center
                 const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
@@ -431,7 +436,7 @@ class InteractiveMap {
         const worldX = (centerX - this.panX) / this.zoom;
         const worldY = (centerY - this.panY) / this.zoom;
         
-        this.zoom = Math.max(MIN_ZOOM, this.zoom / 1.3);
+        this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, this.zoom / 1.3);
         
         this.panX = centerX - worldX * this.zoom;
         this.panY = centerY - worldY * this.zoom;
