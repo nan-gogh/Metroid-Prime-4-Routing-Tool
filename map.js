@@ -23,9 +23,9 @@ class InteractiveMap {
         // Map state
         this.zoom = DEFAULT_ZOOM;
         this.panX = 0;
-        this.panY = 0;
-        
-        // Interaction state
+        this.images = {};
+        this.currentImage = null;
+        this.currentResolution = 0;
         this.isDragging = false;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
@@ -38,6 +38,8 @@ class InteractiveMap {
         
         // Images cache
         this.images = {};
+        // Full-folder image cache: { folderName: { resolutionIndex: Image|ImageBitmap } }
+        this.imagesByFolder = {};
         this.currentImage = null;
         this.currentResolution = 0;
         this.loadingResolution = null;
@@ -104,50 +106,68 @@ class InteractiveMap {
     preloadAllMapImages() {
         const head = document.head || document.getElementsByTagName('head')[0];
         const initial = this.getNeededResolution();
-        for (let i = 0; i < RESOLUTIONS.length; i++) {
-            const size = RESOLUTIONS[i];
-            const href = `tiles/${this.getTilesetFolder()}/${size}.avif`;
+        // Preload for all possible folders so toggling is instant. Adjust list if
+        // your deployment has different folder names.
+        const folders = ['sat', 'sat_bw', 'holo', 'holo_bw'];
 
-            // Hint browser to fetch early
-            try {
-                const link = document.createElement('link');
-                // Only aggressively preload the initially-needed resolution; prefetch others
-                link.rel = (i === initial) ? 'preload' : 'prefetch';
-                link.as = 'image';
-                link.href = href;
-                head.appendChild(link);
-            } catch (e) {}
+        for (let f = 0; f < folders.length; f++) {
+            const folder = folders[f];
+            if (!this.imagesByFolder[folder]) this.imagesByFolder[folder] = {};
 
-            // Stagger fetches to avoid a burst of work on load
-            setTimeout(async () => {
-                if (this.images[i]) return;
+            for (let i = 0; i < RESOLUTIONS.length; i++) {
+                const size = RESOLUTIONS[i];
+                const href = `tiles/${folder}/${size}.avif`;
+
+                // Hint browser to fetch early. Only aggressively preload the
+                // currently-needed resolution from the active folder; prefetch
+                // others.
                 try {
-                    if (window.fetch && window.createImageBitmap) {
-                        const resp = await fetch(href);
-                        if (resp.ok) {
-                            const blob = await resp.blob();
-                            const bmp = await createImageBitmap(blob);
-                            this.images[i] = bmp;
-                            return;
+                    const link = document.createElement('link');
+                    if (folder === this.getTilesetFolder() && i === initial) {
+                        link.rel = 'preload';
+                        link.as = 'image';
+                    } else {
+                        link.rel = 'prefetch';
+                        link.as = 'image';
+                    }
+                    link.href = href;
+                    head.appendChild(link);
+                } catch (e) {}
+
+                // Stagger fetches to avoid a burst of work on load
+                setTimeout(async () => {
+                    if (this.imagesByFolder[folder][i]) return;
+                    try {
+                        if (window.fetch && window.createImageBitmap) {
+                            const resp = await fetch(href);
+                            if (resp.ok) {
+                                const blob = await resp.blob();
+                                const bmp = await createImageBitmap(blob);
+                                try { bmp._tilesetFolder = folder; } catch (e) {}
+                                this.imagesByFolder[folder][i] = bmp;
+                                return;
+                            }
                         }
+                    } catch (err) {
+                        // fall through to image element fallback
                     }
-                } catch (err) {
-                    // fall through to image element fallback
-                }
 
-                try {
-                    const img = new Image();
-                    img.src = href;
-                    if (img.decode) {
-                        await img.decode();
+                    try {
+                        const img = new Image();
+                        try { img._tilesetFolder = folder; } catch (e) {}
+                        img.src = href;
+                        if (img.decode) {
+                            await img.decode();
+                        }
+                        this.imagesByFolder[folder][i] = img;
+                    } catch (e) {
+                        const img = new Image();
+                        try { img._tilesetFolder = folder; } catch (e) {}
+                        img.onload = () => { this.imagesByFolder[folder][i] = img; };
+                        img.src = href;
                     }
-                    this.images[i] = img;
-                } catch (e) {
-                    const img = new Image();
-                    img.onload = () => { this.images[i] = img; };
-                    img.src = href;
-                }
-            }, i * 150);
+                }, (f * RESOLUTIONS.length + i) * 80);
+            }
         }
     }
     
@@ -565,9 +585,11 @@ class InteractiveMap {
     
     loadImage(resolutionIndex) {
         const size = RESOLUTIONS[resolutionIndex];
-        
-        if (this.images[resolutionIndex]) {
-            this.currentImage = this.images[resolutionIndex];
+        const folder = this.getTilesetFolder();
+
+        // If we already preloaded this resolution for the current folder, use it.
+        if (this.imagesByFolder && this.imagesByFolder[folder] && this.imagesByFolder[folder][resolutionIndex]) {
+            this.currentImage = this.imagesByFolder[folder][resolutionIndex];
             this.currentResolution = resolutionIndex;
             this.render();
             return;
@@ -576,13 +598,20 @@ class InteractiveMap {
         if (this.loadingResolution === resolutionIndex) return;
         this.loadingResolution = resolutionIndex;
         
+        const href = `tiles/${folder}/${size}.avif`;
+
         const img = new Image();
         img.onload = () => {
-            this.images[resolutionIndex] = img;
+            try { img._tilesetFolder = folder; } catch (e) {}
+            // store into folder cache for future switches
+            if (!this.imagesByFolder[folder]) this.imagesByFolder[folder] = {};
+            this.imagesByFolder[folder][resolutionIndex] = img;
             this.loadingResolution = null;
-            
+
             // Always use this image if we don't have one yet, or if it's the best choice
-            if (!this.currentImage || resolutionIndex === this.getNeededResolution()) {
+            const curFolder = this.getTilesetFolder();
+            const imgFolder = img._tilesetFolder || null;
+            if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
                 this.currentImage = img;
                 this.currentResolution = resolutionIndex;
                 this.render();
@@ -593,7 +622,7 @@ class InteractiveMap {
             this.loadingResolution = null;
             console.error(`Failed to load: ${size}px`);
         };
-                    img.src = `tiles/${this.getTilesetFolder()}/${size}.avif`;
+        img.src = href;
     }
 
     setTileset(tileset) {
