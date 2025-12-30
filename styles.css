@@ -23,6 +23,15 @@ body {
 .map-container canvas.grayscale {
     filter: grayscale(100%);
 }
+/* Fallback: when using a separate tile canvas (`#mapTiles`), applying a
+    DOM filter to that element is acceptable and will only affect tile
+    imagery. This helps on mobile browsers that don't support `ctx.filter`.
+*/
+#mapTiles.grayscale {
+     filter: grayscale(100%);
+     -webkit-filter: grayscale(100%);
+     will-change: filter;
+}
     position: absolute;
     left: 0;
     top: 0;
