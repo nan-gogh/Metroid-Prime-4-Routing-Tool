@@ -920,8 +920,9 @@ class InteractiveMap {
         const step = (t) => {
             const dt = Math.max(0, t - this._lastRouteAnimTime) / 1000; // seconds
             this._lastRouteAnimTime = t;
-            // advance offset by speed * dt (wrap to avoid large numbers)
-            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt) % 1000000;
+            // advance offset by speed * dt * direction (wrap to avoid large numbers)
+            const dir = (typeof this._routeAnimationDirection === 'number') ? this._routeAnimationDirection : 1;
+            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir + 1000000) % 1000000;
             // only continue animating if there is a route
             if (!this.currentRoute || !this.currentRoute.length) {
                 this._routeRaf = null;
@@ -1280,6 +1281,28 @@ async function init() {
             }, 50);
         });
     }
+
+    // Route direction toggle: single button that flips animation direction
+        try {
+            const toggleDirBtn = document.getElementById('toggleRouteDirBtn');
+            // load persisted direction (1 forward, -1 reverse)
+            let stored = 1;
+            try { stored = Number(localStorage.getItem('routeDir')) || 1; } catch (e) { stored = 1; }
+            map._routeAnimationDirection = stored;
+            const updateRouteDirUI = () => {
+                if (toggleDirBtn) toggleDirBtn.setAttribute('aria-pressed', map._routeAnimationDirection === -1 ? 'true' : 'false');
+            };
+            if (toggleDirBtn) {
+                toggleDirBtn.addEventListener('click', () => {
+                    map._routeAnimationDirection = (map._routeAnimationDirection === 1) ? -1 : 1;
+                    try { localStorage.setItem('routeDir', String(map._routeAnimationDirection)); } catch (e) {}
+                    // Reset the last animation timestamp so the next RAF frame doesn't use a large dt
+                    try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
+                    updateRouteDirUI();
+                });
+            }
+            updateRouteDirUI();
+        } catch (e) {}
 
     if (clearRouteBtn) {
         clearRouteBtn.addEventListener('click', () => {
