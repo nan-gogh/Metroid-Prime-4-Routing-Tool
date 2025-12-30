@@ -742,7 +742,8 @@ class InteractiveMap {
     
     // Base marker radius in CSS pixels (used for rendering and hit-testing)
     getBaseMarkerRadius() {
-        return Math.max(6, Math.min(16, 10 * this.zoom));
+        // Reduce the minimum radius so markers remain smaller when zoomed out
+        return Math.max(4, Math.min(16, 10 * this.zoom));
     }
 
     // Hit radius used for interaction (render radius + touch padding)
