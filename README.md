@@ -1,17 +1,18 @@
 # Metroid Prime 4: Beyond - Sol Valley Interactive Map
 
-A lightweight, mobile-friendly interactive map for tracking collectibles in Metroid Prime 4: Beyond. Works seamlessly on desktop and mobile devices.
+A lightweight, mobile-first interactive map for tracking collectibles in Metroid Prime 4: Beyond. Built to work well on desktop and mobile with touch-friendly controls and an in-browser routing tool.
 
-## Features
+## Highlights (current state)
 
-- 🗺️ **Pan and zoom** with mouse wheel, touch gestures, or keyboard
-- 🔍 **Multi-resolution tiles** (256px - 8192px, auto-loaded based on zoom)
-- 💎 **Green Crystals layer** (175+ collectible locations)
-- 📍 **Custom Markers** (user-placed, up to 50 per session)
-- 💾 **Persistent storage** (localStorage auto-saves custom markers)
-- 📤 **Export/Import** (JSON format for sharing marker sets)
-- 📱 **Mobile optimized** (collapsible sidebar, touch-friendly controls)
-- 🎨 **Layer-aware UI** (dynamic icons and colors from data definitions)
+- 🗺️ Pan & zoom (mouse, touch pinch, keyboard)
+- 🔍 Multi-resolution tiles (256 → 8192px, auto-loaded)
+- 💎 Green Crystals layer (data-driven markers)
+- 📍 Custom Markers with persistence via `MarkerUtils` (localStorage)
+- 🧭 Routing: in-browser Euclidean TSP solver (nearest-neighbor seed + multi-restart 2‑opt; optional 3‑opt polishing)
+- ▶ Animated route rendering (dashed stroke with RAF-driven animation)
+- 🧭 Route metadata: normalized route length (map width = 1) shown in sidebar
+- 🎛 Data-driven `LAYERS` architecture (add layers without changing rendering code)
+- 📱 Mobile-friendly interactions: replaced hover visuals with press states to avoid hover sticking on touch devices
 
 ## Usage
 
@@ -25,124 +26,63 @@ python -m http.server 8080
 npx serve
 ```
 
-Then visit `http://localhost:8080`
+Then visit `http://localhost:8080`.
 
-## Live Demo
+### Compute a Route
 
-View the live site: https://nan-gogh.github.io/Metroid-Prime-4-Routing-Tool/
+Use the sidebar `➤ Compute Route` button to compute a closed tour visiting every visible marker (Green Crystals plus any visible Custom Markers). Key points:
 
-## Controls
-
-### Desktop
-| Input | Action |
-|-------|--------|
-| **Scroll wheel** | Zoom in/out |
-| **Drag** | Pan map |
-| **Double-click** | Zoom in (centered) |
-| **Click (marker)** | Toggle marker tooltip |
-| **Click (empty space)** | Place custom marker |
-| **Click (custom marker)** | Delete custom marker |
-| `+` or `=` | Zoom in |
-| `-` | Zoom out |
-| `0` | Reset view |
-
-### Mobile (Touch)
-| Gesture | Action |
-|---------|--------|
-| **Drag** | Pan map |
-| **Pinch** | Zoom in/out + pan map |
-| **Double-tap** | Zoom in (centered) |
-| **Tap (marker)** | Toggle marker tooltip |
-| **Tap (empty space)** | Place custom marker |
-| **Tap (custom marker)** | Delete custom marker |
-
-### Sidebar
-| Control | Action |
-|---------|--------|
-| **Layer toggles** | Show/hide Green Crystals or Custom Markers |
-| **Export** | Download custom markers as JSON |
-| **Import** | Load custom markers from JSON file |
-| **Clear** | Remove all custom markers (with confirmation) |
-| **Handle (◀)** | Collapse/expand sidebar |
-
-## Custom Markers
-
-### Adding Markers
-- **Desktop**: Quick tap (less than 150ms hold) on empty space
-- **Mobile**: Brief tap on empty space
-
-### Removing Markers
-- **Desktop**: Quick tap on custom marker
-- **Mobile**: Brief tap on custom marker
-
-### Saving & Sharing
-- Custom markers auto-save to browser storage
-- **Export**: Downloads JSON file with timestamp and data hash (`custom-markers-{timestamp}-{hash}.json`)
-- **Import**: Paste JSON file to load marker sets
-- **Share**: Paste JSON content directly in Discord (compact one-line-per-marker format)
+- Solver: `tools/tsp_euclid.js` — fast browser-safe heuristic (NN seed + repeated 2-opt; advanced mode uses 3-opt polishing).
+- Result: `map.setRoute()` stores a normalized length (map width = 1) and the route indices; the sidebar displays the normalized length.
+- Visibility: when a route is computed the `route` layer is automatically enabled (sidebar toggle checked) so the polyline is visible even if it was previously hidden.
+- Clear Route: `Clear Route` shows a confirmation prompt before removing the visualization.
 
 ## Project Structure
 
 ```
-├── index.html              # Main HTML document
-├── styles.css              # Responsive styling
-├── map.js                  # Interactive map engine (750+ lines)
+├── index.html              # Main HTML document (sidebar + controls)
+├── styles.css              # Styling; uses .pressed states for touch
+├── map.js                  # Interactive map engine (rendering, interaction, route UI)
+├── tools/
+│   └── tsp_euclid.js       # Euclidean TSP solver (NN + 2-opt, 3-opt option)
 ├── data/
-│   ├── init.js            # LAYERS object initialization
-│   ├── greenCrystals.js   # Green Crystals layer data
-│   ├── customMarkers.js   # Custom Markers layer definition
-│   └── markerUtils.js     # Marker export/import utilities
-└── tiles/                 # Map tiles (256-8192px)
-    ├── 256.avif
-    ├── 512.avif
-    ├── 1024.avif
-    ├── 2048.avif
-    ├── 4096.avif
-    └── 8192.avif
+│   ├── init.js             # LAYERS bootstrap
+│   ├── greenCrystals.js    # Green Crystals layer data
+│   ├── customMarkers.js    # Custom markers (data-only)
+│   ├── route.js            # Route layer metadata (color, name, icon)
+│   └── markerUtils.js      # Marker persistence and import/export helpers
+└── tiles/                  # Map tiles (256-8192px)
 ```
 
 ## Data Architecture
 
-### LAYERS Object
-All marker layers are defined in the modular `LAYERS` object:
-```javascript
-LAYERS.greenCrystals = {
-    name: "Green Crystals",
-    icon: "💎",
-    color: "#22c55e",
-    markers: [...]
-}
-```
+All point layers are defined in the global `LAYERS` object. Each layer provides `name`, `icon`, `color`, and a `markers` array. The app renders layers, builds the sidebar, and performs hit-testing dynamically from `LAYERS` so adding new POI layers requires no changes to `map.js`.
 
-Each layer includes:
-- **name**: Display name in sidebar
-- **icon**: Emoji or text for layer toggle
-- **color**: Hex color for markers and UI elements
-- **markers**: Array of marker data
+Custom markers are pure data in `data/customMarkers.js`; `data/markerUtils.js` centralizes localStorage load/save and import/export behavior.
 
-This architecture allows easy addition of new layers (save stations, red doors, etc.) without modifying the core rendering logic.
+## UI / Interaction Notes
+
+- Icons: sidebar buttons use simple single-character dingbats (e.g., ↓, ↑, ✕, ➤) for consistency.
+- Press states: hover-based styles were replaced with `.pressed` class and pointer event handlers to avoid sticky hover states on mobile.
+- Route rendering: color is taken from `LAYERS.route.color` and animated via a dashed stroke whose offset is advanced using `requestAnimationFrame`.
 
 ## Browser Compatibility
 
-- Modern browsers with Canvas 2D API support
-- Touch event support for mobile
-- LocalStorage support for persistence
+- Modern browsers with Canvas 2D API
+- Touch and pointer events supported (mobile-friendly)
+- LocalStorage for persistence
 
-Tested on:
-- Chrome/Edge (desktop & mobile)
-- Firefox (desktop & mobile)
-- Safari (iOS & macOS)
+Tested on Chrome/Edge/Firefox and iOS Safari; mobile-focused changes (pressed states, larger hit targets) improve reliability on touch devices.
 
 ## Performance Notes
 
-- Tiles load dynamically based on zoom level
-- Markers render only when visible (off-screen culling)
-- Hold-duration detection (150ms) distinguishes click from drag
+- Tiles and marker rendering are optimized for visible-region culling
+- Routing is computed client-side; use the "Improved" compute option for longer runs with better solutions
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+MIT (see LICENSE)
 
 ## Disclaimer
 
-This is a fan-made tool for personal use. Metroid Prime 4: Beyond and all related assets are property of Nintendo.
+Fan-made tool for personal use. Metroid Prime 4: Beyond and related assets belong to their respective owners.

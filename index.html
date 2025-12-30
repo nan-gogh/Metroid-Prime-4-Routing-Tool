@@ -18,37 +18,24 @@
             </div>
             
             <div class="controls">
+
                 <div class="control-group">
                     <h3>Layers</h3>
-                    <label class="layer-toggle">
-                        <input type="checkbox" id="toggleCrystals" checked>
-                        <div class="layer-icon"></div>
-                        <div class="layer-info">
-                            <div class="layer-name">Green Crystals</div>
-                            <div class="layer-count"><span id="crystalCount">0</span> markers</div>
-                        </div>
-                    </label>
-                    <label class="layer-toggle">
-                        <input type="checkbox" id="toggleCustom" checked>
-                        <div class="layer-icon"></div>
-                        <div class="layer-info">
-                            <div class="layer-name">Custom Markers</div>
-                            <div class="layer-count"><span id="customCount">0 / 50</span></div>
-                        </div>
-                    </label>
+                    <div id="layerList"></div>
                 </div>
             
                 <div class="control-group">
                     <h3>Routing</h3>
                     <button id="computeRouteBtn" class="control-btn">Compute Route</button>
-                    <button id="clearRouteBtn" class="control-btn">Clear Route</button>
+                    <button id="computeRouteImprovedBtn" class="control-btn">Compute Route (Improved?)</button>
+                    <button id="clearRouteBtn" class="control-btn danger">Clear Route</button>
                 </div>
                 
                 <div class="control-group" id="customMarkerControls">
                     <h3>Custom Markers</h3>
-                    <button id="exportCustom" class="control-btn">↓ Export</button>
-                    <button id="importCustom" class="control-btn">↑ Import</button>
-                    <button id="clearCustom" class="control-btn danger">✕ Clear</button>
+                    <button id="exportCustom" class="control-btn">Export Markers</button>
+                    <button id="importCustom" class="control-btn">Import Markers</button>
+                    <button id="clearCustom" class="control-btn danger">Clear Markers</button>
                     <input type="file" id="importFile" accept=".json" style="display:none;">
                 </div>
             </div>
@@ -90,6 +77,7 @@
     <script src="data/init.js"></script>
     <script src="data/greenCrystals.js"></script>
     <script src="data/customMarkers.js"></script>
+    <script src="data/route.js"></script>
     <script src="data/markerUtils.js"></script>
     <script src="tools/tsp_euclid.js"></script>
     <script src="map.js"></script>

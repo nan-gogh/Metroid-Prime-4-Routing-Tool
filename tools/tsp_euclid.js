@@ -90,6 +90,73 @@
     return tour;
   }
 
+  // Randomized 3-opt improvement: try random triples and accept reconnections that improve total length
+  function randomized3Opt(tour, d, iterations) {
+    iterations = iterations || Math.max(2000, tour.length * 10);
+    var n = tour.length;
+    var best = tour;
+    var bestLen = tourLength(tour, d);
+
+    function makeNewTour(t, i, j, k, caseId) {
+      // Build new tour by concatenating segments according to caseId (0..6)
+      // segments: A = 0..i, B = i+1..j, C = j+1..k, D = k+1..n-1
+      var A = t.slice(0, i + 1);
+      var B = t.slice(i + 1, j + 1);
+      var C = t.slice(j + 1, k + 1);
+      var D = t.slice(k + 1);
+      var res;
+      switch (caseId) {
+        case 0: // reverse B
+          res = A.concat(B.reverse(), C, D);
+          break;
+        case 1: // reverse C
+          res = A.concat(B, C.reverse(), D);
+          break;
+        case 2: // reverse B+C
+          res = A.concat((B.concat(C)).reverse(), D);
+          break;
+        case 3: // swap B and C
+          res = A.concat(C, B, D);
+          break;
+        case 4: // reverse B, swap
+          res = A.concat(C, B.reverse(), D);
+          break;
+        case 5: // reverse C, swap
+          res = A.concat(C.reverse(), B, D);
+          break;
+        case 6: // complex reorder
+          res = A.concat(B.reverse(), C.reverse(), D);
+          break;
+        default:
+          res = t.slice();
+      }
+      return res;
+    }
+
+    for (var it = 0; it < iterations; it++) {
+      // choose random triple with reasonable spacing
+      var i = Math.floor(Math.random() * n);
+      var j = (i + 2 + Math.floor(Math.random() * Math.max(1, Math.min(n - 3, 10)))) % n;
+      var k = (j + 2 + Math.floor(Math.random() * Math.max(1, Math.min(n - j - 1, 10)))) % n;
+      if (i >= j) continue;
+      if (j >= k) continue;
+
+      for (var caseId = 0; caseId < 7; caseId++) {
+        var newTour = makeNewTour(best, i, j, k, caseId);
+        var newLen = tourLength(newTour, d);
+        if (newLen + 1e-12 < bestLen) {
+          best = newTour;
+          bestLen = newLen;
+          break; // accept first improving move
+        }
+      }
+    }
+
+    // polish with 2-opt
+    best = twoOptImprove(best, d);
+    return best;
+  }
+
   function cloneTour(t) {
     return t.slice();
   }
@@ -128,11 +195,43 @@
     return {tour: bestTour, length: bestLen, distanceMatrix: d};
   }
 
+  // Higher-quality solver: more restarts + randomized 3-opt polishing
+  function solveTSPAdvanced(points, opts) {
+    opts = opts || {};
+    var restarts = opts.restarts || 16;
+    var threeOptIters = opts.threeOptIters || Math.max(2000, points.length * 20);
+    var d = computeDistanceMatrix(points);
+    var n = points.length;
+    var bestTour = null;
+    var bestLen = Infinity;
+
+    var starts = [];
+    for (var s = 0; s < Math.min(n, restarts); s++) starts.push(s);
+    while (starts.length < restarts) starts.push(Math.floor(Math.random() * n));
+
+    for (var si = 0; si < starts.length; si++) {
+      var start = starts[si];
+      var tour = nearestNeighborTour(d, start);
+      tour = twoOptImprove(tour, d);
+      // apply randomized 3-opt polishing
+      tour = randomized3Opt(tour, d, Math.floor(threeOptIters / restarts));
+      var len = tourLength(tour, d);
+      if (len < bestLen) {
+        bestLen = len;
+        bestTour = cloneTour(tour);
+      }
+    }
+
+    return { tour: bestTour, length: bestLen, distanceMatrix: d };
+  }
+
   global.TSPEuclid = {
     euclideanDistance: euclideanDistance,
     computeDistanceMatrix: computeDistanceMatrix,
     nearestNeighborTour: nearestNeighborTour,
     twoOptImprove: twoOptImprove,
-    solveTSP: solveTSP
+    solveTSP: solveTSP,
+    solveTSPAdvanced: solveTSPAdvanced,
+    randomized3Opt: randomized3Opt
   };
 })(typeof window !== 'undefined' ? window : globalThis);

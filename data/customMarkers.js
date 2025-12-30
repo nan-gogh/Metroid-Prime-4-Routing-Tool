@@ -7,20 +7,5 @@ LAYERS.customMarkers = {
     markers: []
 };
 
-// Load custom markers from localStorage if available
-(function() {
-    try {
-        const saved = localStorage.getItem('mp4_customMarkers');
-        if (saved) {
-            const data = JSON.parse(saved);
-            if (Array.isArray(data)) {
-                LAYERS.customMarkers.markers = data;
-            }
-        }
-    } catch (e) {
-        console.warn('Failed to load custom markers from localStorage:', e);
-    }
-})();
-
 // Convenience export
 const CUSTOM_MARKERS = LAYERS.customMarkers.markers;

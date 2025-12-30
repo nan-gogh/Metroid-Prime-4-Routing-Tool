@@ -36,21 +36,29 @@ class InteractiveMap {
         
         // Markers
         this.markers = [];
-        this.customMarkers = [];
+        this.customMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) ? LAYERS.customMarkers.markers : [];
         // Current route: array of marker indices in `this.markers` order (or null)
         this.currentRoute = null;
         this.currentRouteLength = 0;
+        // Route animation state
+        this._routeDashOffset = 0; // px offset used for animated dashes
+        this._routeRaf = null; // requestAnimationFrame id
+        this._lastRouteAnimTime = 0;
+        this._routeAnimationSpeed = 30; // pixels per second
         this.hoveredMarker = null;
-        this.hoveredMarkerLayer = null; // layer key like 'greenCrystals' or 'customMarkers'
+        this.hoveredMarkerLayer = null; // layer key identifying which LAYERS entry the hovered marker belongs to
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
         this.selectedMarker = null;
         this.selectedMarkerLayer = null;
         
         // Layer visibility state (runtime UI state, separate from data)
-        this.layerVisibility = {
-            'greenCrystals': true,
-            'customMarkers': true
-        };
+        this.layerVisibility = {};
+        try {
+            const keys = Object.keys(LAYERS || {});
+            for (let k = 0; k < keys.length; k++) this.layerVisibility[keys[k]] = true;
+        } catch (e) {}
+        // Ensure the virtual 'route' layer is present and visible by default
+        this.layerVisibility.route = true;
         
         // Layer configuration (runtime constraints, not data)
         this.layerConfig = {
@@ -333,19 +341,21 @@ class InteractiveMap {
             const hit = this.findMarkerAt(localX, localY);
 
             if (isQuickTap && hit) {
-                if (hit.layerKey === 'customMarkers') {
-                    if (typeof MarkerUtils !== 'undefined') {
+                const layerKey = hit.layerKey;
+                // Helper determination: deletable layers (custom markers) vs selectable layers
+                const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
+                const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
+
+                if (isDeletable) {
+                    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
                         MarkerUtils.deleteCustomMarker(hit.marker.uid);
-                        this.customMarkers = LAYERS.customMarkers.markers;
-                        this.updateCustomMarkerCount();
-                        this.render();
-                        // Update cursor/hit state at the click location after deletion
+                        // MarkerUtils will update LAYERS and map; ensure hover state updates
                         this.checkMarkerHover(localX, localY);
                     }
-                } else if (hit.layerKey === 'greenCrystals') {
-                    // Toggle selection for canonical markers -> show/hide persistent tooltip
+                } else if (isSelectable) {
+                    // Toggle selection for selectable layers
                     const uid = hit.marker.uid;
-                    if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === 'greenCrystals') {
+                    if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
                         // deselect
                         this.selectedMarker = null;
                         this.selectedMarkerLayer = null;
@@ -354,14 +364,15 @@ class InteractiveMap {
                     } else {
                         // select
                         this.selectedMarker = hit.marker;
-                        this.selectedMarkerLayer = 'greenCrystals';
+                        this.selectedMarkerLayer = layerKey;
                         // compute screen coords for tooltip placement
                         const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
                         const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
-                        this.showTooltip(hit.marker, screenX, screenY, 'greenCrystals');
+                        this.showTooltip(hit.marker, screenX, screenY, layerKey);
                         this.render();
                     }
                 }
+                // otherwise: no default action
             } else if (e.button === 0 && isQuickTap && !hit) {
                 // Quick tap on empty space - place custom marker
                 // Reuse previously computed localX/localY to avoid redundant layout read
@@ -374,12 +385,13 @@ class InteractiveMap {
                 
                 // Only place if within map bounds
                 if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
+                    // Do not allow placement when the custom markers layer is hidden
+                    if (!this.layerVisibility || !this.layerVisibility.customMarkers) {
+                        return;
+                    }
                     if (typeof MarkerUtils !== 'undefined') {
                         MarkerUtils.addCustomMarker(worldX, worldY);
-                        this.customMarkers = LAYERS.customMarkers.markers;
-                        this.updateCustomMarkerCount();
-                        this.render();
-                        // Update cursor/hit state at the click location after placement
+                        // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
                         this.checkMarkerHover(localX, localY);
                     }
                 }
@@ -516,33 +528,76 @@ class InteractiveMap {
     
     setMarkers(markers) {
         this.markers = markers;
-        this.customMarkers = LAYERS.customMarkers.markers;
+        this.customMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) ? LAYERS.customMarkers.markers : this.customMarkers;
         this.render();
-        
-        const count = document.getElementById('crystalCount');
-        if (count) count.textContent = markers.length;
-        
-        this.updateCustomMarkerCount();
+        this.updateLayerCounts();
     }
     
     updateCustomMarkerCount() {
-        const count = document.getElementById('customCount');
-        if (count) count.textContent = `${this.customMarkers.length} / 50`;
+        // Backwards-compatible alias: update all layer counts
+        this.updateLayerCounts();
+    }
+
+    // Update counts for all layers in the sidebar (predictable element IDs)
+    updateLayerCounts() {
+        try {
+            const entries = Object.entries(LAYERS || {});
+            for (let i = 0; i < entries.length; i++) {
+                const layerKey = entries[i][0];
+                const layer = entries[i][1];
+                const spanId = (layerKey === 'route') ? 'routeLength' : `${layerKey}Count`;
+                const el = document.getElementById(spanId);
+                if (!el) continue;
+                if (layerKey === 'route') {
+                    if (this.currentRoute && this.currentRoute.length) {
+                        // show normalized map units (map width = 1) with 4 decimal places.
+                        const norm = (typeof this.currentRouteLengthNormalized === 'number') ? this.currentRouteLengthNormalized : (this.currentRouteLength / MAP_SIZE || 0);
+                        // show just the numeric value (no unit suffix) per request
+                        el.textContent = `${norm.toFixed(4)}`;
+                    } else {
+                        // no route -> display 0
+                        el.textContent = '0';
+                    }
+                } else if (Array.isArray(layer.markers)) {
+                    // If layer provides a maxMarkers field use it; otherwise try runtime layerConfig, else just show count
+                    const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (this.layerConfig && this.layerConfig[layerKey] && this.layerConfig[layerKey].maxMarkers);
+                    if (typeof configuredMax === 'number') {
+                        el.textContent = `${layer.markers.length} / ${configuredMax}`;
+                    } else {
+                        el.textContent = `${layer.markers.length}`;
+                    }
+                } else if (typeof layer.markerCountText === 'string') {
+                    el.textContent = layer.markerCountText;
+                } else {
+                    el.textContent = '';
+                }
+            }
+        } catch (e) {
+            // ignore DOM errors
+        }
     }
     
     toggleMarkers(show) {
-        this.layerVisibility.greenCrystals = show;
-        // If crystals are hidden, clear any selected crystal tooltip
-        if (!show && this.selectedMarkerLayer === 'greenCrystals') {
+        this.toggleLayer('greenCrystals', show);
+    }
+    
+    toggleCustomMarkers(show) {
+        this.toggleLayer('customMarkers', show);
+    }
+
+    // Generic layer toggle handler: updates runtime visibility and performs per-layer side-effects
+    toggleLayer(layerKey, show) {
+        if (!this.layerVisibility) this.layerVisibility = {};
+        this.layerVisibility[layerKey] = !!show;
+
+        // If hiding a layer that currently has a selected marker, clear selection
+        if (!show && this.selectedMarkerLayer === layerKey) {
             this.selectedMarker = null;
             this.selectedMarkerLayer = null;
             this.hideTooltip();
         }
-        this.render();
-    }
-    
-    toggleCustomMarkers(show) {
-        this.layerVisibility.customMarkers = show;
+
+        // Generic re-render
         this.render();
     }
     
@@ -552,21 +607,15 @@ class InteractiveMap {
         const markerRadius = this.getHitRadius();
         let foundCursor = false;
 
-        if (this.layerVisibility.customMarkers) {
-            for (let i = this.customMarkers.length - 1; i >= 0; i--) {
-                const marker = this.customMarkers[i];
-                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
-                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-                if (Math.hypot(mouseX - screenX, mouseY - screenY) < markerRadius) {
-                    foundCursor = true;
-                    break;
-                }
-            }
-        }
-
-        if (this.layerVisibility.greenCrystals) {
-            for (let i = this.markers.length - 1; i >= 0; i--) {
-                const marker = this.markers[i];
+        // Iterate layers defined in LAYERS to detect hover over any visible marker
+        const entries = Object.entries(LAYERS || {});
+        for (let li = entries.length - 1; li >= 0 && !foundCursor; li--) {
+            const layerKey = entries[li][0];
+            const layer = entries[li][1];
+            if (!this.layerVisibility[layerKey]) continue;
+            if (!Array.isArray(layer.markers)) continue;
+            for (let i = layer.markers.length - 1; i >= 0; i--) {
+                const marker = layer.markers[i];
                 const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
                 if (Math.hypot(mouseX - screenX, mouseY - screenY) < markerRadius) {
@@ -586,26 +635,19 @@ class InteractiveMap {
     findMarkerAt(screenX, screenY) {
         const markerRadius = this.getHitRadius();
 
-        // Check custom markers first
-        if (this.layerVisibility.customMarkers) {
-            for (let i = this.customMarkers.length - 1; i >= 0; i--) {
-                const marker = this.customMarkers[i];
+        const entries = Object.entries(LAYERS || {});
+        // Iterate in reverse so later layers (higher in DOM) get priority
+        for (let li = entries.length - 1; li >= 0; li--) {
+            const layerKey = entries[li][0];
+            const layer = entries[li][1];
+            if (!this.layerVisibility[layerKey]) continue;
+            if (!Array.isArray(layer.markers)) continue;
+            for (let i = layer.markers.length - 1; i >= 0; i--) {
+                const marker = layer.markers[i];
                 const mx = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const my = marker.y * MAP_SIZE * this.zoom + this.panY;
                 if (Math.hypot(screenX - mx, screenY - my) < markerRadius) {
-                    return { marker: { ...marker }, index: i, layerKey: 'customMarkers' };
-                }
-            }
-        }
-
-        // Then check green crystals
-        if (this.layerVisibility.greenCrystals) {
-            for (let i = this.markers.length - 1; i >= 0; i--) {
-                const marker = this.markers[i];
-                const mx = marker.x * MAP_SIZE * this.zoom + this.panX;
-                const my = marker.y * MAP_SIZE * this.zoom + this.panY;
-                if (Math.hypot(screenX - mx, screenY - my) < markerRadius) {
-                    return { marker: { ...marker }, index: i, layerKey: 'greenCrystals' };
+                    return { marker: { ...marker }, index: i, layerKey };
                 }
             }
         }
@@ -713,71 +755,85 @@ class InteractiveMap {
         const baseSize = this.getBaseMarkerRadius();
         const cssWidth = this.canvas.clientWidth;
         const cssHeight = this.canvas.clientHeight;
-        
-        // Render green crystals if visible
-        if (this.layerVisibility.greenCrystals) {
-            const crystalColor = LAYERS.greenCrystals?.color || '#22c55e';
-            this.markers.forEach((marker, index) => {
+        // Generic rendering for all point-marker layers defined in LAYERS.
+        const entries = Object.entries(LAYERS || {});
+        for (let li = 0; li < entries.length; li++) {
+            const layerKey = entries[li][0];
+            const layer = entries[li][1];
+            if (!this.layerVisibility[layerKey]) continue;
+            if (!Array.isArray(layer.markers)) continue;
+
+            const color = layer.color || '#888';
+
+            for (let i = 0; i < layer.markers.length; i++) {
+                const marker = layer.markers[i];
                 const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-                
+
                 // Skip if off-screen
-                if (screenX < -20 || screenX > cssWidth + 20 ||
-                    screenY < -20 || screenY > cssHeight + 20) {
-                    return;
-                }
-                
-                const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === 'greenCrystals';
-                const size = isSelected ? baseSize * 1.3 : baseSize; // Adjust size when selected
-                
-                // Single circle with solid fill and border
+                if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
+
+                const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
+                const size = isSelected ? baseSize * 1.3 : baseSize;
+
                 ctx.beginPath();
                 ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-                ctx.fillStyle = isSelected ? this.lightenColor(crystalColor, 30) : crystalColor;
+                ctx.fillStyle = isSelected ? this.lightenColor(color, 30) : color;
                 ctx.fill();
-                ctx.strokeStyle = isSelected ? this.lightenColor(crystalColor, 50) : this.darkenColor(crystalColor, 50);
+                ctx.strokeStyle = isSelected ? this.lightenColor(color, 50) : this.darkenColor(color, 50);
                 ctx.lineWidth = isSelected ? 2 : 1.5;
                 ctx.stroke();
-            });
-        }
-        
-        // Render custom markers if visible
-        if (this.layerVisibility.customMarkers) {
-            const customColor = LAYERS.customMarkers?.color || '#ff6b6b';
-            this.customMarkers.forEach((marker, index) => {
-                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
-                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-
-                // Skip if off-screen
-                if (screenX < -20 || screenX > cssWidth + 20 ||
-                    screenY < -20 || screenY > cssHeight + 20) {
-                    return;
-                }
-
-                // Always render custom markers without hover-based visual changes
-                const size = baseSize; // Use baseSize for custom markers
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-                ctx.fillStyle = customColor;
-                ctx.fill();
-                ctx.strokeStyle = this.darkenColor(customColor, 50);
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-            });
+            }
         }
     }
 
     // Render a polyline route stored in `this.currentRoute` (array of indices)
     renderRoute() {
         if (!this.currentRoute || !Array.isArray(this.currentRoute) || this.currentRoute.length === 0) return;
+        if (!this.layerVisibility.route) return;
         if (!this._routeSources || !Array.isArray(this._routeSources)) return;
         const ctx = this.ctx;
         const n = this.currentRoute.length;
         ctx.save();
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(0, 255, 208, 0.9)'; // orange
+        // Use the route layer's configured color (provided by data/route.js)
+        // so route rendering matches the sidebar icon backdrop. Do not provide
+        // a hardcoded color fallback here — the color should come from data.
+        const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
+        const hexToRgba = (h, a) => {
+            if (!h || typeof h !== 'string') return null;
+            let s = h.replace('#', '').trim();
+            // Expand shorthand 3/4-digit hex (eg. #abc or #abcd)
+            if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
+            if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
+
+            let r = 0, g = 0, b = 0, alphaFromHex = 1;
+            if (s.length === 6) {
+                r = parseInt(s.slice(0, 2), 16);
+                g = parseInt(s.slice(2, 4), 16);
+                b = parseInt(s.slice(4, 6), 16);
+            } else if (s.length === 8) {
+                r = parseInt(s.slice(0, 2), 16);
+                g = parseInt(s.slice(2, 4), 16);
+                b = parseInt(s.slice(4, 6), 16);
+                alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
+            } else {
+                return null;
+            }
+
+            const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        if (routeHex) ctx.strokeStyle = hexToRgba(routeHex, 0.9);
         ctx.lineWidth = Math.max(2, 3 * this.zoom);
+        // configure dashed stroke for animated route
+        const dashLen = Math.max(6, 14 * this.zoom);
+        const gapLen = Math.max(6, 10 * this.zoom);
+        if (routeHex) {
+            ctx.setLineDash([dashLen, gapLen]);
+            ctx.lineDashOffset = -this._routeDashOffset;
+        }
 
         // Draw path
         ctx.beginPath();
@@ -794,9 +850,12 @@ class InteractiveMap {
         const firstSrc = this._routeSources[this.currentRoute[0]];
         if (firstSrc && firstSrc.marker) ctx.lineTo(firstSrc.marker.x * MAP_SIZE * this.zoom + this.panX, firstSrc.marker.y * MAP_SIZE * this.zoom + this.panY);
         ctx.stroke();
+        // reset dash state so other drawings are unaffected
+        ctx.setLineDash([]);
 
-        // Draw small circles at nodes
-        ctx.fillStyle = 'rgba(100, 255, 193, 0.95)';
+        // Draw small circles at nodes using the same base color (slightly more opaque)
+        const nodeFill = routeHex ? hexToRgba(routeHex, 0.95) : null;
+        if (nodeFill) ctx.fillStyle = nodeFill;
         const dotSize = Math.max(3, 4 * this.zoom);
         for (let i = 0; i < n; i++) {
             const idx = this.currentRoute[i];
@@ -816,15 +875,68 @@ class InteractiveMap {
     setRoute(routeIndices, lengthNormalized, routeSources) {
         this.currentRoute = routeIndices ? routeIndices.slice() : null;
         this._routeSources = Array.isArray(routeSources) ? routeSources.slice() : null;
-        // lengthNormalized is in normalized map units (0..~sqrt(2) * n), convert to MAP pixels for display if needed
-        this.currentRouteLength = typeof lengthNormalized === 'number' ? lengthNormalized * MAP_SIZE : 0;
+        // lengthNormalized is in normalized map units (map width = 1). Store both
+        // normalized length and pixel length for compatibility.
+        this.currentRouteLengthNormalized = typeof lengthNormalized === 'number' ? lengthNormalized : 0;
+        this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
+        // Update route length display in sidebar
+        try {
+            const el = document.getElementById('routeLength');
+            if (el) this.updateLayerCounts();
+        } catch (e) {}
+
         this.render();
+        // Start animated route when a route is set
+        if (this.currentRoute && this.currentRoute.length) {
+            // Ensure the virtual 'route' layer is visible so the computed route appears
+            if (!this.layerVisibility) this.layerVisibility = {};
+            this.layerVisibility.route = true;
+            // If the sidebar toggle exists, check it so the UI reflects the change
+            try {
+                const cb = document.getElementById('toggle_route');
+                if (cb) cb.checked = true;
+            } catch (e) {}
+            this.startRouteAnimation();
+        } else {
+            this.stopRouteAnimation();
+        }
     }
 
     clearRoute() {
         this.currentRoute = null;
         this.currentRouteLength = 0;
+        this.currentRouteLengthNormalized = 0;
+        // Update UI counts via the central updater so it shows '0'
+        try { this.updateLayerCounts(); } catch (e) {}
         this.render();
+        // Stop animated route when cleared
+        this.stopRouteAnimation();
+    }
+
+    startRouteAnimation() {
+        if (this._routeRaf) return;
+        this._lastRouteAnimTime = performance.now();
+        const step = (t) => {
+            const dt = Math.max(0, t - this._lastRouteAnimTime) / 1000; // seconds
+            this._lastRouteAnimTime = t;
+            // advance offset by speed * dt (wrap to avoid large numbers)
+            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt) % 1000000;
+            // only continue animating if there is a route
+            if (!this.currentRoute || !this.currentRoute.length) {
+                this._routeRaf = null;
+                return;
+            }
+            this.render();
+            this._routeRaf = requestAnimationFrame(step);
+        };
+        this._routeRaf = requestAnimationFrame(step);
+    }
+
+    stopRouteAnimation() {
+        if (this._routeRaf) {
+            cancelAnimationFrame(this._routeRaf);
+            this._routeRaf = null;
+        }
     }
 }
 
@@ -832,68 +944,178 @@ class InteractiveMap {
 let map;
 
 async function initializeLayerIcons() {
-    // Dynamically populate layer icons and colors from LAYERS definitions
-    // Matches DOM order to LAYERS key order (insertion order)
-    const toggles = document.querySelectorAll('.layer-toggle');
-    const layerKeys = Object.keys(LAYERS);
-    
-    toggles.forEach((toggle, index) => {
-        const layerKey = layerKeys[index];
-        if (layerKey && LAYERS[layerKey]) {
-            const layer = LAYERS[layerKey];
-            const iconDiv = toggle.querySelector('.layer-icon');
-            const nameDiv = toggle.querySelector('.layer-name');
-            const countDiv = toggle.querySelector('.layer-count');
-            const checkbox = toggle.querySelector('input[type="checkbox"]');
-            if (iconDiv) {
-                // Set icon text
-                if (layer.icon) {
-                    iconDiv.textContent = layer.icon;
-                }
-                // Set background color from layer definition
-                if (layer.color) {
-                    iconDiv.style.backgroundColor = layer.color;
-                }
-            }
-            // Set display name from layer metadata
-            if (nameDiv && layer.name) nameDiv.textContent = layer.name;
+    // Dynamically build layer toggle list from `LAYERS` so adding layers is data-driven.
+    const container = document.getElementById('layerList');
+    if (!container) return;
+    container.innerHTML = '';
 
-            // Initialize counts and checkbox state where applicable
-            if (layerKey === 'greenCrystals') {
-                if (countDiv) {
-                    const n = (layer.markers && layer.markers.length) || 0;
-                    countDiv.innerHTML = `<span id="crystalCount">${n}</span> markers`;
-                }
-                if (checkbox && typeof map !== 'undefined') checkbox.checked = !!map.layerVisibility.greenCrystals;
-            } else if (layerKey === 'customMarkers') {
-                if (countDiv) {
-                    const n = (layer.markers && layer.markers.length) || 0;
-                    const max = (map && map.layerConfig && map.layerConfig.customMarkers && map.layerConfig.customMarkers.maxMarkers) || 50;
-                    countDiv.innerHTML = `<span id="customCount">${n} / ${max}</span>`;
-                }
-                if (checkbox && typeof map !== 'undefined') checkbox.checked = !!map.layerVisibility.customMarkers;
+    const layerEntries = Object.entries(LAYERS || {});
+    // Ensure a 'route' toggle is present even if not defined in LAYERS (virtual layer)
+    /*if (!LAYERS.route) {
+        // Use a non-mutating fallback so we don't accidentally create runtime data
+        // that should live in a data file. `data/route.js` should provide `LAYERS.route`.
+        layerEntries.push(['route', { name: 'Route', icon: '➤', color: '#ffa500' }]);
+    }*/
+    // Ensure route and greenCrystals appear at the top of the list (route first).
+    const preferred = ['route', 'greenCrystals'];
+    const orderedEntries = [];
+    // push preferred keys in order if present
+    for (let i = 0; i < preferred.length; i++) {
+        const key = preferred[i];
+        const idx = layerEntries.findIndex(e => e[0] === key);
+        if (idx >= 0) orderedEntries.push(layerEntries[idx]);
+    }
+    // append remaining entries in original order
+    for (let i = 0; i < layerEntries.length; i++) {
+        const k = layerEntries[i][0];
+        if (!preferred.includes(k)) orderedEntries.push(layerEntries[i]);
+    }
+
+    orderedEntries.forEach(([layerKey, layer]) => {
+        // root label
+        const label = document.createElement('label');
+        label.className = 'layer-toggle';
+        label.dataset.layer = layerKey;
+
+        // checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `toggle_${layerKey}`;
+        checkbox.checked = !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
+        label.appendChild(checkbox);
+
+        // icon
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'layer-icon';
+        if (layer.icon) iconDiv.textContent = layer.icon;
+        if (layer.color) iconDiv.style.backgroundColor = layer.color;
+        label.appendChild(iconDiv);
+
+        // info
+        const info = document.createElement('div');
+        info.className = 'layer-info';
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'layer-name';
+        nameDiv.textContent = layer.name || layerKey;
+        const countDiv = document.createElement('div');
+        countDiv.className = 'layer-count';
+
+        // count span id strategy: use `${layerKey}Count` to be predictable; special-case 'route' -> 'routeLength'
+        const countSpan = document.createElement('span');
+        countSpan.id = (layerKey === 'route') ? 'routeLength' : `${layerKey}Count`;
+        if (layer.markerCountText) {
+            countSpan.textContent = layer.markerCountText;
+        } else if (Array.isArray(layer.markers)) {
+            const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (map && map.layerConfig && map.layerConfig[layerKey] && map.layerConfig[layerKey].maxMarkers);
+            if (typeof configuredMax === 'number') {
+                countSpan.textContent = `${layer.markers.length} / ${configuredMax}`;
+            } else {
+                countSpan.textContent = `${layer.markers.length}`;
             }
+        } else {
+            countSpan.textContent = '';
         }
+
+        countDiv.appendChild(countSpan);
+        // optional suffix like "markers" or "length" (configurable per-layer)
+        if (layer && layer.countSuffix) {
+            countDiv.appendChild(document.createTextNode(' ' + layer.countSuffix));
+        } else if (layerKey === 'route') {
+            // route shows length (not a count)
+            countDiv.appendChild(document.createTextNode(' length'));
+        } else if (Array.isArray(layer.markers)) {
+            // default suffix for data layers that expose a markers array
+            countDiv.appendChild(document.createTextNode(' markers'));
+        }
+
+        info.appendChild(nameDiv);
+        info.appendChild(countDiv);
+        label.appendChild(info);
+
+        // append to container
+        container.appendChild(label);
+
+        // Add pressed-state feedback for touch/pointer devices to avoid hover sticking
+        label.addEventListener('pointerdown', (e) => {
+            label.classList.add('pressed');
+        });
+        label.addEventListener('pointerup', (e) => {
+            label.classList.remove('pressed');
+        });
+        label.addEventListener('pointercancel', (e) => {
+            label.classList.remove('pressed');
+        });
+
+        // wire change handler per-layer
+        checkbox.addEventListener('change', (e) => {
+            const checked = !!e.target.checked;
+            // update runtime visibility and use generic toggle
+            if (!map.layerVisibility) map.layerVisibility = {};
+            if (layerKey === 'route') {
+                map.layerVisibility.route = checked;
+                map.render();
+            } else {
+                map.toggleLayer(layerKey, checked);
+            }
+        });
+    });
+}
+
+// Utility: attach pressed-state handlers to any element matching selector
+function attachPressedHandlers(selector) {
+    const els = document.querySelectorAll(selector);
+    els.forEach(el => {
+        el.addEventListener('pointerdown', () => el.classList.add('pressed'));
+        el.addEventListener('pointerup', () => el.classList.remove('pressed'));
+        el.addEventListener('pointercancel', () => el.classList.remove('pressed'));
     });
 }
 
 async function init() {
     // Create map
     map = new InteractiveMap('mapCanvas');
-    
-    // GREEN_CRYSTALS is loaded from data/greenCrystals.js
-    if (typeof GREEN_CRYSTALS !== 'undefined') {
-        map.setMarkers(GREEN_CRYSTALS);
-        console.log('✓ Loaded GREEN_CRYSTALS:', GREEN_CRYSTALS.length, 'markers');
-    } else if (typeof LAYERS !== 'undefined' && LAYERS.greenCrystals) {
-        map.setMarkers(LAYERS.greenCrystals.markers);
-        console.log('✓ Loaded from LAYERS.greenCrystals:', LAYERS.greenCrystals.markers.length, 'markers');
-    } else {
-        console.error('✗ GREEN_CRYSTALS data not loaded. Check data/greenCrystals.js is loaded.');
+    // Load persisted custom markers (if any) via MarkerUtils so data-layer stays pure
+    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.loadFromLocalStorage === 'function') {
+        try { MarkerUtils.loadFromLocalStorage(); } catch (e) { console.warn('Failed to load custom markers:', e); }
+    }
+    // Runtime metadata for the special `customMarkers` layer: deletable, not selectable
+    try {
+        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+            LAYERS.customMarkers.deletable = true;
+            LAYERS.customMarkers.selectable = false;
+            if (typeof LAYERS.customMarkers.maxMarkers !== 'number') {
+                LAYERS.customMarkers.maxMarkers = (map && map.layerConfig && map.layerConfig.customMarkers && map.layerConfig.customMarkers.maxMarkers) || 50;
+            }
+        }
+    } catch (e) {}
+
+    // Data-driven primary layer selection: prefer `LAYERS.primary` if set,
+    // otherwise pick the first LAYERS entry that contains markers.
+    try {
+        let primaryKey = (typeof LAYERS === 'object' && typeof LAYERS.primary === 'string' && LAYERS[LAYERS.primary]) ? LAYERS.primary : null;
+        if (!primaryKey) {
+            const entries = Object.entries(LAYERS || {});
+            for (let i = 0; i < entries.length; i++) {
+                const k = entries[i][0];
+                const layer = entries[i][1];
+                if (Array.isArray(layer.markers) && layer.markers.length > 0) { primaryKey = k; break; }
+            }
+        }
+
+        if (primaryKey) {
+            map.setMarkers(LAYERS[primaryKey].markers);
+            console.log('✓ Loaded markers from', primaryKey + ':', LAYERS[primaryKey].markers.length, 'markers');
+        } else {
+            console.warn('No layer marker data available; no markers loaded.');
+        }
+    } catch (e) {
+        console.warn('Failed to initialize primary markers:', e);
     }
     
     // Populate layer icons from LAYERS definitions
     initializeLayerIcons();
+    // Ensure the sidebar counts reflect current map state now that elements exist
+    try { map.updateLayerCounts(); } catch (e) {}
     
     // Setup controls
     const zoomInBtn = document.getElementById('zoomIn');
@@ -910,14 +1132,11 @@ async function init() {
         btn.addEventListener('pointerup', () => btn.classList.remove('pressed'));
         btn.addEventListener('pointercancel', () => btn.classList.remove('pressed'));
     });
+
+    // Attach pressed handlers to all sidebar control buttons (Compute/Clear/Export/etc.)
+    attachPressedHandlers('.control-btn');
     
-    document.getElementById('toggleCrystals').addEventListener('change', (e) => {
-        map.toggleMarkers(e.target.checked);
-    });
-    
-    document.getElementById('toggleCustom').addEventListener('change', (e) => {
-        map.toggleCustomMarkers(e.target.checked);
-    });
+    // Layer toggle handlers are created dynamically in `initializeLayerIcons()`
     
     // Custom marker controls
     document.getElementById('exportCustom').addEventListener('click', () => {
@@ -935,7 +1154,7 @@ async function init() {
         if (file && typeof MarkerUtils !== 'undefined') {
             MarkerUtils.importCustomMarkers(file).then(() => {
                 map.customMarkers = LAYERS.customMarkers.markers;
-                map.updateCustomMarkerCount();
+                map.updateLayerCounts();
                 map.render();
                 // Reset file input
                 e.target.value = '';
@@ -951,7 +1170,7 @@ async function init() {
             if (typeof MarkerUtils !== 'undefined') {
                 MarkerUtils.clearCustomMarkers();
                 map.customMarkers = LAYERS.customMarkers.markers;
-                map.updateCustomMarkerCount();
+                map.updateLayerCounts();
                 map.render();
             }
         }
@@ -959,19 +1178,21 @@ async function init() {
 
     // Routing controls
     const computeBtn = document.getElementById('computeRouteBtn');
+    const computeImprovedBtn = document.getElementById('computeRouteImprovedBtn');
     const clearRouteBtn = document.getElementById('clearRouteBtn');
     if (computeBtn) {
         computeBtn.addEventListener('click', () => {
-                // Gather visible markers from all layers (green crystals + custom markers when visible)
+                // Gather visible markers from all layers defined in LAYERS (skip virtual 'route')
                 const sources = [];
-                if (map.layerVisibility.greenCrystals && Array.isArray(map.markers)) {
-                    for (let i = 0; i < map.markers.length; i++) {
-                        sources.push({ marker: map.markers[i], layerKey: 'greenCrystals', layerIndex: i });
-                    }
-                }
-                if (map.layerVisibility.customMarkers && Array.isArray(map.customMarkers)) {
-                    for (let i = 0; i < map.customMarkers.length; i++) {
-                        sources.push({ marker: map.customMarkers[i], layerKey: 'customMarkers', layerIndex: i });
+                const layerEntries = Object.entries(LAYERS || {});
+                for (let li = 0; li < layerEntries.length; li++) {
+                    const layerKey = layerEntries[li][0];
+                    const layer = layerEntries[li][1];
+                    if (layerKey === 'route') continue;
+                    if (!map.layerVisibility[layerKey]) continue;
+                    if (!Array.isArray(layer.markers)) continue;
+                    for (let i = 0; i < layer.markers.length; i++) {
+                        sources.push({ marker: layer.markers[i], layerKey, layerIndex: i });
                     }
                 }
                 if (sources.length === 0) {
@@ -1009,9 +1230,61 @@ async function init() {
         });
     }
 
+    if (computeImprovedBtn) {
+        computeImprovedBtn.addEventListener('click', () => {
+            // Build combined visible marker sources from LAYERS (skip virtual 'route')
+            const sources = [];
+            const layerEntries2 = Object.entries(LAYERS || {});
+            for (let li = 0; li < layerEntries2.length; li++) {
+                const layerKey = layerEntries2[li][0];
+                const layer = layerEntries2[li][1];
+                if (layerKey === 'route') continue;
+                if (!map.layerVisibility[layerKey]) continue;
+                if (!Array.isArray(layer.markers)) continue;
+                for (let i = 0; i < layer.markers.length; i++) {
+                    sources.push({ marker: layer.markers[i], layerKey, layerIndex: i });
+                }
+            }
+            if (sources.length === 0) {
+                alert('No visible markers available to route.');
+                return;
+            }
+
+            if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSPAdvanced !== 'function') {
+                alert('Advanced TSP solver not available.');
+                return;
+            }
+
+            computeImprovedBtn.disabled = true;
+            const oldText2 = computeImprovedBtn.textContent;
+            computeImprovedBtn.textContent = 'Computing (Improved)...';
+
+            setTimeout(() => {
+                try {
+                    const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
+                    const result = TSPEuclid.solveTSPAdvanced(points, { restarts: 24, threeOptIters: Math.max(2000, points.length * 30) });
+                    if (result && Array.isArray(result.tour)) {
+                        map.setRoute(result.tour, result.length, sources);
+                        console.log('Improved route length (normalized):', result.length, 'tour size:', result.tour.length);
+                    } else {
+                        alert('Advanced solver returned no route.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Error computing improved route: ' + err.message);
+                } finally {
+                    computeImprovedBtn.disabled = false;
+                    computeImprovedBtn.textContent = oldText2;
+                }
+            }, 50);
+        });
+    }
+
     if (clearRouteBtn) {
         clearRouteBtn.addEventListener('click', () => {
-            map.clearRoute();
+            if (confirm('Clear computed route? This cannot be undone.')) {
+                map.clearRoute();
+            }
         });
     }
 

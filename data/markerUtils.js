@@ -86,6 +86,14 @@ const MarkerUtils = {
                     
                     // Persist to localStorage
                     MarkerUtils.saveToLocalStorage();
+                    // Update map runtime state if available
+                    try {
+                        if (typeof map !== 'undefined' && map) {
+                            map.customMarkers = LAYERS.customMarkers.markers;
+                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                            map.render();
+                        }
+                    } catch (e) {}
                     
                     console.log('✓ Imported', imported.length, 'markers');
                     resolve(imported);
@@ -121,7 +129,15 @@ const MarkerUtils = {
         const marker = { uid, x, y };
         LAYERS.customMarkers.markers.push(marker);
         MarkerUtils.saveToLocalStorage();
-        
+        // Update map runtime state and counts
+        try {
+            if (typeof map !== 'undefined' && map) {
+                map.customMarkers = LAYERS.customMarkers.markers;
+                if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                map.render();
+            }
+        } catch (e) {}
+
         console.log('✓ Added custom marker:', uid);
         return marker;
     },
@@ -132,6 +148,14 @@ const MarkerUtils = {
         if (index !== -1) {
             LAYERS.customMarkers.markers.splice(index, 1);
             MarkerUtils.saveToLocalStorage();
+            // Update map runtime state and counts
+            try {
+                if (typeof map !== 'undefined' && map) {
+                    map.customMarkers = LAYERS.customMarkers.markers;
+                    if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                    map.render();
+                }
+            } catch (e) {}
             console.log('✓ Deleted marker:', uid);
             return true;
         }
@@ -143,6 +167,15 @@ const MarkerUtils = {
         const count = LAYERS.customMarkers.markers.length;
         LAYERS.customMarkers.markers.length = 0;
         MarkerUtils.saveToLocalStorage();
+        // Update map runtime state and counts
+        try {
+            if (typeof map !== 'undefined' && map) {
+                map.customMarkers = LAYERS.customMarkers.markers;
+                if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                map.render();
+            }
+        } catch (e) {}
+
         console.log('✓ Cleared all', count, 'custom markers');
     },
     
@@ -152,6 +185,31 @@ const MarkerUtils = {
             localStorage.setItem('mp4_customMarkers', JSON.stringify(LAYERS.customMarkers.markers));
         } catch (e) {
             console.error('✗ Failed to save to localStorage:', e);
+        }
+    }
+    ,
+    // Load custom markers from localStorage into LAYERS and update map/UI
+    loadFromLocalStorage() {
+        try {
+            const saved = localStorage.getItem('mp4_customMarkers');
+            if (!saved) return [];
+            const data = JSON.parse(saved);
+            if (!Array.isArray(data)) return [];
+            // Replace markers array in LAYERS
+            LAYERS.customMarkers = LAYERS.customMarkers || { name: 'Custom Marker', icon: '📍', color: '#ff6b6b', markers: [] };
+            LAYERS.customMarkers.markers = data.slice();
+            // Notify map if present
+            try {
+                if (typeof map !== 'undefined' && map) {
+                    map.customMarkers = LAYERS.customMarkers.markers;
+                    if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                    map.render();
+                }
+            } catch (e) {}
+            return LAYERS.customMarkers.markers;
+        } catch (e) {
+            console.error('✗ Failed to load custom markers from localStorage:', e);
+            return [];
         }
     }
 };

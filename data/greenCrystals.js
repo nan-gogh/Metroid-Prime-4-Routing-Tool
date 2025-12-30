@@ -1,7 +1,7 @@
 // Green Crystals layer data
 // Requires data/init.js to be loaded first
 LAYERS.greenCrystals = {
-    name: "Green Crystal",
+    name: "GE Crystal",
     icon: "💎",
     color: "#22c55e",
     markers: [
