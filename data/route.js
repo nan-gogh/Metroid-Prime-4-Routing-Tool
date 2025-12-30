@@ -4,6 +4,6 @@
 if (typeof LAYERS === 'undefined') LAYERS = {};
 LAYERS.route = {
     name: "Route",
-    icon: "➤",
-    color: "#ff7b00ff"
+    icon: "🧭",
+    color: "#00ffb7ff"
 };
