@@ -9,8 +9,16 @@ const DEFAULT_ZOOM = 0.1;
 
 class InteractiveMap {
     constructor(canvasId) {
+        // Overlay canvas (interactive) — keep `this.canvas`/`this.ctx` for
+        // backwards compatibility with existing code.
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+
+        // Background tile canvas (non-interactive). May be null if the
+        // element is not present; later tasks will render tiles into this
+        // context and leave the overlay for routes/markers.
+        this.canvasTiles = document.getElementById('mapTiles');
+        this.ctxTiles = this.canvasTiles ? this.canvasTiles.getContext('2d') : null;
         
         // Map state
         this.zoom = DEFAULT_ZOOM;
@@ -156,8 +164,19 @@ class InteractiveMap {
         this.canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
         this.canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
 
+        // If a separate tile canvas exists, size its backing store too
+        if (this.canvasTiles && this.ctxTiles) {
+            this.canvasTiles.style.width = cssWidth + 'px';
+            this.canvasTiles.style.height = cssHeight + 'px';
+            this.canvasTiles.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasTiles.height = Math.max(1, Math.floor(cssHeight * dpr));
+        }
+
         // Scale drawing so we can use CSS pixels in drawing code
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (this.ctxTiles) {
+            try { this.ctxTiles.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
+        }
         // compute a device-aware minimum zoom so smallest resolution can be reached
         const minRes = RESOLUTIONS[0];
         // minZoom such that minRes >= MAP_SIZE * minZoom * dpr => minZoom = minRes / (MAP_SIZE * dpr)
@@ -598,16 +617,15 @@ class InteractiveMap {
         this.tilesetGrayscale = !!enabled;
         try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
         try {
-            if (this.canvas) {
-                console.log('setTilesetGrayscale: applying', this.tilesetGrayscale);
-                this.canvas.classList.toggle('grayscale', this.tilesetGrayscale);
-                console.log('canvas.classList contains grayscale?', this.canvas.classList.contains('grayscale'));
-            } else {
-                console.log('setTilesetGrayscale: no canvas element');
+            // Apply a CSS class to the tile canvas (if present) so mobile
+            // fallbacks that rely on DOM filters still work. Also force a
+            // redraw of tiles.
+            if (this.canvasTiles) {
+                try { this.canvasTiles.classList.toggle('grayscale', this.tilesetGrayscale); } catch (e) {}
+            } else if (this.canvas) {
+                try { this.canvas.classList.toggle('grayscale', this.tilesetGrayscale); } catch (e) {}
             }
-            // Force an immediate redraw so the filter takes effect without
-            // waiting for the next pointer/mouse event.
-            try { this.render(); } catch (e) {}
+            try { this.renderTiles(); } catch (e) {}
         } catch (e) {}
     }
     
@@ -624,6 +642,29 @@ class InteractiveMap {
             }
         }
         return RESOLUTIONS.length - 1;
+    }
+
+    // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
+    // available, fall back to drawing into the overlay context.
+    renderTiles() {
+        const ctxT = this.ctxTiles || this.ctx;
+        if (!ctxT) return;
+        const cssWidth = (this.canvasTiles || this.canvas).clientWidth;
+        const cssHeight = (this.canvasTiles || this.canvas).clientHeight;
+
+        // Clear background
+        try {
+            ctxT.fillStyle = '#0a0a0a';
+            ctxT.fillRect(0, 0, cssWidth, cssHeight);
+        } catch (e) {}
+
+        if (this.currentImage) {
+            const size = MAP_SIZE * this.zoom;
+            try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
+            try { ctxT.filter = this.tilesetGrayscale ? 'grayscale(100%)' : 'none'; } catch (e) {}
+            try { ctxT.drawImage(this.currentImage, this.panX, this.panY, size, size); } catch (e) {}
+            try { ctxT.filter = 'none'; } catch (e) {}
+        }
     }
     
     updateResolution() {
@@ -809,28 +850,21 @@ class InteractiveMap {
     }
     
     render() {
+        // Full redraw: tiles + overlay
+        try { this.renderTiles(); } catch (e) {}
+        try { this.renderOverlay(); } catch (e) {}
+    }
+
+    // Draw only the overlay contents (route, markers, tooltip).
+    renderOverlay() {
         const ctx = this.ctx;
         const cssWidth = this.canvas.clientWidth;
         const cssHeight = this.canvas.clientHeight;
 
-        // Clear canvas (using CSS pixel sizes since context is scaled)
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
-        
-        // Draw map image (apply canvas filter when grayscale is enabled)
-        if (this.currentImage) {
-            const size = MAP_SIZE * this.zoom;
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            try {
-                ctx.filter = this.tilesetGrayscale ? 'grayscale(100%)' : 'none';
-            } catch (e) {}
-            ctx.drawImage(this.currentImage, this.panX, this.panY, size, size);
-            // reset filter so subsequent drawing (markers/routes) aren't affected
-            try { ctx.filter = 'none'; } catch (e) {}
-        }
-        
-        // Draw markers from all visible layers
+        // Clear overlay (transparent) before drawing route/markers
+        try { ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
+
+        // Draw markers from all visible layers onto the overlay canvas
         this.renderMarkers();
 
         // Draw computed route on top of the map but beneath markers (so markers remain visible)
@@ -1134,7 +1168,8 @@ class InteractiveMap {
                 this._routeRaf = null;
                 return;
             }
-            this.render();
+            // Only redraw the overlay (route + markers) for animation frames
+            try { this.renderOverlay(); } catch (e) { try { this.render(); } catch (e) {} }
             this._routeRaf = requestAnimationFrame(step);
         };
         this._routeRaf = requestAnimationFrame(step);

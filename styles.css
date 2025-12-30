@@ -289,8 +289,25 @@ body {
     overflow: hidden;
 }
 
-#mapCanvas {
+/* Stack canvases to fill the map area and avoid layout shifts (fixes blue bar) */
+.map-container canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     display: block;
+    background: transparent;
+}
+
+/* tile canvas beneath overlay (non-interactive) */
+#mapTiles {
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* overlay canvas (interactive) */
+#mapCanvas {
+    z-index: 1;
     cursor: grab;
     touch-action: none;
 }

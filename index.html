@@ -80,6 +80,9 @@
         </button>
         
         <main class="map-container">
+            <!-- Background tile canvas (drawn in task 2). Marked aria-hidden since it's decorative. -->
+            <canvas id="mapTiles" aria-hidden="true"></canvas>
+            <!-- Overlay canvas for routes & markers (keeps existing id for compatibility with map.js) -->
             <canvas id="mapCanvas"></canvas>
             
             <div class="zoom-controls">
