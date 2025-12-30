@@ -19,19 +19,9 @@ body {
 /* Sidebar */
 .sidebar {
 
-/* Optional grayscale filter applied to the map canvas when toggled by the user */
-.map-container canvas.grayscale {
-    filter: grayscale(100%);
-}
-/* Fallback: when using a separate tile canvas (`#mapTiles`), applying a
-    DOM filter to that element is acceptable and will only affect tile
-    imagery. This helps on mobile browsers that don't support `ctx.filter`.
+/* Grayscale tile variants are provided by server-side folders (sat_bw / holo_bw).
+   Runtime canvas or DOM filters are no longer used for grayscale.
 */
-#mapTiles.grayscale {
-     filter: grayscale(100%);
-     -webkit-filter: grayscale(100%);
-     will-change: filter;
-}
     position: absolute;
     left: 0;
     top: 0;
