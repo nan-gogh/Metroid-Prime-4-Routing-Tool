@@ -19,6 +19,10 @@ class InteractiveMap {
         // context and leave the overlay for routes/markers.
         this.canvasTiles = document.getElementById('mapTiles');
         this.ctxTiles = this.canvasTiles ? this.canvasTiles.getContext('2d') : null;
+        // Grayscale preprocessed image cache (resolutionIndex -> ImageBitmap|Image)
+        this.grayscaleImages = {};
+        // Feature-detect whether the 2D context supports `filter`.
+        this.supportsCanvasFilter = this._detectCanvasFilterSupport();
         
         // Map state
         this.zoom = DEFAULT_ZOOM;
@@ -128,6 +132,11 @@ class InteractiveMap {
                             const blob = await resp.blob();
                             const bmp = await createImageBitmap(blob);
                             this.images[i] = bmp;
+                            // If grayscale fallback is required, pre-generate
+                            // a grayscale bitmap for this resolution.
+                            if (this.tilesetGrayscale && !this.supportsCanvasFilter) {
+                                try { await this._generateGrayscaleForIndex(i); } catch (e) {}
+                            }
                             return;
                         }
                     }
@@ -142,6 +151,9 @@ class InteractiveMap {
                         await img.decode();
                     }
                     this.images[i] = img;
+                    if (this.tilesetGrayscale && !this.supportsCanvasFilter) {
+                        try { await this._generateGrayscaleForIndex(i); } catch (e) {}
+                    }
                 } catch (e) {
                     const img = new Image();
                     img.onload = () => { this.images[i] = img; };
@@ -583,9 +595,23 @@ class InteractiveMap {
             
             // Always use this image if we don't have one yet, or if it's the best choice
             if (!this.currentImage || resolutionIndex === this.getNeededResolution()) {
-                this.currentImage = img;
-                this.currentResolution = resolutionIndex;
-                this.render();
+                // If we need a preprocessed grayscale and canvas filters are
+                // not supported, generate it and use that image for drawing.
+                if (this.tilesetGrayscale && !this.supportsCanvasFilter) {
+                    this._generateGrayscaleForIndex(resolutionIndex).then((g) => {
+                        if (g) this.currentImage = g; else this.currentImage = img;
+                        this.currentResolution = resolutionIndex;
+                        this.render();
+                    }).catch(() => {
+                        this.currentImage = img;
+                        this.currentResolution = resolutionIndex;
+                        this.render();
+                    });
+                } else {
+                    this.currentImage = img;
+                    this.currentResolution = resolutionIndex;
+                    this.render();
+                }
             }
             this.updateResolution();
         };
@@ -603,8 +629,9 @@ class InteractiveMap {
         if (tileset !== 'sat' && tileset !== 'holo') return;
         this.tileset = tileset;
         try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
-        // Clear cached images and reload
+        // Clear cached images and grayscale variants, then reload
         this.images = {};
+        this.grayscaleImages = {};
         this.currentImage = null;
         this.currentResolution = 0;
         this.loadingResolution = null;
@@ -625,7 +652,24 @@ class InteractiveMap {
             } else if (this.canvas) {
                 try { this.canvas.classList.toggle('grayscale', this.tilesetGrayscale); } catch (e) {}
             }
-            try { this.renderTiles(); } catch (e) {}
+            // If canvas filters aren't supported, generate a grayscale
+            // preprocessed bitmap for the current resolution before redraw.
+            if (this.tilesetGrayscale && !this.supportsCanvasFilter) {
+                try {
+                    this._generateGrayscaleForIndex(this.currentResolution).then(() => {
+                        try { this.renderTiles(); } catch (e) {}
+                    }).catch(() => { try { this.renderTiles(); } catch (e) {} });
+                } catch (e) { try { this.renderTiles(); } catch (e) {} }
+            } else {
+                try { this.renderTiles(); } catch (e) {}
+            }
+            // If grayscale was just disabled, ensure we use the original image
+            if (!this.tilesetGrayscale) {
+                try {
+                    const orig = this.images && this.images[this.currentResolution];
+                    if (orig) { this.currentImage = orig; try { this.renderTiles(); } catch (e) {} }
+                } catch (e) {}
+            }
         } catch (e) {}
     }
     
@@ -642,6 +686,78 @@ class InteractiveMap {
             }
         }
         return RESOLUTIONS.length - 1;
+    }
+
+    _detectCanvasFilterSupport() {
+        try {
+            const c = document.createElement('canvas');
+            const ctx = c.getContext('2d');
+            if (!ctx) return false;
+            // try assigning a filter; some browsers may accept the property but
+            // throw when drawing — we rely on try/catch where used.
+            ctx.filter = 'grayscale(100%)';
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // Generate a grayscale ImageBitmap (or Image) for a loaded image/bitmap
+    // and cache it at `this.grayscaleImages[resolutionIndex]`.
+    async _generateGrayscaleForIndex(resolutionIndex) {
+        try {
+            if (!this.images || !this.images[resolutionIndex]) return null;
+            if (this.grayscaleImages[resolutionIndex]) return this.grayscaleImages[resolutionIndex];
+
+            const src = this.images[resolutionIndex];
+            // Determine width/height
+            const w = src.width || (src.width ?? 0);
+            const h = src.height || (src.height ?? 0);
+            if (!w || !h) return null;
+
+            // Offscreen canvas
+            const oc = document.createElement('canvas');
+            oc.width = w;
+            oc.height = h;
+            const octx = oc.getContext('2d');
+            if (!octx) return null;
+
+            // Draw source onto offscreen canvas
+            try { octx.drawImage(src, 0, 0, w, h); } catch (e) { return null; }
+
+            // Read pixels and convert to grayscale
+            let imgData;
+            try { imgData = octx.getImageData(0, 0, w, h); } catch (e) { return null; }
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                // luminance
+                const l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+                data[i] = data[i + 1] = data[i + 2] = l;
+            }
+            octx.putImageData(imgData, 0, 0);
+
+            // Prefer ImageBitmap for drawing performance
+            try {
+                const bmp = await createImageBitmap(oc);
+                this.grayscaleImages[resolutionIndex] = bmp;
+                return bmp;
+            } catch (e) {
+                // Fallback to data URL image
+                try {
+                    const dataUrl = oc.toDataURL();
+                    const img = new Image();
+                    img.src = dataUrl;
+                    await img.decode();
+                    this.grayscaleImages[resolutionIndex] = img;
+                    return img;
+                } catch (e2) {
+                    return null;
+                }
+            }
+        } catch (e) {
+            return null;
+        }
     }
 
     // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
@@ -661,9 +777,20 @@ class InteractiveMap {
         if (this.currentImage) {
             const size = MAP_SIZE * this.zoom;
             try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
-            try { ctxT.filter = this.tilesetGrayscale ? 'grayscale(100%)' : 'none'; } catch (e) {}
-            try { ctxT.drawImage(this.currentImage, this.panX, this.panY, size, size); } catch (e) {}
-            try { ctxT.filter = 'none'; } catch (e) {}
+
+            // Select source image: prefer preprocessed grayscale when
+            // canvas filters aren't available and grayscale was requested.
+            let srcToDraw = this.currentImage;
+            if (this.tilesetGrayscale && !this.supportsCanvasFilter) {
+                const g = this.grayscaleImages[this.currentResolution];
+                if (g) srcToDraw = g;
+            }
+
+            // Use canvas filter only when supported; otherwise preprocessed
+            // images will already be grayscale.
+            try { if (this.supportsCanvasFilter) ctxT.filter = this.tilesetGrayscale ? 'grayscale(100%)' : 'none'; } catch (e) {}
+            try { ctxT.drawImage(srcToDraw, this.panX, this.panY, size, size); } catch (e) {}
+            try { if (this.supportsCanvasFilter) ctxT.filter = 'none'; } catch (e) {}
         }
     }
     
