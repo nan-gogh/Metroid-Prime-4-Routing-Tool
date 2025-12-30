@@ -5,16 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metroid Prime 4 Routing Tool Beta</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="mp4b_routing_favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="mp4b_routing_favicon.png">
-    <link rel="apple-touch-icon" href="mp4b_routing_favicon.png">
+    <link rel="icon" href="graphics/mp4b_routing_favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="graphics/mp4b_routing_favicon.png">
+    <link rel="apple-touch-icon" href="graphics/mp4b_routing_favicon.png">
 </head>
 <body>
     <div class="app-container">
         <aside class="sidebar">
             <div class="header">
-                <h1>Metroid Prime 4 Routing Tool</h1>
-                <h2>Sol Valley</h2>
+                <div class="logo-stack" aria-hidden="true">
+                    <img src="graphics/mp4b_routing_logo_ball.svg" alt="" class="logo-ball">
+                    <img src="graphics/mp4b_routing_logo_geotag.svg" alt="" class="logo-geotag">
+                </div>
+                <div class="title-block">
+                    <h1>Metroid Prime 4 Routing Tool</h1>
+                    <h2>Sol Valley</h2>
+                </div>
             </div>
             
             <div class="controls">
@@ -41,12 +47,21 @@
                     <input type="file" id="importFile" accept=".json" style="display:none;">
                     <input type="file" id="importRouteFile" accept=".json" style="display:none;">
                 </div>
+
+                <div class="control-group">
+                    <h3>Mapping</h3>
+                    <div class="tileset-controls">
+                        <button id="tilesetSatBtn" class="control-btn" aria-pressed="false">Satellite</button>
+                        <button id="tilesetHoloBtn" class="control-btn" aria-pressed="false">Holographic</button>
+                        <button id="tilesetGrayscaleBtn" class="control-btn" aria-pressed="false">Grayscale</button>
+                    </div>
+                </div>
             </div>
             
             <div class="hints">
-                <kbd>+</kbd>/<kbd>-</kbd>/<kbd>Pinch</kbd> Zoom &nbsp;
-                <kbd>Drag</kbd> Pan &nbsp;
-                <kbd>0</kbd>/<kbd>⌂</kbd> Reset
+                <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Pinch</kbd>&nbsp;<span class="hint-label">Zoom</span></span>
+                <span class="hint-group"><kbd>Drag</kbd>&nbsp;<span class="hint-label">Pan</span></span>
+                <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd>&nbsp;<span class="hint-label">Reset</span></span>
             </div>
             
             <div class="status-bar">

@@ -44,7 +44,9 @@ class InteractiveMap {
         this._routeDashOffset = 0; // px offset used for animated dashes
         this._routeRaf = null; // requestAnimationFrame id
         this._lastRouteAnimTime = 0;
-        this._routeAnimationSpeed = 15; // pixels per second
+        this._routeAnimationSpeed = 100; // pixels per second
+        // Configurable route stroke width (CSS pixels). Multiply by `zoom` in render.
+        this.routeLineWidth = 20; // default base stroke width
         this.hoveredMarker = null;
         this.hoveredMarkerLayer = null; // layer key identifying which LAYERS entry the hovered marker belongs to
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
@@ -71,6 +73,10 @@ class InteractiveMap {
         
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
+        // Tileset selection (sat / holo). Persisted in localStorage as 'mp4_tileset'
+        try { this.tileset = localStorage.getItem('mp4_tileset') || 'sat'; } catch (e) { this.tileset = 'sat'; }
+        // Optional grayscale flag for tiles; persisted as 'mp4_tileset_grayscale'
+        try { this.tilesetGrayscale = localStorage.getItem('mp4_tileset_grayscale') === '1'; } catch (e) { this.tilesetGrayscale = false; }
         
         // Setup
         this.resize();
@@ -92,7 +98,7 @@ class InteractiveMap {
         const initial = this.getNeededResolution();
         for (let i = 0; i < RESOLUTIONS.length; i++) {
             const size = RESOLUTIONS[i];
-            const href = `tiles/${size}.avif`;
+            const href = `tiles/${this.tileset}/${size}.avif`;
 
             // Hint browser to fetch early
             try {
@@ -568,7 +574,41 @@ class InteractiveMap {
             this.loadingResolution = null;
             console.error(`Failed to load: ${size}px`);
         };
-        img.src = `tiles/${size}.avif`;
+                    img.src = `tiles/${this.tileset}/${size}.avif`;
+    }
+
+    setTileset(tileset) {
+        try { tileset = String(tileset); } catch (e) { return; }
+        if (!tileset) return;
+        if (this.tileset === tileset) return;
+        if (tileset !== 'sat' && tileset !== 'holo') return;
+        this.tileset = tileset;
+        try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
+        // Clear cached images and reload
+        this.images = {};
+        this.currentImage = null;
+        this.currentResolution = 0;
+        this.loadingResolution = null;
+        try { this.preloadAllMapImages(); } catch (e) {}
+        try { this.loadInitialImage(); } catch (e) {}
+        try { this.render(); } catch (e) {}
+    }
+
+    setTilesetGrayscale(enabled) {
+        this.tilesetGrayscale = !!enabled;
+        try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
+        try {
+            if (this.canvas) {
+                console.log('setTilesetGrayscale: applying', this.tilesetGrayscale);
+                this.canvas.classList.toggle('grayscale', this.tilesetGrayscale);
+                console.log('canvas.classList contains grayscale?', this.canvas.classList.contains('grayscale'));
+            } else {
+                console.log('setTilesetGrayscale: no canvas element');
+            }
+            // Force an immediate redraw so the filter takes effect without
+            // waiting for the next pointer/mouse event.
+            try { this.render(); } catch (e) {}
+        } catch (e) {}
     }
     
     getNeededResolution() {
@@ -777,12 +817,17 @@ class InteractiveMap {
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, cssWidth, cssHeight);
         
-        // Draw map image
+        // Draw map image (apply canvas filter when grayscale is enabled)
         if (this.currentImage) {
             const size = MAP_SIZE * this.zoom;
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
+            try {
+                ctx.filter = this.tilesetGrayscale ? 'grayscale(100%)' : 'none';
+            } catch (e) {}
             ctx.drawImage(this.currentImage, this.panX, this.panY, size, size);
+            // reset filter so subsequent drawing (markers/routes) aren't affected
+            try { ctx.filter = 'none'; } catch (e) {}
         }
         
         // Draw markers from all visible layers
@@ -822,8 +867,32 @@ class InteractiveMap {
     
     // Base marker radius in CSS pixels (used for rendering and hit-testing)
     getBaseMarkerRadius() {
-        // Reduce the minimum radius so markers remain smaller when zoomed out
-        return Math.max(4, Math.min(16, 10 * this.zoom));
+        // Default marker sizing behavior
+        // Lower the base minimum so markers can shrink more when zoomed out
+        const base = Math.max(2, Math.min(16, 10 * this.zoom));
+        // Ensure markers are always a bit larger than route node dots so
+        // markers (and hitboxes) remain easier to interact with at high zoom.
+        try {
+            const nodeSize = this.getRouteNodeSize();
+            return Math.max(base, nodeSize + 10 * this.zoom);
+        } catch (e) {
+            return base;
+        }
+    }
+
+    // Compute route node dot size in a single place so markers can reference it
+    getRouteNodeSize() {
+        const baseLine = (typeof this.routeLineWidth === 'number') ? this.routeLineWidth : 3;
+        // Computed size from stroke width and zoom. Reduce multiplier and
+        // maximum so nodes (and consequently markers) remain a bit smaller
+        // at high zoom levels.
+        const computed = baseLine * this.zoom * 1.0;
+        // Minimum size should scale with zoom but allow smaller values when
+        // zoomed out.
+        const minSize = Math.max(2, 3 * this.zoom);
+        // Lower maximum to keep sizes more compact at high zoom
+        const maxSize = 80;
+        return Math.max(minSize, Math.min(maxSize, computed));
     }
 
     // Hit radius used for interaction (render radius + touch padding)
@@ -906,11 +975,16 @@ class InteractiveMap {
             const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         };
-        if (routeHex) ctx.strokeStyle = hexToRgba(routeHex, 0.9);
-        ctx.lineWidth = Math.max(2, 3 * this.zoom);
-        // configure dashed stroke for animated route
-        const dashLen = Math.max(6, 14 * this.zoom);
-        const gapLen = Math.max(6, 10 * this.zoom);
+        // Use fully opaque stroke color for the route (no transparency)
+        if (routeHex) ctx.strokeStyle = hexToRgba(routeHex, 1);
+        // Use configurable `routeLineWidth` (base CSS pixels) scaled by zoom
+        const baseLine = (typeof this.routeLineWidth === 'number') ? this.routeLineWidth : 3;
+        ctx.lineWidth = Math.max(2, baseLine * this.zoom);
+        // configure dashed stroke for animated route (shorter dashes; scale with zoom and base line width)
+        const spacingScale = Math.max(0.35, baseLine / 5);
+        // Use smaller base multipliers so dashes are shorter and tighter
+        const dashLen = Math.max(3, 8 * this.zoom * spacingScale);
+        const gapLen = Math.max(3, 6 * this.zoom * spacingScale);
         if (routeHex) {
             ctx.setLineDash([dashLen, gapLen]);
             ctx.lineDashOffset = -this._routeDashOffset;
@@ -937,7 +1011,9 @@ class InteractiveMap {
         // Draw small circles at nodes using the same base color (slightly more opaque)
         const nodeFill = routeHex ? hexToRgba(routeHex, 0.95) : null;
         if (nodeFill) ctx.fillStyle = nodeFill;
-        const dotSize = Math.max(3, 4 * this.zoom);
+        // Node dot size: use the shared helper so sizing (including min/max)
+        // is consistent with marker sizing.
+        const dotSize = this.getRouteNodeSize();
         for (let i = 0; i < n; i++) {
             const idx = this.currentRoute[i];
             const src = this._routeSources[idx];
@@ -1028,7 +1104,6 @@ class InteractiveMap {
                     console.warn('Saved route contains invalid point at index', i);
                     return false;
                 }
-                // Create a lightweight source object with only a marker containing x/y
                 sources.push({ marker: { x: p.x, y: p.y }, layerKey: 'saved', layerIndex: i });
             }
             const routeIndices = sources.map((_, i) => i);
@@ -1048,10 +1123,12 @@ class InteractiveMap {
         const step = (t) => {
             const dt = Math.max(0, t - this._lastRouteAnimTime) / 1000; // seconds
             this._lastRouteAnimTime = t;
-            // advance offset by speed * dt * direction (wrap to avoid large numbers)
+            // advance offset by speed * dt * direction (scale with zoom so perceived
+            // animation speed remains consistent across zoom levels)
             // Coerce direction to a number so persisted string values still work
             const dir = (Number(this._routeAnimationDirection) === -1) ? -1 : 1;
-            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir + 1000000) % 1000000;
+            const zoomFactor = (typeof this.zoom === 'number' && this.zoom > 0) ? this.zoom : 1;
+            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir * zoomFactor + 1000000) % 1000000;
             // only continue animating if there is a route
             if (!this.currentRoute || !this.currentRoute.length) {
                 this._routeRaf = null;
@@ -1277,6 +1354,38 @@ async function init() {
             MarkerUtils.exportCustomMarkers();
         }
     });
+
+    // Tileset controls (Satellite / Holographic)
+    const tilesetSatBtn = document.getElementById('tilesetSatBtn');
+    const tilesetHoloBtn = document.getElementById('tilesetHoloBtn');
+    function updateTilesetUI() {
+        if (!tilesetSatBtn || !tilesetHoloBtn) return;
+        const current = (map && map.tileset) ? map.tileset : 'sat';
+        tilesetSatBtn.classList.toggle('pressed', current === 'sat');
+        tilesetHoloBtn.classList.toggle('pressed', current === 'holo');
+        tilesetSatBtn.setAttribute('aria-pressed', current === 'sat' ? 'true' : 'false');
+        tilesetHoloBtn.setAttribute('aria-pressed', current === 'holo' ? 'true' : 'false');
+        // Grayscale button reflects map.tilesetGrayscale
+        if (tilesetGrayscaleBtn) {
+            const g = (map && map.tilesetGrayscale) ? true : false;
+            tilesetGrayscaleBtn.classList.toggle('pressed', g);
+            tilesetGrayscaleBtn.setAttribute('aria-pressed', g ? 'true' : 'false');
+        }
+    }
+    const tilesetGrayscaleBtn = document.getElementById('tilesetGrayscaleBtn');
+    if (tilesetSatBtn && tilesetHoloBtn) {
+        tilesetSatBtn.addEventListener('click', () => { map.setTileset('sat'); updateTilesetUI(); });
+        tilesetHoloBtn.addEventListener('click', () => { map.setTileset('holo'); updateTilesetUI(); });
+        if (tilesetGrayscaleBtn) {
+            tilesetGrayscaleBtn.addEventListener('click', () => {
+                map.setTilesetGrayscale(!map.tilesetGrayscale);
+                updateTilesetUI();
+            });
+        }
+        // Apply grayscale to canvas on init, then update UI to reflect state
+        try { map.setTilesetGrayscale(map.tilesetGrayscale); } catch (e) {}
+        updateTilesetUI();
+    }
     
     document.getElementById('importCustom').addEventListener('click', () => {
         document.getElementById('importFile').click();
@@ -1369,7 +1478,8 @@ async function init() {
             let stored = 1;
             try {
                 const raw = localStorage.getItem('routeDir');
-                const parsed = Number(raw);
+                // If key is missing `raw` will be null; avoid Number(null) === 0
+                const parsed = (raw !== null) ? Number(raw) : NaN;
                 stored = Number.isFinite(parsed) ? parsed : 1;
             } catch (e) { stored = 1; }
             map._routeAnimationDirection = stored;
