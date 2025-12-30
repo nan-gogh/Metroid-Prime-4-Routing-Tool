@@ -279,6 +279,86 @@ class InteractiveMap {
                 this.checkMarkerHover(localX, localY);
             }
         });
+        // Route export/import handlers
+        const exportRouteBtn = document.getElementById('exportRoute');
+        const importRouteBtn = document.getElementById('importRoute');
+        const importRouteFile = document.getElementById('importRouteFile');
+
+        if (exportRouteBtn) {
+            exportRouteBtn.addEventListener('click', () => {
+                try {
+                    if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
+                        alert('No computed route to export.');
+                        return;
+                    }
+                    const pts = [];
+                    for (let i = 0; i < map.currentRoute.length; i++) {
+                        const idx = map.currentRoute[i];
+                        const src = map._routeSources && map._routeSources[idx];
+                        if (!src || !src.marker) continue;
+                        pts.push({ x: Number(src.marker.x), y: Number(src.marker.y) });
+                    }
+                    if (!pts.length) { alert('No valid points to export.'); return; }
+
+                    const now = new Date();
+                    const timestamp = now.getTime();
+                    let hash = '';
+                    try {
+                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.hashMarkerData === 'function') {
+                            // reuse hash function by mapping points to marker-like objects
+                            hash = MarkerUtils.hashMarkerData(pts.map(p => ({ x: p.x, y: p.y })));
+                        }
+                    } catch (e) { hash = ''; }
+
+                    const payload = {
+                        exported: now.toISOString(),
+                        count: pts.length,
+                        points: pts,
+                        length: map.currentRouteLengthNormalized || 0
+                    };
+
+                    const json = JSON.stringify(payload, null, 2);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    console.log('✓ Exported route (points:', pts.length + ')');
+                } catch (err) {
+                    console.error('Export route failed:', err);
+                    alert('Failed to export route: ' + err.message);
+                }
+            });
+        }
+
+        if (importRouteBtn && importRouteFile) {
+            importRouteBtn.addEventListener('click', () => importRouteFile.click());
+            importRouteFile.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const obj = JSON.parse(ev.target.result);
+                        if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) {
+                            throw new Error('Invalid route file: missing points array');
+                        }
+                        const sources = obj.points.map((p, i) => ({ marker: { x: Number(p.x), y: Number(p.y) }, layerKey: 'imported', layerIndex: i }));
+                        const routeIndices = sources.map((_, i) => i);
+                        const length = typeof obj.length === 'number' ? obj.length : 0;
+                        map.setRoute(routeIndices, length, sources);
+                        console.log('✓ Imported route (points:', sources.length + ')');
+                    } catch (err) {
+                        console.error('Import route failed:', err);
+                        alert('Failed to import route: ' + (err.message || String(err)));
+                    }
+                };
+                reader.onerror = () => alert('Failed to read file');
+                reader.readAsText(file);
+            });
+        }
 
         this.canvas.addEventListener('pointerup', (e) => {
             this.canvas.releasePointerCapture && this.canvas.releasePointerCapture(e.pointerId);
@@ -898,6 +978,8 @@ class InteractiveMap {
                 if (cb) cb.checked = true;
             } catch (e) {}
             this.startRouteAnimation();
+            // Persist the route so it survives reloads
+            try { this.saveRouteToStorage(); } catch (e) {}
         } else {
             this.stopRouteAnimation();
         }
@@ -912,6 +994,52 @@ class InteractiveMap {
         this.render();
         // Stop animated route when cleared
         this.stopRouteAnimation();
+        // Remove persisted route when cleared
+        try { localStorage.removeItem('mp4_saved_route'); } catch (e) {}
+    }
+
+    // Persist the current route to localStorage as an ordered list of positions
+    saveRouteToStorage() {
+        try {
+            if (!this.currentRoute || !Array.isArray(this._routeSources) || !this.currentRoute.length) return;
+            const pts = [];
+            for (let i = 0; i < this.currentRoute.length; i++) {
+                const idx = this.currentRoute[i];
+                const src = this._routeSources && this._routeSources[idx];
+                if (!src || !src.marker) return; // abort if marker is missing
+                pts.push({ x: Number(src.marker.x), y: Number(src.marker.y) });
+            }
+            const payload = { points: pts, length: this.currentRouteLengthNormalized };
+            localStorage.setItem('mp4_saved_route', JSON.stringify(payload));
+        } catch (e) {}
+    }
+
+    // Attempt to load a previously saved route from localStorage (positions-only) and apply it
+    loadRouteFromStorage() {
+        try {
+            const raw = localStorage.getItem('mp4_saved_route');
+            if (!raw) return false;
+            const obj = JSON.parse(raw);
+            if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) return false;
+            const sources = [];
+            for (let i = 0; i < obj.points.length; i++) {
+                const p = obj.points[i];
+                if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+                    console.warn('Saved route contains invalid point at index', i);
+                    return false;
+                }
+                // Create a lightweight source object with only a marker containing x/y
+                sources.push({ marker: { x: p.x, y: p.y }, layerKey: 'saved', layerIndex: i });
+            }
+            const routeIndices = sources.map((_, i) => i);
+            const length = typeof obj.length === 'number' ? obj.length : 0;
+            this.setRoute(routeIndices, length, sources);
+            console.log('Loaded saved route (positions:', sources.length + ')');
+            return true;
+        } catch (e) {
+            console.warn('Failed to load saved route:', e);
+            return false;
+        }
     }
 
     startRouteAnimation() {
@@ -1117,6 +1245,8 @@ async function init() {
     
     // Populate layer icons from LAYERS definitions
     initializeLayerIcons();
+    // Attempt to restore a previously saved route (if any)
+    try { map.loadRouteFromStorage(); } catch (e) {}
     // Ensure the sidebar counts reflect current map state now that elements exist
     try { map.updateLayerCounts(); } catch (e) {}
     
@@ -1180,59 +1310,8 @@ async function init() {
     });
 
     // Routing controls
-    const computeBtn = document.getElementById('computeRouteBtn');
     const computeImprovedBtn = document.getElementById('computeRouteImprovedBtn');
     const clearRouteBtn = document.getElementById('clearRouteBtn');
-    if (computeBtn) {
-        computeBtn.addEventListener('click', () => {
-                // Gather visible markers from all layers defined in LAYERS (skip virtual 'route')
-                const sources = [];
-                const layerEntries = Object.entries(LAYERS || {});
-                for (let li = 0; li < layerEntries.length; li++) {
-                    const layerKey = layerEntries[li][0];
-                    const layer = layerEntries[li][1];
-                    if (layerKey === 'route') continue;
-                    if (!map.layerVisibility[layerKey]) continue;
-                    if (!Array.isArray(layer.markers)) continue;
-                    for (let i = 0; i < layer.markers.length; i++) {
-                        sources.push({ marker: layer.markers[i], layerKey, layerIndex: i });
-                    }
-                }
-                if (sources.length === 0) {
-                    alert('No visible markers available to route.');
-                    return;
-                }
-            if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSP !== 'function') {
-                alert('TSP solver not available.');
-                return;
-            }
-
-            computeBtn.disabled = true;
-            const oldText = computeBtn.textContent;
-            computeBtn.textContent = 'Computing...';
-
-            // Allow UI state to update before heavy compute
-            setTimeout(() => {
-                try {
-                    const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
-                    const result = TSPEuclid.solveTSP(points, { restarts: 12 });
-                    if (result && Array.isArray(result.tour)) {
-                        map.setRoute(result.tour, result.length, sources);
-                        console.log('Route length (normalized):', result.length, 'tour size:', result.tour.length);
-                    } else {
-                        alert('Solver returned no route.');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert('Error computing route: ' + err.message);
-                } finally {
-                    computeBtn.disabled = false;
-                    computeBtn.textContent = oldText;
-                }
-            }, 50);
-        });
-    }
-
     if (computeImprovedBtn) {
         computeImprovedBtn.addEventListener('click', () => {
             // Build combined visible marker sources from LAYERS (skip virtual 'route')
@@ -1302,8 +1381,14 @@ async function init() {
                     // Coerce current value to number then flip between 1 and -1
                     map._routeAnimationDirection = (Number(map._routeAnimationDirection) === 1) ? -1 : 1;
                     try { localStorage.setItem('routeDir', String(map._routeAnimationDirection)); } catch (e) {}
+                    // Flip internal dash offset so the dash pattern continues smoothly
+                    try {
+                        map._routeDashOffset = (1000000 - (Number(map._routeDashOffset) || 0)) % 1000000;
+                    } catch (e) {}
                     // Reset the last animation timestamp so the next RAF frame doesn't use a large dt
                     try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
+                    // Render immediately to show updated direction without waiting a frame
+                    try { map.render(); } catch (e) {}
                     updateRouteDirUI();
                 });
             }
@@ -1331,6 +1416,11 @@ async function init() {
         } else {
             app.classList.remove('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'true');
+        }
+        // Swap the handle glyph instead of rotating it with CSS
+        if (handle) {
+            const icon = handle.querySelector('.handle-icon');
+            if (icon) icon.textContent = collapsed ? '▶' : '◀';
         }
         if (persist) localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
         // Resize map after sidebar animation

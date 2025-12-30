@@ -1,4 +1,4 @@
-# Metroid Prime 4: Beyond - Sol Valley Interactive Map
+# Metroid Prime 4: Beyond Routing Tool
 
 A lightweight, mobile-first interactive map for tracking collectibles in Metroid Prime 4: Beyond. Built to work well on desktop and mobile with touch-friendly controls and an in-browser routing tool.
 
@@ -30,9 +30,9 @@ Then visit `http://localhost:8080`.
 
 ### Compute a Route
 
-Use the sidebar `➤ Compute Route` button to compute a closed tour visiting every visible marker (Green Crystals plus any visible Custom Markers). Key points:
+Use the sidebar `Compute Route` button to compute a closed tour visiting every visible marker (Green Crystals plus any visible Custom Markers). Key points:
 
-- Solver: `tools/tsp_euclid.js` — fast browser-safe heuristic (NN seed + repeated 2-opt; advanced mode uses 3-opt polishing).
+- Solver: `tools/tsp_euclid.js` — the improved heuristic used by the sidebar `Compute Route` button: nearest‑neighbor seed + multi‑restart 2‑opt, with optional 3‑opt polishing for stronger results on larger marker sets.
 - Result: `map.setRoute()` stores a normalized length (map width = 1) and the route indices; the sidebar displays the normalized length.
 - Visibility: when a route is computed the `route` layer is automatically enabled (sidebar toggle checked) so the polyline is visible even if it was previously hidden.
 - Clear Route: `Clear Route` shows a confirmation prompt before removing the visualization.
@@ -60,12 +60,6 @@ All point layers are defined in the global `LAYERS` object. Each layer provides 
 
 Custom markers are pure data in `data/customMarkers.js`; `data/markerUtils.js` centralizes localStorage load/save and import/export behavior.
 
-## UI / Interaction Notes
-
-- Icons: sidebar buttons use simple single-character dingbats (e.g., ↓, ↑, ✕, ➤) for consistency.
-- Press states: hover-based styles were replaced with `.pressed` class and pointer event handlers to avoid sticky hover states on mobile.
-- Route rendering: color is taken from `LAYERS.route.color` and animated via a dashed stroke whose offset is advanced using `requestAnimationFrame`.
-
 ## Browser Compatibility
 
 - Modern browsers with Canvas 2D API
@@ -77,7 +71,7 @@ Tested on Chrome/Edge/Firefox and iOS Safari; mobile-focused changes (pressed st
 ## Performance Notes
 
 - Tiles and marker rendering are optimized for visible-region culling
-- Routing is computed client-side; use the "Improved" compute option for longer runs with better solutions
+- Routing is computed client-side; the sidebar `Compute Route` button calls the improved solver (nearest‑neighbor seed + multi‑restart 2‑opt with optional 3‑opt polishing).
 
 ## License
 

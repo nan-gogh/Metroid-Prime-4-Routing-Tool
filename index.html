@@ -26,9 +26,10 @@
             
                 <div class="control-group">
                     <h3>Routing</h3>
-                    <button id="computeRouteBtn" class="control-btn">Compute Route</button>
-                    <button id="computeRouteImprovedBtn" class="control-btn">Compute Route (Improved?)</button>
-                                <button id="toggleRouteDirBtn" class="control-btn" aria-pressed="false">Reverse Direction</button>
+                    <button id="computeRouteImprovedBtn" class="control-btn">Compute Route</button>
+                    <button id="toggleRouteDirBtn" class="control-btn" aria-pressed="false">Reverse Direction</button>
+                    <button id="exportRoute" class="control-btn">Export Route</button>
+                    <button id="importRoute" class="control-btn">Import Route</button>
                     <button id="clearRouteBtn" class="control-btn danger">Clear Route</button>
                 </div>
                 
@@ -38,6 +39,7 @@
                     <button id="importCustom" class="control-btn">Import Markers</button>
                     <button id="clearCustom" class="control-btn danger">Clear Markers</button>
                     <input type="file" id="importFile" accept=".json" style="display:none;">
+                    <input type="file" id="importRouteFile" accept=".json" style="display:none;">
                 </div>
             </div>
             
