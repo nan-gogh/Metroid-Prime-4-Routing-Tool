@@ -1567,9 +1567,8 @@ async function init() {
     const app = document.querySelector('.app-container');
     // Support multiple possible handle IDs for backwards compatibility
     const handle = document.getElementById('sidebarHandle') || document.getElementById('sidebarToggle');
-    const SIDEBAR_KEY = 'mp4_sidebar_collapsed';
-
-    function setSidebarCollapsed(collapsed, persist = true) {
+    // No persistence: sidebar state should always start open on load
+    function setSidebarCollapsed(collapsed, persist = false) {
         if (collapsed) {
             app.classList.add('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'false');
@@ -1582,7 +1581,7 @@ async function init() {
             const icon = handle.querySelector('.handle-icon');
             if (icon) icon.textContent = collapsed ? '▶' : '◀';
         }
-        if (persist) localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+        // do not persist sidebar state to localStorage
         // Resize map after sidebar animation
         setTimeout(() => map.resize(), 300);
     }
@@ -1606,13 +1605,8 @@ async function init() {
         console.warn('Sidebar handle element not found; collapsing unavailable');
     }
 
-    // Restore saved preference; default collapsed on mobile
-    const saved = localStorage.getItem(SIDEBAR_KEY);
-    if (window.innerWidth <= 720) {
-        setSidebarCollapsed(saved !== '0', false);
-    } else {
-        if (saved === '1') setSidebarCollapsed(true, false);
-    }
+    // Always start with the sidebar open on page load
+    setSidebarCollapsed(false, false);
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -10,6 +10,7 @@
     <link rel="apple-touch-icon" href="graphics/mp4b_routing_favicon.png">
 </head>
 <body>
+    <div id="loadFade" aria-hidden="true"></div>
     <div class="app-container">
         <aside class="sidebar">
             <div class="header">
@@ -102,5 +103,21 @@
     <script src="data/markerUtils.js"></script>
     <script src="tools/tsp_euclid.js"></script>
     <script src="map.js"></script>
+    <script>
+    (function(){
+        function removeFade(){
+            var el = document.getElementById('loadFade');
+            if(!el) return;
+            // Trigger fade-out
+            el.classList.add('fade-out');
+            // Remove node after transition so it doesn't block interaction
+            var done = function(){ if(el && el.parentNode) el.parentNode.removeChild(el); };
+            el.addEventListener('transitionend', done, { once: true });
+            // Fallback: remove after 1s if transitionend doesn't fire
+            setTimeout(done, 1200);
+        }
+        if (document.readyState === 'complete') removeFade(); else window.addEventListener('load', removeFade);
+    })();
+    </script>
 </body>
 </html>

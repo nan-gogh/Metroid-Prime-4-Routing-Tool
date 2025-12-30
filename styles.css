@@ -11,6 +11,25 @@ body {
     overflow: hidden;
     height: 100vh;
 }
+.load-fade-keeper {}
+
+/* Full-screen load fade overlay (fades from black to transparent) */
+#loadFade {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: #000;
+    opacity: 1;
+    transition: opacity 600ms ease;
+    pointer-events: none;
+    will-change: opacity;
+}
+
+#loadFade.fade-out { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+    #loadFade { transition: none; opacity: 0; }
+}
 .app-container {
     display: flex;
     height: 100vh;
