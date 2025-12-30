@@ -44,7 +44,7 @@ class InteractiveMap {
         this._routeDashOffset = 0; // px offset used for animated dashes
         this._routeRaf = null; // requestAnimationFrame id
         this._lastRouteAnimTime = 0;
-        this._routeAnimationSpeed = 30; // pixels per second
+        this._routeAnimationSpeed = 15; // pixels per second
         this.hoveredMarker = null;
         this.hoveredMarkerLayer = null; // layer key identifying which LAYERS entry the hovered marker belongs to
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
