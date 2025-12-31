@@ -47,6 +47,10 @@ class InteractiveMap {
         this._imageElements = {}; // IMG elements in-flight per resolution
         this._imageBitmaps = {}; // ImageBitmap objects stored per resolution
         this._preloadLinks = []; // Optional <link> elements created for preload/prefetch
+        // Bitmap decoding concurrency control to avoid overwhelming decoders
+        this._bitmapLimit = 2;
+        this._bitmapActive = 0;
+        this._bitmapQueue = [];
         
         // Markers
         this.markers = [];
@@ -642,10 +646,30 @@ class InteractiveMap {
                     if (!resp.ok) throw new Error('fetch-failed');
                     const blob = await resp.blob();
                     if (this._tilesetGeneration !== gen) { this.loadingResolution = null; return; }
-                    const bmp = await createImageBitmap(blob);
+                    // Use the bitmap task queue to limit concurrent decodes
+                    let bmp = null;
+                    try {
+                        bmp = await this._runBitmapTask(() => createImageBitmap(blob));
+                    } catch (e) {
+                        // If bitmap decode failed, fall back to direct createImageBitmap
+                        try { bmp = await createImageBitmap(blob); } catch (err) { bmp = null; }
+                    }
                     try { bmp._tilesetFolder = folder; } catch (e) {}
-                    // Close previous ImageBitmap if we are replacing
-                    try { if (this._imageBitmaps[resolutionIndex] && typeof this._imageBitmaps[resolutionIndex].close === 'function') this._imageBitmaps[resolutionIndex].close(); } catch (e) {}
+                    // Close previous ImageBitmap if we are replacing, but avoid
+                    // closing bitmaps that are currently referenced elsewhere
+                    try {
+                        const prev = this._imageBitmaps[resolutionIndex];
+                        if (prev && typeof prev.close === 'function') {
+                            let safeToClose = true;
+                            if (prev === this.currentImage) safeToClose = false;
+                            try {
+                                for (const v of Object.values(this.images || {})) {
+                                    if (v === prev) { safeToClose = false; break; }
+                                }
+                            } catch (e) {}
+                            if (safeToClose) { try { prev.close(); } catch (e) {} }
+                        }
+                    } catch (e) {}
                     if (this._tilesetGeneration === gen) {
                         try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
                         try { this.images[resolutionIndex] = bmp; } catch (e) {}
@@ -788,21 +812,67 @@ class InteractiveMap {
         this._imageElements = {};
 
         try {
-            // Close ImageBitmaps when possible to free GPU memory
+            // Close ImageBitmaps when possible to free GPU memory, but avoid
+            // closing bitmaps that are currently referenced by `this.currentImage`
+            // or present in `this.images` to prevent use-after-close.
             for (const k in this._imageBitmaps) {
-                try { if (this._imageBitmaps[k] && typeof this._imageBitmaps[k].close === 'function') this._imageBitmaps[k].close(); } catch (e) {}
+                try {
+                    const bmp = this._imageBitmaps[k];
+                    if (!bmp || typeof bmp.close !== 'function') continue;
+                    // If this bitmap is the one currently displayed, skip closing
+                    if (bmp === this.currentImage) continue;
+                    // If any entry in this.images references the same bitmap, skip
+                    let inUse = false;
+                    try {
+                        for (const v of Object.values(this.images || {})) {
+                            if (v === bmp) { inUse = true; break; }
+                        }
+                    } catch (e) {}
+                    if (inUse) continue;
+                    try { bmp.close(); } catch (e) {}
+                } catch (e) {}
             }
         } catch (e) {}
-        this._imageBitmaps = {};
-
+        // Rebuild bitmap map: keep a reference to the currently used bitmap if any
+        const preserved = {};
         try {
-            // Remove any preload <link> tags previously inserted
-            for (const l of (this._preloadLinks || [])) {
-                try { if (l.parentNode) l.parentNode.removeChild(l); } catch (e) {}
+            if (this.currentImage && typeof this.currentImage !== 'string' && typeof this.currentImage !== 'number') {
+                // If currentImage is an ImageBitmap, preserve it under its resolution
+                if (this.currentResolution != null && this._imageBitmaps && this._imageBitmaps[this.currentResolution] === this.currentImage) {
+                    preserved[this.currentResolution] = this.currentImage;
+                }
             }
         } catch (e) {}
-        this._preloadLinks = [];
+        this._imageBitmaps = preserved;
     }
+
+    // Run a bitmap decode task with concurrency limiting. `fn` should return
+    // a Promise that resolves to an ImageBitmap.
+    _runBitmapTask(fn) {
+        return new Promise((resolve, reject) => {
+            const task = async () => {
+                this._bitmapActive++;
+                try {
+                    const res = await fn();
+                    resolve(res);
+                } catch (e) {
+                    reject(e);
+                } finally {
+                    this._bitmapActive--;
+                    // schedule next queued task
+                    const next = this._bitmapQueue.shift();
+                    if (next) setTimeout(next, 0);
+                }
+            };
+
+            if (this._bitmapActive < (this._bitmapLimit || 2)) {
+                task();
+            } else {
+                this._bitmapQueue.push(task);
+            }
+        });
+    }
+    
 
     // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
     // available, fall back to drawing into the overlay context.
