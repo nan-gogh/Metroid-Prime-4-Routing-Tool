@@ -819,12 +819,12 @@ class InteractiveMap {
         try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
         try { this._abortAndCleanupTileLoads(); } catch (e) {}
         try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
-        // Clear cached images and reload (folder may change depending on
-        // whether grayscale variants are enabled)
-        this.images = {};
-        this.currentImage = null;
-        this.currentResolution = 0;
-        this.loadingResolution = null;
+        // Clear cached images but preserve the currently-displayed image as a
+        // temporary fallback to avoid a black map while the new tiles load.
+        // We intentionally do not clear `currentImage` here; `_abortAndCleanupTileLoads`
+        // preserved the displayed bitmap where safe.
+        try { this.images = {}; } catch (e) {}
+        try { console.log('map: tileset switched to', tileset, '- preserving previous image as temporary fallback'); } catch (e) {}
         try { this.preloadAllMapImages(); } catch (e) {}
         try { this.loadInitialImage(); } catch (e) {}
         try { this.render(); } catch (e) {}
@@ -848,10 +848,10 @@ class InteractiveMap {
             try { this._abortAndCleanupTileLoads(); } catch (e) {}
             // Switch to grayscale tile folder and reload tiles instead of
             // applying runtime canvas filters.
-            this.images = {};
-            this.currentImage = null;
-            this.currentResolution = 0;
-            this.loadingResolution = null;
+            // Clear cached images but keep the currently-displayed image so the
+            // map does not appear blank while the grayscale tiles download.
+            try { this.images = {}; } catch (e) {}
+            try { console.log('map: tileset grayscale toggled to', this.tilesetGrayscale, '- preserving previous image as temporary fallback'); } catch (e) {}
             try { this.preloadAllMapImages(); } catch (e) {}
             try { this.loadInitialImage(); } catch (e) {}
             try { this.renderTiles(); } catch (e) {}
