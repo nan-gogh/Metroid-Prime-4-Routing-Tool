@@ -87,10 +87,7 @@
             </div>
         </aside>
         
-        <!-- Sidebar toggle handle -->
-        <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true">
-            <span class="handle-icon">◀</span>
-        </button>
+        <!-- Sidebar toggle handle will be placed inside zoom-controls (static, no animation) -->
         
         <main class="map-container">
             <!-- Background tile canvas (drawn in task 2). Marked aria-hidden since it's decorative. -->
@@ -99,6 +96,9 @@
             <canvas id="mapCanvas"></canvas>
             
             <div class="zoom-controls">
+                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true">
+                    <span class="handle-icon">◀</span>
+                </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
                 <button class="zoom-btn" id="resetView" title="Reset View">⌂</button>
