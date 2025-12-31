@@ -41,6 +41,12 @@ class InteractiveMap {
         this.currentImage = null;
         this.currentResolution = 0;
         this.loadingResolution = null;
+        // Internal trackers for robust tile loading and cancellation
+        this._tilesetGeneration = 0; // increment on tileset/grayscale change
+        this._imageControllers = {}; // AbortController per resolution
+        this._imageElements = {}; // IMG elements in-flight per resolution
+        this._imageBitmaps = {}; // ImageBitmap objects stored per resolution
+        this._preloadLinks = []; // Optional <link> elements created for preload/prefetch
         
         // Markers
         this.markers = [];
@@ -117,41 +123,66 @@ class InteractiveMap {
                 link.as = 'image';
                 link.href = href;
                 head.appendChild(link);
+                try { this._preloadLinks.push(link); } catch (e) {}
             } catch (e) {}
 
             // Stagger fetches to avoid a burst of work on load
-            setTimeout(async () => {
-                if (this.images[i]) return;
-                try {
-                    if (window.fetch && window.createImageBitmap) {
-                        const resp = await fetch(href);
-                        if (resp.ok) {
+            (function(i, size, folder, href){
+                const gen = this._tilesetGeneration;
+                setTimeout(async () => {
+                    // If tileset changed since scheduling, skip
+                    if (this._tilesetGeneration !== gen) return;
+                    if (this.images[i]) return;
+
+                    // Try fetch + createImageBitmap path first
+                    try {
+                        if (window.fetch && window.createImageBitmap) {
+                            const controller = new AbortController();
+                            try { this._imageControllers[i] = controller; } catch (e) {}
+                            const resp = await fetch(href, { signal: controller.signal });
+                            try { delete this._imageControllers[i]; } catch (e) {}
+                            if (!resp.ok) throw new Error('fetch-failed');
                             const blob = await resp.blob();
+                            // Generation may have changed while fetching
+                            if (this._tilesetGeneration !== gen) { return; }
                             const bmp = await createImageBitmap(blob);
                             try { bmp._tilesetFolder = folder; } catch (e) {}
-                            this.images[i] = bmp;
+                            if (this._tilesetGeneration === gen) {
+                                try { this._imageBitmaps[i] = bmp; } catch (e) {}
+                                try { this.images[i] = bmp; } catch (e) {}
+                            } else {
+                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                            }
                             return;
                         }
+                    } catch (err) {
+                        try { delete this._imageControllers[i]; } catch (e) {}
+                        // fall through to image element fallback
                     }
-                } catch (err) {
-                    // fall through to image element fallback
-                }
 
-                try {
-                    const img = new Image();
-                    try { img._tilesetFolder = folder; } catch (e) {}
-                    img.src = href;
-                    if (img.decode) {
-                        await img.decode();
+                    // Fallback to <img> element loading
+                    try {
+                        const img = new Image();
+                        try { img._tilesetFolder = folder; } catch (e) {}
+                        try { this._imageElements[i] = img; } catch (e) {}
+                        img.onload = () => {
+                            try {
+                                if (this._tilesetGeneration !== gen) {
+                                    try { img.onload = null; img.onerror = null; img.src = ''; } catch (e) {}
+                                    return;
+                                }
+                                try { this.images[i] = img; } catch (e) {}
+                            } catch (e) {}
+                        };
+                        img.onerror = () => {
+                            try { img.onload = null; img.onerror = null; } catch (e) {}
+                        };
+                        img.src = href;
+                    } catch (e) {
+                        // Give up for this resolution
                     }
-                    this.images[i] = img;
-                } catch (e) {
-                    const img = new Image();
-                    try { img._tilesetFolder = folder; } catch (e) {}
-                    img.onload = () => { this.images[i] = img; };
-                    img.src = href;
-                }
-            }, i * 150);
+                }, i * 150);
+            }).call(this, i, size, folder, href);
         }
     }
     
@@ -578,38 +609,88 @@ class InteractiveMap {
     
     loadImage(resolutionIndex) {
         const size = RESOLUTIONS[resolutionIndex];
-        
         if (this.images[resolutionIndex]) {
             this.currentImage = this.images[resolutionIndex];
             this.currentResolution = resolutionIndex;
             this.render();
             return;
         }
-        
+
         if (this.loadingResolution === resolutionIndex) return;
         this.loadingResolution = resolutionIndex;
-        
-        const img = new Image();
-        img.onload = () => {
-            try { img._tilesetFolder = this.getTilesetFolder(); } catch (e) {}
-            this.images[resolutionIndex] = img;
-            this.loadingResolution = null;
-            
-            // Always use this image if we don't have one yet, or if it's the best choice
-            const curFolder = this.getTilesetFolder();
-            const imgFolder = img._tilesetFolder || null;
-            if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
-                this.currentImage = img;
-                this.currentResolution = resolutionIndex;
-                this.render();
+
+        const gen = this._tilesetGeneration;
+        const folder = this.getTilesetFolder();
+        const href = `tiles/${folder}/${size}.avif`;
+
+        // Try fetch + createImageBitmap first (abortable)
+        (async () => {
+            let controller = null;
+            try {
+                if (window.fetch && window.createImageBitmap) {
+                    controller = new AbortController();
+                    try { this._imageControllers[resolutionIndex] = controller; } catch (e) {}
+                    const resp = await fetch(href, { signal: controller.signal });
+                    try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
+                    if (!resp.ok) throw new Error('fetch-failed');
+                    const blob = await resp.blob();
+                    if (this._tilesetGeneration !== gen) { this.loadingResolution = null; return; }
+                    const bmp = await createImageBitmap(blob);
+                    try { bmp._tilesetFolder = folder; } catch (e) {}
+                    // Close previous ImageBitmap if we are replacing
+                    try { if (this._imageBitmaps[resolutionIndex] && typeof this._imageBitmaps[resolutionIndex].close === 'function') this._imageBitmaps[resolutionIndex].close(); } catch (e) {}
+                    if (this._tilesetGeneration === gen) {
+                        try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
+                        try { this.images[resolutionIndex] = bmp; } catch (e) {}
+                    } else {
+                        try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                        this.loadingResolution = null;
+                        return;
+                    }
+                    this.loadingResolution = null;
+                    // Use this image if appropriate
+                    try {
+                        const curFolder = this.getTilesetFolder();
+                        const imgFolder = bmp._tilesetFolder || null;
+                        if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
+                            this.currentImage = bmp;
+                            this.currentResolution = resolutionIndex;
+                            this.render();
+                        }
+                    } catch (e) {}
+                    this.updateResolution();
+                    return;
+                }
+            } catch (err) {
+                try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
             }
-            this.updateResolution();
-        };
-        img.onerror = () => {
-            this.loadingResolution = null;
-            console.error(`Failed to load: ${size}px`);
-        };
-                    img.src = `tiles/${this.getTilesetFolder()}/${size}.avif`;
+
+            // Fallback to <img>
+            try {
+                const img = new Image();
+                try { img._tilesetFolder = folder; } catch (e) {}
+                try { this._imageElements[resolutionIndex] = img; } catch (e) {}
+                img.onload = () => {
+                    try {
+                        this.images[resolutionIndex] = img;
+                        this.loadingResolution = null;
+                        const curFolder = this.getTilesetFolder();
+                        const imgFolder = img._tilesetFolder || null;
+                        if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
+                            this.currentImage = img;
+                            this.currentResolution = resolutionIndex;
+                            this.render();
+                        }
+                        this.updateResolution();
+                    } catch (e) { this.loadingResolution = null; }
+                };
+                img.onerror = () => { this.loadingResolution = null; };
+                img.src = href;
+            } catch (e) {
+                this.loadingResolution = null;
+                console.error(`Failed to load: ${size}px`);
+            }
+        })();
     }
 
     setTileset(tileset) {
@@ -618,6 +699,9 @@ class InteractiveMap {
         if (this.tileset === tileset) return;
         if (tileset !== 'sat' && tileset !== 'holo') return;
         this.tileset = tileset;
+        // Increment generation and abort any in-flight tile loads from previous tileset
+        try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
+        try { this._abortAndCleanupTileLoads(); } catch (e) {}
         try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
         // Clear cached images and reload (folder may change depending on
         // whether grayscale variants are enabled)
@@ -643,6 +727,9 @@ class InteractiveMap {
         this.tilesetGrayscale = !!enabled;
         try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
         try {
+            // increment generation and abort previous loads so we don't mix tilesets
+            try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
+            try { this._abortAndCleanupTileLoads(); } catch (e) {}
             // Switch to grayscale tile folder and reload tiles instead of
             // applying runtime canvas filters.
             this.images = {};
@@ -668,6 +755,46 @@ class InteractiveMap {
             }
         }
         return RESOLUTIONS.length - 1;
+    }
+
+    // Abort and cleanup any in-flight tile loads, image elements, and ImageBitmaps
+    _abortAndCleanupTileLoads() {
+        try {
+            // Abort fetches
+            for (const k in this._imageControllers) {
+                try { this._imageControllers[k].abort(); } catch (e) {}
+            }
+        } catch (e) {}
+        this._imageControllers = {};
+
+        try {
+            // Remove and neutralize image elements
+            for (const k in this._imageElements) {
+                try {
+                    const img = this._imageElements[k];
+                    img.onload = null;
+                    img.onerror = null;
+                    try { img.src = ''; } catch (e) {}
+                } catch (e) {}
+            }
+        } catch (e) {}
+        this._imageElements = {};
+
+        try {
+            // Close ImageBitmaps when possible to free GPU memory
+            for (const k in this._imageBitmaps) {
+                try { if (this._imageBitmaps[k] && typeof this._imageBitmaps[k].close === 'function') this._imageBitmaps[k].close(); } catch (e) {}
+            }
+        } catch (e) {}
+        this._imageBitmaps = {};
+
+        try {
+            // Remove any preload <link> tags previously inserted
+            for (const l of (this._preloadLinks || [])) {
+                try { if (l.parentNode) l.parentNode.removeChild(l); } catch (e) {}
+            }
+        } catch (e) {}
+        this._preloadLinks = [];
     }
 
     // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
