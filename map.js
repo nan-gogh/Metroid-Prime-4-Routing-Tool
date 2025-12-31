@@ -653,56 +653,72 @@ class InteractiveMap {
                 if (window.fetch && window.createImageBitmap) {
                     controller = new AbortController();
                     try { this._imageControllers[resolutionIndex] = controller; } catch (e) {}
+                    // Abort fetch if it takes longer than the bitmap timeout window
+                    let fetchTimer = null;
+                    try {
+                        fetchTimer = setTimeout(() => {
+                            try { controller.abort(); } catch (e) {}
+                        }, this._bitmapTimeoutMs || 15000);
+                    } catch (e) { fetchTimer = null; }
+
                     const resp = await fetch(href, { signal: controller.signal });
+                    try { if (fetchTimer) clearTimeout(fetchTimer); } catch (e) {}
                     try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
                     if (!resp.ok) throw new Error('fetch-failed');
                     const blob = await resp.blob();
                     if (this._tilesetGeneration !== gen) { this.loadingResolution = null; return; }
-                    // Use the bitmap task queue to limit concurrent decodes
+
+                    // Use the bitmap task queue to limit concurrent decodes. If the
+                    // decode times out, treat it as a graceful failure (bmp === null)
+                    // so we fall back to the <img> path and keep the queue draining.
                     let bmp = null;
                     try {
                         bmp = await this._runBitmapTask(() => createImageBitmap(blob));
                     } catch (e) {
-                        // If bitmap decode failed, fall back to direct createImageBitmap
-                        try { bmp = await createImageBitmap(blob); } catch (err) { bmp = null; }
+                        // decode failed or timed out -> do not retry here, fall back
+                        bmp = null;
                     }
-                    try { bmp._tilesetFolder = folder; } catch (e) {}
-                    // Close previous ImageBitmap if we are replacing, but avoid
-                    // closing bitmaps that are currently referenced elsewhere
-                    try {
-                        const prev = this._imageBitmaps[resolutionIndex];
-                        if (prev && typeof prev.close === 'function') {
-                            let safeToClose = true;
-                            if (prev === this.currentImage) safeToClose = false;
-                            try {
-                                for (const v of Object.values(this.images || {})) {
-                                    if (v === prev) { safeToClose = false; break; }
-                                }
-                            } catch (e) {}
-                            if (safeToClose) { try { prev.close(); } catch (e) {} }
+
+                    if (bmp) {
+                        try { bmp._tilesetFolder = folder; } catch (e) {}
+                        // Close previous ImageBitmap if we are replacing, but avoid
+                        // closing bitmaps that are currently referenced elsewhere
+                        try {
+                            const prev = this._imageBitmaps[resolutionIndex];
+                            if (prev && typeof prev.close === 'function') {
+                                let safeToClose = true;
+                                if (prev === this.currentImage) safeToClose = false;
+                                try {
+                                    for (const v of Object.values(this.images || {})) {
+                                        if (v === prev) { safeToClose = false; break; }
+                                    }
+                                } catch (e) {}
+                                if (safeToClose) { try { prev.close(); } catch (e) {} }
+                            }
+                        } catch (e) {}
+                        if (this._tilesetGeneration === gen) {
+                            try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
+                            try { this.images[resolutionIndex] = bmp; } catch (e) {}
+                        } else {
+                            try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                            this.loadingResolution = null;
+                            return;
                         }
-                    } catch (e) {}
-                    if (this._tilesetGeneration === gen) {
-                        try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
-                        try { this.images[resolutionIndex] = bmp; } catch (e) {}
-                    } else {
-                        try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
                         this.loadingResolution = null;
+                        // Use this image if appropriate
+                        try {
+                            const curFolder = this.getTilesetFolder();
+                            const imgFolder = bmp._tilesetFolder || null;
+                            if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
+                                this.currentImage = bmp;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            }
+                        } catch (e) {}
+                        this.updateResolution();
                         return;
                     }
-                    this.loadingResolution = null;
-                    // Use this image if appropriate
-                    try {
-                        const curFolder = this.getTilesetFolder();
-                        const imgFolder = bmp._tilesetFolder || null;
-                        if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
-                            this.currentImage = bmp;
-                            this.currentResolution = resolutionIndex;
-                            this.render();
-                        }
-                    } catch (e) {}
-                    this.updateResolution();
-                    return;
+                    // If bmp is null (timeout or decode error) fall through to <img> fallback
                 }
             } catch (err) {
                 try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
