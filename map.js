@@ -52,6 +52,12 @@ class InteractiveMap {
         this._bitmapActive = 0;
         this._bitmapQueue = [];
         this._bitmapTimeoutMs = 15000; // timeout for bitmap decode tasks
+        // Interaction mode: when user is actively zooming/pinching, defer
+        // heavy decode work and prefer lower-resolution cached tiles to
+        // keep panning/zooming smooth. Cleared after short idle.
+        this._interactionMode = false;
+        this._interactionTimer = null;
+        this._bitmapLimitSaved = this._bitmapLimit;
         // Detect low-spec devices and reduce concurrency / preloads conservatively
         this._lowSpec = false;
         try {
@@ -255,6 +261,8 @@ class InteractiveMap {
     bindEvents() {
         // Mouse wheel zoom
         this.canvas.addEventListener('wheel', (e) => {
+            // mark interaction so heavy decode work is throttled
+            try { this._setInteractionActive(); } catch (e) {}
             e.preventDefault();
             const rect = this.canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -277,6 +285,7 @@ class InteractiveMap {
         });
         // Pointer events (unified for mouse + touch + pen)
         this.canvas.addEventListener('pointerdown', (e) => {
+            try { this._setInteractionActive(); } catch (e) {}
             this.canvas.setPointerCapture(e.pointerId);
             const rect = this.canvas.getBoundingClientRect();
             const localX = e.clientX - rect.left;
@@ -318,6 +327,7 @@ class InteractiveMap {
             }
 
             if (this.pointers.size === 2 && this.pinch) {
+                try { this._setInteractionActive(); } catch (e) {}
                 // handle pinch-to-zoom and pan
                 const pts = Array.from(this.pointers.values());
                 const dx = pts[0].clientX - pts[1].clientX;
@@ -352,6 +362,7 @@ class InteractiveMap {
             }
 
             if (this.isDragging) {
+                try { this._setInteractionActive(); } catch (e) {}
                 this.panX += e.clientX - this.lastMouseX;
                 this.panY += e.clientY - this.lastMouseY;
                 this.lastMouseX = e.clientX;
@@ -932,6 +943,25 @@ class InteractiveMap {
     }
 
     // Expose simple runtime stats for diagnostics
+    _setInteractionActive() {
+        try {
+            if (!this._interactionMode) {
+                this._interactionMode = true;
+                try { this._bitmapLimitSaved = this._bitmapLimit; } catch (e) {}
+                try { this._bitmapLimit = 1; } catch (e) {}
+            }
+            if (this._interactionTimer) try { clearTimeout(this._interactionTimer); } catch (e) {}
+            this._interactionTimer = setTimeout(() => {
+                try {
+                    this._interactionMode = false;
+                    try { this._bitmapLimit = this._bitmapLimitSaved || 2; } catch (e) {}
+                    this._interactionTimer = null;
+                    try { this.updateResolution(); } catch (e) {}
+                } catch (e) {}
+            }, 300);
+        } catch (e) {}
+    }
+
     getTileLoadStats() {
         return {
             bitmapActive: this._bitmapActive || 0,
