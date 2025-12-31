@@ -125,15 +125,10 @@ class InteractiveMap {
     preloadAllMapImages() {
         const head = document.head || document.getElementsByTagName('head')[0];
         const initial = this.getNeededResolution();
-        // Consider the currently-needed resolution and both neighbors to
-        // improve initial coverage across different DPR/zoom calculations.
-        const toPreload = [];
-        for (let delta = -1; delta <= 1; delta++) {
-            const idx = initial + delta;
-            if (idx >= 0 && idx < RESOLUTIONS.length) toPreload.push(idx);
-        }
-        // If not low-spec, optionally include one higher neighbor beyond this window
-        if (!this._lowSpec && (initial + 2 < RESOLUTIONS.length)) toPreload.push(initial + 2);
+        // Only consider the currently-needed resolution and (unless low-spec)
+        // one higher neighbor.
+        const toPreload = [initial];
+        if (!this._lowSpec && (initial + 1 < RESOLUTIONS.length)) toPreload.push(initial + 1);
         for (let p = 0; p < toPreload.length; p++) {
             const i = toPreload[p];
             const size = RESOLUTIONS[i];
@@ -632,18 +627,7 @@ class InteractiveMap {
     
     loadInitialImage() {
         const needed = this.getNeededResolution();
-        // Load the needed resolution and both neighbors to ensure smooth
-        // initial zooming across devices with different DPR/zoom math.
-        const tryLoad = (idx, delay) => {
-            if (idx < 0 || idx >= RESOLUTIONS.length) return;
-            setTimeout(() => {
-                try { this.loadImage(idx); } catch (e) {}
-            }, delay || 0);
-        };
-
-        tryLoad(needed, 0);
-        tryLoad(needed - 1, 120);
-        tryLoad(needed + 1, 160);
+        this.loadImage(needed);
     }
     
     loadImage(resolutionIndex) {
@@ -799,7 +783,10 @@ class InteractiveMap {
     }
 
     setTilesetGrayscale(enabled) {
-        this.tilesetGrayscale = !!enabled;
+        const newVal = !!enabled;
+        // If there's no change, avoid aborting/clearing caches (init may call this redundantly)
+        if (newVal === this.tilesetGrayscale) return;
+        this.tilesetGrayscale = newVal;
         try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
         try {
             // increment generation and abort previous loads so we don't mix tilesets
@@ -946,16 +933,16 @@ class InteractiveMap {
 
     // Expose simple runtime stats for diagnostics
     getTileLoadStats() {
-                try {
-                    const delay = (i === initial) ? 0 : 200 + Math.abs(i - initial) * 100;
-                    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-                        try { window.requestIdleCallback(() => task(), { timeout: Math.max(250, delay) }); } catch (e) { setTimeout(task, delay); }
-                    } else {
-                        setTimeout(task, i * 150 + 50);
-                    }
-                } catch (e) {
-                    setTimeout(task, i * 150 + 50);
-                }
+        return {
+            bitmapActive: this._bitmapActive || 0,
+            bitmapQueue: (this._bitmapQueue && this._bitmapQueue.length) || 0,
+            imageControllers: Object.keys(this._imageControllers || {}).length,
+            imageBitmaps: Object.keys(this._imageBitmaps || {}).length
+        };
+    }
+
+    // Diagnostic: return array of resolution sizes currently present in _imageBitmaps
+    getCachedBitmapResolutions() {
         try {
             const keys = Object.keys(this._imageBitmaps || {}).map(k => Number(k)).filter(n => Number.isFinite(n));
             const sizes = keys.map(i => RESOLUTIONS[i]).filter(Boolean);
