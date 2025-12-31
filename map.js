@@ -1134,7 +1134,34 @@ class InteractiveMap {
     
     updateResolution() {
         const needed = this.getNeededResolution();
-        
+
+        // If we're requesting a higher resolution, prefer showing the 512px
+        // version of the current tileset immediately while the desired
+        // higher-res tile downloads/decodes. This reduces perceived blank
+        // time on low-memory devices.
+        const idx512 = RESOLUTIONS.indexOf(512);
+        try {
+            const neededIndex = needed;
+            if (neededIndex > idx512) {
+                const folder = this.getTilesetFolder();
+                // If we already have a cached 512 image for this tileset, show it
+                try {
+                    const cached512 = this.images && this.images[idx512];
+                    if (cached512 && ((cached512._tilesetFolder && cached512._tilesetFolder === folder) || (this._imageBitmaps && this._imageBitmaps[idx512] && this._imageBitmaps[idx512]._tilesetFolder === folder))) {
+                        if (!this.currentImage) {
+                            this.currentImage = cached512;
+                            this.currentResolution = idx512;
+                            try { this.render(); } catch (e) {}
+                        }
+                    } else {
+                        // Otherwise, proactively start loading the 512 tile so it
+                        // can be displayed quickly while the desired resolution loads.
+                        try { if (this.loadingResolution !== idx512) this.loadImage(idx512); } catch (e) {}
+                    }
+                } catch (e) {}
+            }
+        } catch (e) {}
+
         if (needed !== this.currentResolution && this.loadingResolution !== needed) {
             // Try to display a nearest lower-resolution cached image immediately
             // to reduce occurrences of a blank map while the desired tile loads.
