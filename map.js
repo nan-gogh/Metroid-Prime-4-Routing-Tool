@@ -339,15 +339,18 @@ class InteractiveMap {
                         }
                     } catch (e) { hash = ''; }
 
-                    const payload = {
-                        exported: now.toISOString(),
-                        count: pts.length,
-                        points: pts,
-                        length: map.currentRouteLengthNormalized || 0
-                    };
-
-                    const json = JSON.stringify(payload, null, 2);
-                    const blob = new Blob([json], { type: 'application/json' });
+                                        const exported = now.toISOString();
+                                        // Build a compact export where each point object is a single line
+                                        const pointsJson = pts.map(p => JSON.stringify({ x: p.x, y: p.y })).join(',\n        ');
+                                        const json = `{
+    "exported": "${exported}",
+    "count": ${pts.length},
+    "points": [
+        ${pointsJson}
+    ],
+    "length": ${map.currentRouteLengthNormalized || 0}
+}`;
+                                        const blob = new Blob([json], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
