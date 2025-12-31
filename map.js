@@ -1919,12 +1919,22 @@ async function init() {
             devCb.addEventListener('change', applyToggle);
 
             // live stats updater
-            if (devStats && map && typeof map.getTileLoadStats === 'function') {
+            if (map && typeof map.getTileLoadStats === 'function') {
+                const devBitmapActiveEl = document.getElementById('dev_bitmapActive');
+                const devBitmapQueueEl = document.getElementById('dev_bitmapQueue');
+                const devImageControllersEl = document.getElementById('dev_imageControllers');
+                const devImageBitmapsEl = document.getElementById('dev_imageBitmaps');
                 const upd = () => {
                     try {
                         const s = map.getTileLoadStats();
-                        devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
-                    } catch (e) { devStats.textContent = 'error'; }
+                        if (devStats) devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
+                        if (devBitmapActiveEl) devBitmapActiveEl.textContent = String(s.bitmapActive || 0);
+                        if (devBitmapQueueEl) devBitmapQueueEl.textContent = String(s.bitmapQueue || 0);
+                        if (devImageControllersEl) devImageControllersEl.textContent = String(s.imageControllers || 0);
+                        if (devImageBitmapsEl) devImageBitmapsEl.textContent = String(s.imageBitmaps || 0);
+                    } catch (e) {
+                        if (devStats) devStats.textContent = 'error';
+                    }
                 };
                 upd();
                 map._devStatsInterval = setInterval(upd, 600);
