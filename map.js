@@ -110,20 +110,25 @@ class InteractiveMap {
     preloadAllMapImages() {
         const head = document.head || document.getElementsByTagName('head')[0];
         const initial = this.getNeededResolution();
-        for (let i = 0; i < RESOLUTIONS.length; i++) {
+        // Only consider the currently-needed resolution and one higher neighbor
+        const toPreload = [initial];
+        if (initial + 1 < RESOLUTIONS.length) toPreload.push(initial + 1);
+        for (let p = 0; p < toPreload.length; p++) {
+            const i = toPreload[p];
             const size = RESOLUTIONS[i];
             const folder = this.getTilesetFolder();
             const href = `tiles/${folder}/${size}.avif`;
 
-            // Hint browser to fetch early
+            // Hint browser to fetch early for prioritized resolutions. Avoid duplicate link tags.
             try {
-                const link = document.createElement('link');
-                // Only aggressively preload the initially-needed resolution; prefetch others
-                link.rel = (i === initial) ? 'preload' : 'prefetch';
-                link.as = 'image';
-                link.href = href;
-                head.appendChild(link);
-                try { this._preloadLinks.push(link); } catch (e) {}
+                if (!head.querySelector || !head.querySelector(`link[href="${href}"]`)) {
+                    const link = document.createElement('link');
+                    link.rel = (i === initial) ? 'preload' : 'prefetch';
+                    link.as = 'image';
+                    link.href = href;
+                    head.appendChild(link);
+                    try { this._preloadLinks.push(link); } catch (e) {}
+                }
             } catch (e) {}
 
             // Stagger fetches to avoid a burst of work on load
