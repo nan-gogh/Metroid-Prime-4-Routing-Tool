@@ -66,6 +66,8 @@ class InteractiveMap {
                 this._bitmapLimit = 1;
             }
         } catch (e) {}
+        // Backup canvas max side: reduce on low-spec devices to limit memory usage
+        this._backupMaxSide = this._lowSpec ? 768 : 2048;
         
         // Markers
         this.markers = [];
@@ -254,7 +256,7 @@ class InteractiveMap {
             const bw = Math.max(1, Math.floor(cssW * dpr));
             const bh = Math.max(1, Math.floor(cssH * dpr));
             // Limit backup size to avoid runaway memory on very large screens
-            const maxSide = 2048; // backing store max per dimension
+            const maxSide = this._backupMaxSide || 2048; // backing store max per dimension
             const finalW = Math.min(bw, maxSide);
             const finalH = Math.min(bh, maxSide);
             if (this._backupCanvas.width !== finalW || this._backupCanvas.height !== finalH) {
