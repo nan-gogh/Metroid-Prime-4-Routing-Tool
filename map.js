@@ -45,6 +45,9 @@ class InteractiveMap {
         this._backupCanvas = document.createElement('canvas');
         this._backupCtx = this._backupCanvas.getContext('2d');
         this._haveBackup = false;
+        // Optional small ImageBitmap created from backup canvas for better fidelity
+        this._backupBitmap = null;
+        this._haveBackupBitmap = false;
         // Internal trackers for robust tile loading and cancellation
         this._tilesetGeneration = 0; // increment on tileset/grayscale change
         this._imageControllers = {}; // AbortController per resolution
@@ -269,6 +272,25 @@ class InteractiveMap {
                 // drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh)
                 this._backupCtx.drawImage(src, 0, 0, src.width || finalW, src.height || finalH, 0, 0, finalW, finalH);
                 this._haveBackup = true;
+                // Attempt to create a small ImageBitmap from the backup canvas for
+                // improved rendering fidelity while keeping memory usage low. Use
+                // the bitmap task queue to avoid overwhelming decoders.
+                try {
+                    // Close any previous backup bitmap first
+                    try { if (this._backupBitmap && typeof this._backupBitmap.close === 'function') this._backupBitmap.close(); } catch (e) {}
+                    this._backupBitmap = null;
+                    this._haveBackupBitmap = false;
+                    if (window.createImageBitmap && this._runBitmapTask) {
+                        this._runBitmapTask(() => createImageBitmap(this._backupCanvas)).then((bmp) => {
+                            try {
+                                this._backupBitmap = bmp;
+                                this._haveBackupBitmap = true;
+                            } catch (e) { this._haveBackupBitmap = false; }
+                        }).catch(() => { this._haveBackupBitmap = false; });
+                    }
+                } catch (e) {
+                    this._haveBackupBitmap = false;
+                }
             } catch (e) {
                 // Fallback: try simple draw
                 try { this._backupCtx.drawImage(src, 0, 0, finalW, finalH); this._haveBackup = true; } catch (ee) { this._haveBackup = false; }
@@ -985,6 +1007,14 @@ class InteractiveMap {
             }
         } catch (e) {}
         this._imageBitmaps = preserved;
+        // Also close any backup bitmap we were holding for visual fallback
+        try {
+            if (this._backupBitmap && typeof this._backupBitmap.close === 'function') {
+                try { this._backupBitmap.close(); } catch (e) {}
+            }
+        } catch (e) {}
+        this._backupBitmap = null;
+        this._haveBackupBitmap = false;
     }
 
     // Run a bitmap decode task with concurrency limiting. `fn` should return
@@ -1072,15 +1102,32 @@ class InteractiveMap {
             try { ctxT.drawImage(this.currentImage, this.panX, this.panY, size, size); } catch (e) {}
             // If we used a backup snapshot previously, clear it now that a real
             // image is displayed to free memory.
-            try { if (this._haveBackup) { this._haveBackup = false; this._backupCtx && this._backupCtx.clearRect(0,0,this._backupCanvas.width,this._backupCanvas.height); } } catch (e) {}
+            try {
+                if (this._haveBackup) {
+                    this._haveBackup = false;
+                    try { this._backupCtx && this._backupCtx.clearRect(0,0,this._backupCanvas.width,this._backupCanvas.height); } catch (e) {}
+                }
+                if (this._haveBackupBitmap && this._backupBitmap) {
+                    try { if (typeof this._backupBitmap.close === 'function') this._backupBitmap.close(); } catch (e) {}
+                    this._backupBitmap = null;
+                    this._haveBackupBitmap = false;
+                }
+            } catch (e) {}
         } else if (this._haveBackup && this._backupCanvas) {
-            // Draw lightweight backup snapshot scaled to fit the map area.
+            // Prefer drawing the smaller ImageBitmap backup if available
             try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
             try {
-                // backup canvas is in backing store pixels; draw it stretched to CSS pixels
-                ctxT.drawImage(this._backupCanvas, 0, 0, this._backupCanvas.width / (window.devicePixelRatio || 1), this._backupCanvas.height / (window.devicePixelRatio || 1));
+                if (this._haveBackupBitmap && this._backupBitmap) {
+                    const dpr = window.devicePixelRatio || 1;
+                    const drawW = (this._backupBitmap.width || this._backupCanvas.width) / dpr;
+                    const drawH = (this._backupBitmap.height || this._backupCanvas.height) / dpr;
+                    try { ctxT.drawImage(this._backupBitmap, 0, 0, drawW, drawH); } catch (e) { throw e; }
+                } else {
+                    // fallback to drawing the canvas if bitmap not ready
+                    try { ctxT.drawImage(this._backupCanvas, 0, 0, this._backupCanvas.width / (window.devicePixelRatio || 1), this._backupCanvas.height / (window.devicePixelRatio || 1)); } catch (e) { try { ctxT.drawImage(this._backupCanvas, 0, 0); } catch (ee) {} }
+                }
             } catch (e) {
-                try { ctxT.drawImage(this._backupCanvas, 0, 0); } catch (e) {}
+                try { ctxT.drawImage(this._backupCanvas, 0, 0); } catch (ee) {}
             }
         }
     }
