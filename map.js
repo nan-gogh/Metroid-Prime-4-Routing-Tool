@@ -1888,9 +1888,14 @@ async function init() {
 
     // Bind dev sidebar controls (if present)
     try {
-        const devCb = document.getElementById('dev_lowSpec_toggle');
-        const devLabel = document.getElementById('dev_lowSpec_label');
-        const devStats = document.getElementById('devStats');
+            const devCb = document.getElementById('dev_lowSpec_toggle');
+            const devLabel = document.getElementById('dev_lowSpec_label');
+            const devStatsPanel = document.getElementById('devStatsPanel');
+            const dev_bitmapActive = document.getElementById('dev_bitmapActive');
+            const dev_bitmapQueue = document.getElementById('dev_bitmapQueue');
+            const dev_imageControllers = document.getElementById('dev_imageControllers');
+            const dev_imageBitmaps = document.getElementById('dev_imageBitmaps');
+            const devStats = document.getElementById('devStats');
         if (devCb) {
             // initialize state
             devCb.checked = !!(map && map._lowSpec);
@@ -1918,13 +1923,26 @@ async function init() {
 
             devCb.addEventListener('change', applyToggle);
 
-            // live stats updater
-            if (devStats && map && typeof map.getTileLoadStats === 'function') {
+            // live stats updater (populate panel rows if present, otherwise keep compact label)
+            if ((devStatsPanel || devStats) && map && typeof map.getTileLoadStats === 'function') {
                 const upd = () => {
                     try {
                         const s = map.getTileLoadStats();
-                        devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
-                    } catch (e) { devStats.textContent = 'error'; }
+                        if (dev_bitmapActive) dev_bitmapActive.textContent = s.bitmapActive;
+                        if (dev_bitmapQueue) dev_bitmapQueue.textContent = s.bitmapQueue;
+                        if (dev_imageControllers) dev_imageControllers.textContent = s.imageControllers;
+                        if (dev_imageBitmaps) dev_imageBitmaps.textContent = s.imageBitmaps;
+                        if (!devStatsPanel && devStats) devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
+                    } catch (e) {
+                        if (devStatsPanel) {
+                            try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) {}
+                            try { if (dev_bitmapQueue) dev_bitmapQueue.textContent = 'err'; } catch (e) {}
+                            try { if (dev_imageControllers) dev_imageControllers.textContent = 'err'; } catch (e) {}
+                            try { if (dev_imageBitmaps) dev_imageBitmaps.textContent = 'err'; } catch (e) {}
+                        } else if (devStats) {
+                            devStats.textContent = 'error';
+                        }
+                    }
                 };
                 upd();
                 map._devStatsInterval = setInterval(upd, 600);

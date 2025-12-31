@@ -427,6 +427,33 @@ body {
     font-size: 11px;
 }
 
+/* Dev-stats panel (compact rows under low-spec toggle) */
+.dev-stats {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(34,211,238,0.06);
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dev-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+}
+.dev-label {
+    color: #9fb9c9;
+    font-size: 12px;
+}
+.dev-value {
+    color: #22d3ee;
+    font-weight: 600;
+    font-size: 12px;
+}
+
 /* Mobile: smaller handle, adjust positioning */
 @media (max-width: 720px) {
     .sidebar {

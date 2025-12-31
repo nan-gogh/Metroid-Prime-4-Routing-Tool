@@ -65,9 +65,14 @@
                         <div class="layer-icon" style="background:#888">⚙</div>
                         <div class="layer-info">
                             <div class="layer-name">Low-spec mode</div>
-                            <div class="layer-count" id="devStats">idle</div>
                         </div>
                     </label>
+                    <div id="devStatsPanel" class="dev-stats" aria-live="polite">
+                        <div class="dev-row"><div class="dev-label">Decoders active</div><div class="dev-value" id="dev_bitmapActive">0</div></div>
+                        <div class="dev-row"><div class="dev-label">Decode queue</div><div class="dev-value" id="dev_bitmapQueue">0</div></div>
+                        <div class="dev-row"><div class="dev-label">Active fetches</div><div class="dev-value" id="dev_imageControllers">0</div></div>
+                        <div class="dev-row"><div class="dev-label">Cached bitmaps</div><div class="dev-value" id="dev_imageBitmaps">0</div></div>
+                    </div>
                 </div>
             </div>
             
