@@ -1886,9 +1886,17 @@ async function init() {
                     map._lowSpec = !!devCb.checked;
                     map._bitmapLimit = devCb.checked ? 1 : 2;
                     if (devLabel) devLabel.classList.toggle('pressed', !!devCb.checked);
+                    // Abort and cleanup in-flight loads
                     try { map._abortAndCleanupTileLoads(); } catch (e) {}
+                    // Clear cached images and ensure a clean reload to avoid stale state
+                    try { map.images = {}; } catch (e) {}
+                    try { map.currentImage = null; } catch (e) {}
+                    try { map.currentResolution = 0; } catch (e) {}
+                    try { map.loadingResolution = null; } catch (e) {}
+                    // Restart preloads and load a fresh initial image, then render
                     try { map.preloadAllMapImages(); } catch (e) {}
                     try { map.loadInitialImage(); } catch (e) {}
+                    try { map.render(); } catch (e) {}
                 } catch (e) { console.warn('Dev low-spec toggle failed:', e); }
             };
 
