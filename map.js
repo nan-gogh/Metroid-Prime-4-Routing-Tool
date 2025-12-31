@@ -52,6 +52,16 @@ class InteractiveMap {
         this._bitmapActive = 0;
         this._bitmapQueue = [];
         this._bitmapTimeoutMs = 15000; // timeout for bitmap decode tasks
+        // Detect low-spec devices and reduce concurrency / preloads conservatively
+        this._lowSpec = false;
+        try {
+            const dm = (typeof navigator !== 'undefined' && navigator.deviceMemory) ? Number(navigator.deviceMemory) : null;
+            const hc = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? Number(navigator.hardwareConcurrency) : null;
+            if ((dm !== null && !Number.isNaN(dm) && dm <= 1.5) || (hc !== null && !Number.isNaN(hc) && hc <= 2)) {
+                this._lowSpec = true;
+                this._bitmapLimit = 1;
+            }
+        } catch (e) {}
         
         // Markers
         this.markers = [];
@@ -115,9 +125,10 @@ class InteractiveMap {
     preloadAllMapImages() {
         const head = document.head || document.getElementsByTagName('head')[0];
         const initial = this.getNeededResolution();
-        // Only consider the currently-needed resolution and one higher neighbor
+        // Only consider the currently-needed resolution and (unless low-spec)
+        // one higher neighbor.
         const toPreload = [initial];
-        if (initial + 1 < RESOLUTIONS.length) toPreload.push(initial + 1);
+        if (!this._lowSpec && (initial + 1 < RESOLUTIONS.length)) toPreload.push(initial + 1);
         for (let p = 0; p < toPreload.length; p++) {
             const i = toPreload[p];
             const size = RESOLUTIONS[i];
