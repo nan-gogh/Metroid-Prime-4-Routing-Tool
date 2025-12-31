@@ -41,6 +41,10 @@ class InteractiveMap {
         this.currentImage = null;
         this.currentResolution = 0;
         this.loadingResolution = null;
+        // Lightweight downscaled visual fallback to avoid holding huge ImageBitmaps
+        this._backupCanvas = document.createElement('canvas');
+        this._backupCtx = this._backupCanvas.getContext('2d');
+        this._haveBackup = false;
         // Internal trackers for robust tile loading and cancellation
         this._tilesetGeneration = 0; // increment on tileset/grayscale change
         this._imageControllers = {}; // AbortController per resolution
@@ -233,6 +237,41 @@ class InteractiveMap {
                 }
             }).call(this, i, size, folder, href);
         }
+    }
+
+    // Capture a downscaled snapshot of the currently-drawn tile canvas into
+    // `_backupCanvas` so we can show a lightweight visual fallback while
+    // new tiles download/decodes. This avoids keeping large ImageBitmaps alive.
+    captureFallback() {
+        try {
+            const src = this.canvasTiles || this.canvas;
+            if (!src) return;
+            // Use CSS pixel size * DPR as backup backing store — much smaller
+            // than full tile image resolutions (which may be 8k).
+            const cssW = src.clientWidth || (src.width / (window.devicePixelRatio || 1));
+            const cssH = src.clientHeight || (src.height / (window.devicePixelRatio || 1));
+            const dpr = window.devicePixelRatio || 1;
+            const bw = Math.max(1, Math.floor(cssW * dpr));
+            const bh = Math.max(1, Math.floor(cssH * dpr));
+            // Limit backup size to avoid runaway memory on very large screens
+            const maxSide = 2048; // backing store max per dimension
+            const finalW = Math.min(bw, maxSide);
+            const finalH = Math.min(bh, maxSide);
+            if (this._backupCanvas.width !== finalW || this._backupCanvas.height !== finalH) {
+                this._backupCanvas.width = finalW;
+                this._backupCanvas.height = finalH;
+            }
+            // Clear and copy the visible tile canvas into the backup (scaled)
+            try { this._backupCtx.clearRect(0, 0, finalW, finalH); } catch (e) {}
+            try {
+                // drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh)
+                this._backupCtx.drawImage(src, 0, 0, src.width || finalW, src.height || finalH, 0, 0, finalW, finalH);
+                this._haveBackup = true;
+            } catch (e) {
+                // Fallback: try simple draw
+                try { this._backupCtx.drawImage(src, 0, 0, finalW, finalH); this._haveBackup = true; } catch (ee) { this._haveBackup = false; }
+            }
+        } catch (e) { this._haveBackup = false; }
     }
     
     resize() {
@@ -818,12 +857,10 @@ class InteractiveMap {
         try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
         try { this._abortAndCleanupTileLoads(); } catch (e) {}
         try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
-        // Clear cached images but preserve the currently-displayed image as a
-        // temporary fallback to avoid a black map while the new tiles load.
-        // We intentionally do not clear `currentImage` here; `_abortAndCleanupTileLoads`
-        // preserved the displayed bitmap where safe.
+        // Capture a downscaled visual snapshot before clearing caches so we
+        // avoid preserving large ImageBitmaps (which can cause OOM on mobile).
+        try { this.captureFallback(); } catch (e) {}
         try { this.images = {}; } catch (e) {}
-        // preserve previous image as temporary fallback (no debug log)
         try { this.preloadAllMapImages(); } catch (e) {}
         try { this.loadInitialImage(); } catch (e) {}
         try { this.render(); } catch (e) {}
@@ -846,11 +883,10 @@ class InteractiveMap {
             try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
             try { this._abortAndCleanupTileLoads(); } catch (e) {}
             // Switch to grayscale tile folder and reload tiles instead of
-            // applying runtime canvas filters.
-            // Clear cached images but keep the currently-displayed image so the
-            // map does not appear blank while the grayscale tiles download.
+            // applying runtime canvas filters. Capture a downscaled snapshot
+            // to use as a lightweight visual fallback while new tiles load.
+            try { this.captureFallback(); } catch (e) {}
             try { this.images = {}; } catch (e) {}
-            // preserve previous image as temporary fallback (no debug log)
             try { this.preloadAllMapImages(); } catch (e) {}
             try { this.loadInitialImage(); } catch (e) {}
             try { this.renderTiles(); } catch (e) {}
@@ -1032,6 +1068,18 @@ class InteractiveMap {
             const size = MAP_SIZE * this.zoom;
             try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
             try { ctxT.drawImage(this.currentImage, this.panX, this.panY, size, size); } catch (e) {}
+            // If we used a backup snapshot previously, clear it now that a real
+            // image is displayed to free memory.
+            try { if (this._haveBackup) { this._haveBackup = false; this._backupCtx && this._backupCtx.clearRect(0,0,this._backupCanvas.width,this._backupCanvas.height); } } catch (e) {}
+        } else if (this._haveBackup && this._backupCanvas) {
+            // Draw lightweight backup snapshot scaled to fit the map area.
+            try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
+            try {
+                // backup canvas is in backing store pixels; draw it stretched to CSS pixels
+                ctxT.drawImage(this._backupCanvas, 0, 0, this._backupCanvas.width / (window.devicePixelRatio || 1), this._backupCanvas.height / (window.devicePixelRatio || 1));
+            } catch (e) {
+                try { ctxT.drawImage(this._backupCanvas, 0, 0); } catch (e) {}
+            }
         }
     }
     
