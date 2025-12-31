@@ -51,6 +51,7 @@ class InteractiveMap {
         this._bitmapLimit = 2;
         this._bitmapActive = 0;
         this._bitmapQueue = [];
+        this._bitmapTimeoutMs = 15000; // timeout for bitmap decode tasks
         
         // Markers
         this.markers = [];
@@ -853,7 +854,7 @@ class InteractiveMap {
             const task = async () => {
                 this._bitmapActive++;
                 try {
-                    const res = await fn();
+                    const res = await this._withTimeout(() => fn(), this._bitmapTimeoutMs);
                     resolve(res);
                 } catch (e) {
                     reject(e);
@@ -871,6 +872,43 @@ class InteractiveMap {
                 this._bitmapQueue.push(task);
             }
         });
+    }
+
+    // Helper: run a promise-returning function with a timeout (ms)
+    _withTimeout(fn, ms) {
+        return new Promise((resolve, reject) => {
+            let done = false;
+            const timer = setTimeout(() => {
+                if (done) return;
+                done = true;
+                reject(new Error('bitmap-decode-timeout'));
+            }, ms || 0);
+
+            Promise.resolve()
+                .then(() => fn())
+                .then((v) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    resolve(v);
+                })
+                .catch((err) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    reject(err);
+                });
+        });
+    }
+
+    // Expose simple runtime stats for diagnostics
+    getTileLoadStats() {
+        return {
+            bitmapActive: this._bitmapActive || 0,
+            bitmapQueue: (this._bitmapQueue && this._bitmapQueue.length) || 0,
+            imageControllers: Object.keys(this._imageControllers || {}).length,
+            imageBitmaps: Object.keys(this._imageBitmaps || {}).length
+        };
     }
     
 
