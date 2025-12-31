@@ -152,7 +152,7 @@ class InteractiveMap {
             // Stagger fetches to avoid a burst of work on load
             (function(i, size, folder, href){
                 const gen = this._tilesetGeneration;
-                setTimeout(async () => {
+                const task = async () => {
                     // If tileset changed since scheduling, skip
                     if (this._tilesetGeneration !== gen) return;
                     if (this.images[i]) return;
@@ -162,21 +162,35 @@ class InteractiveMap {
                         if (window.fetch && window.createImageBitmap) {
                             const controller = new AbortController();
                             try { this._imageControllers[i] = controller; } catch (e) {}
+                            // Abort fetch if it takes too long
+                            let fetchTimer = null;
+                            try { fetchTimer = setTimeout(() => { try { controller.abort(); } catch (e) {} }, this._bitmapTimeoutMs || 15000); } catch (e) { fetchTimer = null; }
                             const resp = await fetch(href, { signal: controller.signal });
+                            try { if (fetchTimer) clearTimeout(fetchTimer); } catch (e) {}
                             try { delete this._imageControllers[i]; } catch (e) {}
                             if (!resp.ok) throw new Error('fetch-failed');
                             const blob = await resp.blob();
                             // Generation may have changed while fetching
                             if (this._tilesetGeneration !== gen) { return; }
-                            const bmp = await createImageBitmap(blob);
-                            try { bmp._tilesetFolder = folder; } catch (e) {}
-                            if (this._tilesetGeneration === gen) {
-                                try { this._imageBitmaps[i] = bmp; } catch (e) {}
-                                try { this.images[i] = bmp; } catch (e) {}
-                            } else {
-                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+
+                            // Use the bitmap task queue to limit concurrent decodes; if decode fails/null, fall back to <img>
+                            let bmp = null;
+                            try {
+                                bmp = await this._runBitmapTask(() => createImageBitmap(blob));
+                            } catch (e) {
+                                bmp = null;
                             }
-                            return;
+
+                            if (bmp) {
+                                try { bmp._tilesetFolder = folder; } catch (e) {}
+                                if (this._tilesetGeneration === gen) {
+                                    try { this._imageBitmaps[i] = bmp; } catch (e) {}
+                                    try { this.images[i] = bmp; } catch (e) {}
+                                } else {
+                                    try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                                }
+                                return;
+                            }
                         }
                     } catch (err) {
                         try { delete this._imageControllers[i]; } catch (e) {}
@@ -204,7 +218,19 @@ class InteractiveMap {
                     } catch (e) {
                         // Give up for this resolution
                     }
-                }, i * 150);
+                };
+
+                // Schedule using requestIdleCallback when available to avoid blocking critical work
+                try {
+                    const delay = (i === initial) ? 0 : 200;
+                    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+                        try { window.requestIdleCallback(() => task(), { timeout: Math.max(250, delay) }); } catch (e) { setTimeout(task, delay); }
+                    } else {
+                        setTimeout(task, i * 150 + 50);
+                    }
+                } catch (e) {
+                    setTimeout(task, i * 150 + 50);
+                }
             }).call(this, i, size, folder, href);
         }
     }
@@ -646,6 +672,21 @@ class InteractiveMap {
         const folder = this.getTilesetFolder();
         const href = `tiles/${folder}/${size}.avif`;
 
+        // If we don't currently have any image displayed, try the nearest
+        // lower-resolution cached image immediately so the map isn't blank
+        // while the requested resolution is still loading.
+        try {
+            if (!this.currentImage) {
+                const fb = this.findNearestLowerResolutionCached(resolutionIndex);
+                if (fb) {
+                    this.currentImage = fb.image;
+                    this.currentResolution = fb.index;
+                    try { console.log('map: using lower-res fallback', fb.index, 'for target', resolutionIndex); } catch (e) {}
+                    try { this.render(); } catch (e) {}
+                }
+            }
+        } catch (e) {}
+
         // Try fetch + createImageBitmap first (abortable)
         (async () => {
             let controller = null;
@@ -707,9 +748,16 @@ class InteractiveMap {
                         this.loadingResolution = null;
                         // Use this image if appropriate
                         try {
-                            const curFolder = this.getTilesetFolder();
-                            const imgFolder = bmp._tilesetFolder || null;
-                            if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
+                            const neededNow = this.getNeededResolution();
+                            if (!this.currentImage) {
+                                this.currentImage = bmp;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            } else if (resolutionIndex === neededNow) {
+                                this.currentImage = bmp;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            } else if ((this.currentResolution == null || resolutionIndex > this.currentResolution) && resolutionIndex <= neededNow) {
                                 this.currentImage = bmp;
                                 this.currentResolution = resolutionIndex;
                                 this.render();
@@ -733,13 +781,22 @@ class InteractiveMap {
                     try {
                         this.images[resolutionIndex] = img;
                         this.loadingResolution = null;
-                        const curFolder = this.getTilesetFolder();
-                        const imgFolder = img._tilesetFolder || null;
-                        if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
-                            this.currentImage = img;
-                            this.currentResolution = resolutionIndex;
-                            this.render();
-                        }
+                        try {
+                            const neededNow = this.getNeededResolution();
+                            if (!this.currentImage) {
+                                this.currentImage = img;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            } else if (resolutionIndex === neededNow) {
+                                this.currentImage = img;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            } else if ((this.currentResolution == null || resolutionIndex > this.currentResolution) && resolutionIndex <= neededNow) {
+                                this.currentImage = img;
+                                this.currentResolution = resolutionIndex;
+                                this.render();
+                            }
+                        } catch (e) {}
                         this.updateResolution();
                     } catch (e) { this.loadingResolution = null; }
                 };
@@ -814,6 +871,25 @@ class InteractiveMap {
             }
         }
         return RESOLUTIONS.length - 1;
+    }
+
+    // Find the nearest cached lower-resolution image (ImageBitmap or <img>)
+    // Returns { image, index } or null. Ensures the cached image matches
+    // the current tileset folder to avoid mixing tilesets.
+    findNearestLowerResolutionCached(targetIndex) {
+        try {
+            const folder = this.getTilesetFolder();
+            for (let i = targetIndex - 1; i >= 0; i--) {
+                const cand = this.images && this.images[i];
+                if (!cand) continue;
+                try {
+                    const tag = (cand && cand._tilesetFolder) || (this._imageBitmaps && this._imageBitmaps[i] && this._imageBitmaps[i]._tilesetFolder) || (this._imageElements && this._imageElements[i] && this._imageElements[i]._tilesetFolder) || null;
+                    if (tag && tag !== folder) continue;
+                } catch (e) {}
+                return { image: cand, index: i };
+            }
+        } catch (e) {}
+        return null;
     }
 
     // Abort and cleanup any in-flight tile loads, image elements, and ImageBitmaps
@@ -964,6 +1040,20 @@ class InteractiveMap {
         const needed = this.getNeededResolution();
         
         if (needed !== this.currentResolution && this.loadingResolution !== needed) {
+            // Try to display a nearest lower-resolution cached image immediately
+            // to reduce occurrences of a blank map while the desired tile loads.
+            try {
+                if (!this.currentImage) {
+                    const fb = this.findNearestLowerResolutionCached(needed);
+                    if (fb) {
+                        this.currentImage = fb.image;
+                        this.currentResolution = fb.index;
+                        try { console.log('map: using lower-res fallback', fb.index, 'for needed', needed); } catch (e) {}
+                        try { this.render(); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+
             this.loadImage(needed);
         }
         
