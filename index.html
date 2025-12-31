@@ -65,9 +65,15 @@
                         <div class="layer-icon" style="background:#888">⚙</div>
                         <div class="layer-info">
                             <div class="layer-name">Low-spec mode</div>
-                            <div class="layer-count" id="devStats">idle</div>
+                                <div class="layer-count" id="devStats">idle</div>
                         </div>
                     </label>
+                        <div id="devStatsPanel" class="dev-stats" aria-live="polite">
+                            <div class="dev-stat-row"><div class="dev-stat-label">Decoders active</div><div class="dev-stat-value" id="dev_bitmapActive">0</div></div>
+                            <div class="dev-stat-row"><div class="dev-stat-label">Decode queue</div><div class="dev-stat-value" id="dev_bitmapQueue">0</div></div>
+                            <div class="dev-stat-row"><div class="dev-stat-label">Active fetches</div><div class="dev-stat-value" id="dev_imageControllers">0</div></div>
+                            <div class="dev-stat-row"><div class="dev-stat-label">Cached bitmaps</div><div class="dev-stat-value" id="dev_imageBitmaps">0</div></div>
+                        </div>
                 </div>
             </div>
             
@@ -87,11 +93,6 @@
             </div>
         </aside>
         
-        <!-- Sidebar toggle handle -->
-        <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true">
-            <span class="handle-icon">◀</span>
-        </button>
-        
         <main class="map-container">
             <!-- Background tile canvas (drawn in task 2). Marked aria-hidden since it's decorative. -->
             <canvas id="mapTiles" aria-hidden="true"></canvas>
@@ -99,6 +100,10 @@
             <canvas id="mapCanvas"></canvas>
             
             <div class="zoom-controls">
+                <!-- Sidebar toggle integrated here for compact UI; no animation -->
+                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true">
+                    <span class="handle-icon">◀</span>
+                </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
                 <button class="zoom-btn" id="resetView" title="Reset View">⌂</button>
