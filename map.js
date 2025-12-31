@@ -559,9 +559,15 @@ class InteractiveMap {
     }
     
     resetView() {
-        this.zoom = DEFAULT_ZOOM;
+        // Reset view to the same initial fit used on page load (fit full map into container)
+        const cssWidth = this.canvas.parentElement.clientWidth;
+        const cssHeight = this.canvas.parentElement.clientHeight;
+        const fitZoom = Math.min(cssWidth / MAP_SIZE, cssHeight / MAP_SIZE);
+        this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
         this.centerMap();
         this.updateResolution();
+        // Ensure an appropriately-sized tile image is loaded for the reset view
+        try { this.loadInitialImage(); } catch (e) {}
         this.render();
     }
     
