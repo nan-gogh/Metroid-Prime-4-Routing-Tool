@@ -1869,6 +1869,25 @@ async function init() {
 
     // Always start with the sidebar open on page load
     setSidebarCollapsed(false, false);
+
+    // Bind dev sidebar controls (if present)
+    try {
+        const devCb = document.getElementById('dev_lowSpec_toggle');
+        if (devCb) {
+            // initialize state
+            devCb.checked = !!(map && map._lowSpec);
+            devCb.addEventListener('change', () => {
+                try {
+                    if (!map) return;
+                    map._lowSpec = !!devCb.checked;
+                    map._bitmapLimit = devCb.checked ? 1 : 2;
+                    try { map._abortAndCleanupTileLoads(); } catch (e) {}
+                    try { map.preloadAllMapImages(); } catch (e) {}
+                    try { map.loadInitialImage(); } catch (e) {}
+                } catch (e) { console.warn('Dev low-spec toggle failed:', e); }
+            });
+        }
+    } catch (e) {}
 }
 
 document.addEventListener('DOMContentLoaded', init);
