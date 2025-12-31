@@ -123,7 +123,9 @@ class InteractiveMap {
             try {
                 if (!head.querySelector || !head.querySelector(`link[href="${href}"]`)) {
                     const link = document.createElement('link');
-                    link.rel = (i === initial) ? 'preload' : 'prefetch';
+                    // Use `preload` only if we're still in the page load phase; otherwise use `prefetch`
+                    const usePreload = (i === initial && (typeof document !== 'undefined' && document.readyState !== 'complete'));
+                    link.rel = usePreload ? 'preload' : 'prefetch';
                     link.as = 'image';
                     link.href = href;
                     head.appendChild(link);
