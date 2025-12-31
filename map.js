@@ -1873,19 +1873,38 @@ async function init() {
     // Bind dev sidebar controls (if present)
     try {
         const devCb = document.getElementById('dev_lowSpec_toggle');
+        const devLabel = document.getElementById('dev_lowSpec_label');
+        const devStats = document.getElementById('devStats');
         if (devCb) {
             // initialize state
             devCb.checked = !!(map && map._lowSpec);
-            devCb.addEventListener('change', () => {
+            if (devLabel) devLabel.classList.toggle('pressed', !!devCb.checked);
+
+            const applyToggle = () => {
                 try {
                     if (!map) return;
                     map._lowSpec = !!devCb.checked;
                     map._bitmapLimit = devCb.checked ? 1 : 2;
+                    if (devLabel) devLabel.classList.toggle('pressed', !!devCb.checked);
                     try { map._abortAndCleanupTileLoads(); } catch (e) {}
                     try { map.preloadAllMapImages(); } catch (e) {}
                     try { map.loadInitialImage(); } catch (e) {}
                 } catch (e) { console.warn('Dev low-spec toggle failed:', e); }
-            });
+            };
+
+            devCb.addEventListener('change', applyToggle);
+
+            // live stats updater
+            if (devStats && map && typeof map.getTileLoadStats === 'function') {
+                const upd = () => {
+                    try {
+                        const s = map.getTileLoadStats();
+                        devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
+                    } catch (e) { devStats.textContent = 'error'; }
+                };
+                upd();
+                map._devStatsInterval = setInterval(upd, 600);
+            }
         }
     } catch (e) {}
 }

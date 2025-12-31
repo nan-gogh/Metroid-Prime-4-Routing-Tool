@@ -60,7 +60,14 @@
 
                 <div class="control-group" id="devTools">
                     <h3>Dev Tools</h3>
-                    <label class="dev-toggle"><input type="checkbox" id="dev_lowSpec_toggle"> Low-spec mode</label>
+                    <label class="layer-toggle dev-toggle" id="dev_lowSpec_label">
+                        <input type="checkbox" id="dev_lowSpec_toggle">
+                        <div class="layer-icon" style="background:#888">⚙</div>
+                        <div class="layer-info">
+                            <div class="layer-name">Low-spec mode</div>
+                            <div class="layer-count" id="devStats">idle</div>
+                        </div>
+                    </label>
                 </div>
             </div>
             
