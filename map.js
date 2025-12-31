@@ -249,6 +249,12 @@ class InteractiveMap {
     // new tiles download/decodes. This avoids keeping large ImageBitmaps alive.
     captureFallback() {
         try {
+            // Only create fallback snapshot on low-spec devices to avoid
+            // unnecessary memory/decoder work on capable devices.
+            if (!this._lowSpec) {
+                this._haveBackup = false;
+                return;
+            }
             const src = this.canvasTiles || this.canvas;
             if (!src) return;
             // Use CSS pixel size * DPR as backup backing store — much smaller
@@ -1103,17 +1109,21 @@ class InteractiveMap {
             // If we used a backup snapshot previously, clear it now that a real
             // image is displayed to free memory.
             try {
-                if (this._haveBackup) {
-                    this._haveBackup = false;
-                    try { this._backupCtx && this._backupCtx.clearRect(0,0,this._backupCanvas.width,this._backupCanvas.height); } catch (e) {}
-                }
-                if (this._haveBackupBitmap && this._backupBitmap) {
-                    try { if (typeof this._backupBitmap.close === 'function') this._backupBitmap.close(); } catch (e) {}
-                    this._backupBitmap = null;
-                    this._haveBackupBitmap = false;
+                if (this._lowSpec) {
+                    if (this._haveBackup) {
+                        this._haveBackup = false;
+                        try { this._backupCtx && this._backupCtx.clearRect(0,0,this._backupCanvas.width,this._backupCanvas.height); } catch (e) {}
+                    }
+                    if (this._haveBackupBitmap && this._backupBitmap) {
+                        try { if (typeof this._backupBitmap.close === 'function') this._backupBitmap.close(); } catch (e) {}
+                        this._backupBitmap = null;
+                        this._haveBackupBitmap = false;
+                    }
                 }
             } catch (e) {}
         } else if (this._haveBackup && this._backupCanvas) {
+            // Only draw lightweight fallbacks on low-spec devices
+            if (!this._lowSpec) return;
             // Prefer drawing the smaller ImageBitmap backup if available
             try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
             try {
@@ -1140,27 +1150,30 @@ class InteractiveMap {
         // higher-res tile downloads/decodes. This reduces perceived blank
         // time on low-memory devices.
         const idx512 = RESOLUTIONS.indexOf(512);
-        try {
-            const neededIndex = needed;
-            if (neededIndex > idx512) {
-                const folder = this.getTilesetFolder();
-                // If we already have a cached 512 image for this tileset, show it
-                try {
-                    const cached512 = this.images && this.images[idx512];
-                    if (cached512 && ((cached512._tilesetFolder && cached512._tilesetFolder === folder) || (this._imageBitmaps && this._imageBitmaps[idx512] && this._imageBitmaps[idx512]._tilesetFolder === folder))) {
-                        if (!this.currentImage) {
-                            this.currentImage = cached512;
-                            this.currentResolution = idx512;
-                            try { this.render(); } catch (e) {}
+        // Only apply the 512 fallback behavior on low-spec devices
+        if (this._lowSpec) {
+            try {
+                const neededIndex = needed;
+                if (neededIndex > idx512) {
+                    const folder = this.getTilesetFolder();
+                    // If we already have a cached 512 image for this tileset, show it
+                    try {
+                        const cached512 = this.images && this.images[idx512];
+                        if (cached512 && ((cached512._tilesetFolder && cached512._tilesetFolder === folder) || (this._imageBitmaps && this._imageBitmaps[idx512] && this._imageBitmaps[idx512]._tilesetFolder === folder))) {
+                            if (!this.currentImage) {
+                                this.currentImage = cached512;
+                                this.currentResolution = idx512;
+                                try { this.render(); } catch (e) {}
+                            }
+                        } else {
+                            // Otherwise, proactively start loading the 512 tile so it
+                            // can be displayed quickly while the desired resolution loads.
+                            try { if (this.loadingResolution !== idx512) this.loadImage(idx512); } catch (e) {}
                         }
-                    } else {
-                        // Otherwise, proactively start loading the 512 tile so it
-                        // can be displayed quickly while the desired resolution loads.
-                        try { if (this.loadingResolution !== idx512) this.loadImage(idx512); } catch (e) {}
-                    }
-                } catch (e) {}
-            }
-        } catch (e) {}
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
 
         if (needed !== this.currentResolution && this.loadingResolution !== needed) {
             // Try to display a nearest lower-resolution cached image immediately
