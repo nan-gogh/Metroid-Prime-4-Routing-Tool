@@ -937,6 +937,15 @@ class InteractiveMap {
             imageBitmaps: Object.keys(this._imageBitmaps || {}).length
         };
     }
+
+    // Diagnostic: return array of resolution sizes currently present in _imageBitmaps
+    getCachedBitmapResolutions() {
+        try {
+            const keys = Object.keys(this._imageBitmaps || {}).map(k => Number(k)).filter(n => Number.isFinite(n));
+            const sizes = keys.map(i => RESOLUTIONS[i]).filter(Boolean);
+            return sizes.sort((a,b) => a - b);
+        } catch (e) { return []; }
+    }
     
 
     // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
@@ -1924,6 +1933,7 @@ async function init() {
                 const devBitmapQueueEl = document.getElementById('dev_bitmapQueue');
                 const devImageControllersEl = document.getElementById('dev_imageControllers');
                 const devImageBitmapsEl = document.getElementById('dev_imageBitmaps');
+                const devCachedResEl = document.getElementById('dev_cachedRes');
                 const upd = () => {
                     try {
                         const s = map.getTileLoadStats();
@@ -1932,6 +1942,7 @@ async function init() {
                         if (devBitmapQueueEl) devBitmapQueueEl.textContent = String(s.bitmapQueue || 0);
                         if (devImageControllersEl) devImageControllersEl.textContent = String(s.imageControllers || 0);
                         if (devImageBitmapsEl) devImageBitmapsEl.textContent = String(s.imageBitmaps || 0);
+                        if (devCachedResEl && typeof map.getCachedBitmapResolutions === 'function') devCachedResEl.textContent = map.getCachedBitmapResolutions().join(', ') || '-';
                     } catch (e) {
                         if (devStats) devStats.textContent = 'error';
                     }
