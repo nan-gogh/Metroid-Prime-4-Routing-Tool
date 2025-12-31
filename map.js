@@ -681,7 +681,6 @@ class InteractiveMap {
                 if (fb) {
                     this.currentImage = fb.image;
                     this.currentResolution = fb.index;
-                    try { console.log('map: using lower-res fallback', fb.index, 'for target', resolutionIndex); } catch (e) {}
                     try { this.render(); } catch (e) {}
                 }
             }
@@ -824,7 +823,7 @@ class InteractiveMap {
         // We intentionally do not clear `currentImage` here; `_abortAndCleanupTileLoads`
         // preserved the displayed bitmap where safe.
         try { this.images = {}; } catch (e) {}
-        try { console.log('map: tileset switched to', tileset, '- preserving previous image as temporary fallback'); } catch (e) {}
+        // preserve previous image as temporary fallback (no debug log)
         try { this.preloadAllMapImages(); } catch (e) {}
         try { this.loadInitialImage(); } catch (e) {}
         try { this.render(); } catch (e) {}
@@ -851,7 +850,7 @@ class InteractiveMap {
             // Clear cached images but keep the currently-displayed image so the
             // map does not appear blank while the grayscale tiles download.
             try { this.images = {}; } catch (e) {}
-            try { console.log('map: tileset grayscale toggled to', this.tilesetGrayscale, '- preserving previous image as temporary fallback'); } catch (e) {}
+            // preserve previous image as temporary fallback (no debug log)
             try { this.preloadAllMapImages(); } catch (e) {}
             try { this.loadInitialImage(); } catch (e) {}
             try { this.renderTiles(); } catch (e) {}
@@ -1045,12 +1044,11 @@ class InteractiveMap {
             try {
                 if (!this.currentImage) {
                     const fb = this.findNearestLowerResolutionCached(needed);
-                    if (fb) {
-                        this.currentImage = fb.image;
-                        this.currentResolution = fb.index;
-                        try { console.log('map: using lower-res fallback', fb.index, 'for needed', needed); } catch (e) {}
-                        try { this.render(); } catch (e) {}
-                    }
+                        if (fb) {
+                            this.currentImage = fb.image;
+                            this.currentResolution = fb.index;
+                            try { this.render(); } catch (e) {}
+                        }
                 }
             } catch (e) {}
 
@@ -2009,12 +2007,24 @@ async function init() {
             devCb.addEventListener('change', applyToggle);
 
             // live stats updater
-            if (devStats && map && typeof map.getTileLoadStats === 'function') {
+            if (map && typeof map.getTileLoadStats === 'function') {
                 const upd = () => {
                     try {
                         const s = map.getTileLoadStats();
-                        devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
-                    } catch (e) { devStats.textContent = 'error'; }
+                        const elActive = document.getElementById('dev_bitmapActive');
+                        const elQueue = document.getElementById('dev_bitmapQueue');
+                        const elCtrl = document.getElementById('dev_imageControllers');
+                        const elBmp = document.getElementById('dev_imageBitmaps');
+                        if (elActive) elActive.textContent = String(s.bitmapActive || 0);
+                        if (elQueue) elQueue.textContent = String((s.bitmapQueue != null) ? s.bitmapQueue : 0);
+                        if (elCtrl) elCtrl.textContent = String(s.imageControllers || 0);
+                        if (elBmp) elBmp.textContent = String(s.imageBitmaps || 0);
+                    } catch (e) {
+                        try {
+                            const panel = document.getElementById('devStatsPanel');
+                            if (panel) panel.textContent = 'error';
+                        } catch (ee) {}
+                    }
                 };
                 upd();
                 map._devStatsInterval = setInterval(upd, 600);

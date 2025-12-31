@@ -59,25 +59,22 @@ body {
 .app-container.sidebar-collapsed .sidebar {
     transform: translateX(-100%);
 }
-/* Sidebar handle */
+/* Sidebar handle placed inside the zoom-controls for compact UI.
+   No animated transforms to keep behavior static and predictable. */
 .sidebar-handle {
-    position: absolute;
-    /* place the handle slightly to the right of the sidebar edge to avoid overlap */
-    left: calc(280px + 6px);
-    top: 50%;
-    transform: translateY(-50%);
-    width: 36px;
-    height: 48px;
+    position: relative;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 6px;
     background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
-    background-color: #0b2236; /* fallback */
+    background-color: #0b2236;
     border: 1px solid #0e4a6e;
     border-radius: 8px;
     cursor: pointer;
-    z-index: 250;
+    z-index: 60;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: left 280ms linear, transform 280ms linear, background 150ms ease, border-color 150ms;
     padding: 0;
     appearance: none;
     -webkit-appearance: none;
@@ -87,25 +84,12 @@ body {
 .sidebar-handle.pressed {
     background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
     border-color: #0891b2;
-    transform: translateY(-50%) scale(0.985);
 }
 
 .sidebar-handle .handle-icon {
     color: #22d3ee;
-    font-size: 12px;
-    transition: transform 280ms linear;
-    transform-origin: center center;
+    font-size: 16px;
     display: inline-block;
-}
-
-.app-container.sidebar-collapsed .sidebar-handle {
-    /* keep same gap (6px) to the sidebar edge when collapsed */
-    left: 6px;
-    transform: translateY(-50%);
-}
-
-.app-container.sidebar-collapsed .sidebar-handle .handle-icon {
-    /* icon glyphs are swapped via JS; no CSS rotation */
 }
 
 .header {
@@ -181,6 +165,16 @@ body {
     padding: 16px;
     flex: 1;
     overflow-y: auto;
+    /* hide scrollbar visually but keep scrolling functional */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE 10+ */
+}
+
+/* Hide webkit-based scrollbars (Chrome, Safari, Edge) in the controls pane */
+.controls::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .control-group {
@@ -239,6 +233,30 @@ body {
 .layer-count {
     font-size: 12px;
     color: #888;
+}
+
+/* Dev stats panel under low-spec toggle */
+.dev-stats {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dev-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+.dev-stat-label {
+    color: #98a9b6;
+}
+.dev-stat-value {
+    color: #22d3ee;
+    font-weight: 700;
 }
 
 /* Control buttons */
@@ -421,15 +439,9 @@ body {
         width: 85vw;
         max-width: 320px;
     }
-    
     .sidebar-handle {
-        left: calc(85vw + 6px);
         width: 40px;
-        height: 56px;
-    }
-
-    .app-container.sidebar-collapsed .sidebar-handle {
-        left: 6px;
-        transform: translateY(-50%);
+        height: 40px;
+        margin-bottom: 6px;
     }
 }
