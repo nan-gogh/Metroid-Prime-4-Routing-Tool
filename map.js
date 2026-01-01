@@ -123,7 +123,6 @@ class InteractiveMap {
 
     // Preload map images at all resolutions to reduce hiccups during zoom/pan
     preloadAllMapImages() {
-        const head = document.head || document.getElementsByTagName('head')[0];
         const initial = this.getNeededResolution();
         // Only consider the currently-needed resolution and (unless low-spec)
         // one higher neighbor.
@@ -134,25 +133,6 @@ class InteractiveMap {
             const size = RESOLUTIONS[i];
             const folder = this.getTilesetFolder();
             const href = `tiles/${folder}/${size}.avif`;
-
-                    // Hint browser to fetch early for prioritized resolutions. Avoid duplicate link tags.
-            try {
-                if (!head.querySelector || !head.querySelector(`link[href="${href}"]`)) {
-                    const link = document.createElement('link');
-                    // Use `preload` only when the resource will be consumed by
-                    // the browser's native image loading (not when we plan to
-                    // `fetch` + `createImageBitmap`, which may not reuse the
-                    // preload and triggers devtool warnings). Otherwise prefer
-                    // `prefetch` which is lower-priority and avoids warnings.
-                    const usePreload = (i === initial && (typeof document !== 'undefined' && document.readyState !== 'complete'));
-                    const willUseNativeImg = !(window.fetch && window.createImageBitmap);
-                    link.rel = (usePreload && willUseNativeImg) ? 'preload' : 'prefetch';
-                    link.as = 'image';
-                    link.href = href;
-                    head.appendChild(link);
-                    try { this._preloadLinks.push(link); } catch (e) {}
-                }
-            } catch (e) {}
 
             // Stagger fetches to avoid a burst of work on load
             (function(i, size, folder, href){
