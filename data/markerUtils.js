@@ -1,6 +1,45 @@
 // Marker utility functions for export/import
 
 const MarkerUtils = {
+    // Check if a marker with given UID exists in an array
+    markerExists(uid, markerArray) {
+        if (!Array.isArray(markerArray)) return false;
+        return markerArray.some(m => m.uid === uid);
+    },
+    
+    // Find marker by UID in an array, returns index or -1
+    findMarkerIndex(uid, markerArray) {
+        if (!Array.isArray(markerArray)) return -1;
+        return markerArray.findIndex(m => m.uid === uid);
+    },
+
+    // Determine whether a UID looks like the new position-hash format
+    // Expected format: <prefix>_<8-hex-chars>, e.g. 'cm_4b4f2ee3'
+    isHashedUID(uid) {
+        if (!uid || typeof uid !== 'string') return false;
+        return /^[A-Za-z]+_[0-9a-fA-F]{8}$/.test(uid);
+    },
+
+    // Heuristic: detect legacy marker UID (present but not hashed)
+    // Returns true when UID exists but does not match the hashed pattern
+    isLegacyMarkerUID(uid) {
+        if (!uid || typeof uid !== 'string') return false;
+        return !MarkerUtils.isHashedUID(uid);
+    },
+
+    // Given an array of marker objects, determine whether the file is legacy.
+    // A file is considered legacy when any marker has a non-hashed UID or missing UID.
+    isLegacyMarkerFile(markersArray) {
+        if (!Array.isArray(markersArray)) return false;
+        for (let i = 0; i < markersArray.length; i++) {
+            const m = markersArray[i];
+            if (!m) return true;
+            if (typeof m.uid === 'undefined' || m.uid === null) return true;
+            if (MarkerUtils.isLegacyMarkerUID(m.uid)) return true;
+        }
+        return false;
+    },
+    
     // Generate a hash of marker data for unique filenames
     hashMarkerData(markers) {
         const data = JSON.stringify(markers.map(m => ({ x: m.x, y: m.y })));
@@ -59,6 +98,17 @@ const MarkerUtils = {
                         throw new Error('Invalid format: markers must be an array');
                     }
                     
+                    // Check if imported data is legacy and upgrade if needed
+                    let isLegacy = false;
+                    try {
+                        if (MarkerUtils.isLegacyMarkerFile(data.markers)) {
+                            isLegacy = true;
+                            console.log('Detected legacy marker file on import; upgrading UIDs...');
+                        }
+                    } catch (e) {
+                        console.warn('Legacy detection during import failed:', e);
+                    }
+                    
                     // Validate and add markers
                     for (const marker of data.markers) {
                         if (typeof marker.x !== 'number' || typeof marker.y !== 'number') {
@@ -85,6 +135,11 @@ const MarkerUtils = {
                         const newMarker = { uid, x: marker.x, y: marker.y };
                         LAYERS.customMarkers.markers.push(newMarker);
                         imported.push(newMarker);
+                    }
+                    
+                    // If legacy was detected, notify user
+                    if (isLegacy && imported.length > 0) {
+                        alert(`Upgraded ${imported.length} custom markers from legacy format on import. UIDs have been regenerated based on position.`);
                     }
                     
                     // Persist to localStorage
@@ -157,6 +212,10 @@ const MarkerUtils = {
         if (index !== -1) {
             LAYERS.customMarkers.markers.splice(index, 1);
             MarkerUtils.saveToLocalStorage();
+            
+            // Clean up route references to this marker if a route exists
+            MarkerUtils.cleanupRouteReferences(uid);
+            
             // Update map runtime state and counts
             try {
                 if (typeof map !== 'undefined' && map) {
@@ -173,8 +232,15 @@ const MarkerUtils = {
     // Delete all custom markers
     clearCustomMarkers() {
         const count = LAYERS.customMarkers.markers.length;
+        const uidsToRemove = LAYERS.customMarkers.markers.map(m => m.uid);
         LAYERS.customMarkers.markers.length = 0;
         MarkerUtils.saveToLocalStorage();
+        
+        // Clean up route references for all removed markers
+        for (let i = 0; i < uidsToRemove.length; i++) {
+            MarkerUtils.cleanupRouteReferences(uidsToRemove[i]);
+        }
+        
         // Update map runtime state and counts
         try {
             if (typeof map !== 'undefined' && map) {
@@ -201,6 +267,35 @@ const MarkerUtils = {
             if (!saved) return [];
             const data = JSON.parse(saved);
             if (!Array.isArray(data)) return [];
+
+            // If the saved data appears to be legacy (legacy UIDs / missing uid),
+            // upgrade the UIDs in place and notify the user.
+            try {
+                if (MarkerUtils.isLegacyMarkerFile(data)) {
+                    // Regenerate hashed UIDs for all legacy markers
+                    const prefix = 'cm';
+                    const upgradedMarkers = [];
+                    for (let i = 0; i < data.length; i++) {
+                        const m = data[i];
+                        if (typeof m.x === 'number' && typeof m.y === 'number') {
+                            const newUid = MarkerUtils.generateUID(m.x, m.y, prefix);
+                            upgradedMarkers.push({ uid: newUid, x: m.x, y: m.y });
+                        }
+                    }
+                    // Replace data with upgraded markers
+                    data.length = 0;
+                    for (let i = 0; i < upgradedMarkers.length; i++) {
+                        data.push(upgradedMarkers[i]);
+                    }
+                    // Notify user of upgrade
+                    alert(`Upgraded ${upgradedMarkers.length} custom markers from legacy format. UIDs have been regenerated based on position.`);
+                    console.log(`✓ Upgraded ${upgradedMarkers.length} legacy custom markers to hashed UIDs`);
+                }
+            } catch (e) {
+                // If any error occurs during legacy detection/upgrade, log and continue
+                console.warn('Legacy detection/upgrade failed for saved custom markers:', e);
+            }
+
             // Replace markers array in LAYERS
             LAYERS.customMarkers = LAYERS.customMarkers || { name: 'Custom Marker', icon: '📍', color: '#ff6b6b', markers: [] };
             LAYERS.customMarkers.markers = data.slice();
@@ -216,6 +311,96 @@ const MarkerUtils = {
         } catch (e) {
             console.error('✗ Failed to load custom markers from localStorage:', e);
             return [];
+        }
+    },
+
+    // Merge (replace) custom markers with a new set
+    // Takes array of {uid, x, y} and replaces entire LAYERS.customMarkers.markers
+    mergeCustomMarkers(markersArray) {
+        try {
+            if (!Array.isArray(markersArray)) return [];
+            // Replace entire custom markers array
+            if (!LAYERS.customMarkers) {
+                LAYERS.customMarkers = { name: 'Custom Marker', icon: '📍', color: '#ff6b6b', prefix: 'cm', markers: [] };
+            }
+            LAYERS.customMarkers.markers = markersArray.slice();
+            // Persist to localStorage
+            MarkerUtils.saveToLocalStorage();
+            // Update map if present
+            try {
+                if (typeof map !== 'undefined' && map) {
+                    map.customMarkers = LAYERS.customMarkers.markers;
+                    if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                    map.render();
+                }
+            } catch (e) {}
+            return LAYERS.customMarkers.markers;
+        } catch (e) {
+            console.error('✗ Failed to merge custom markers:', e);
+            return [];
+        }
+    },
+
+    // Clean up route references when a marker is deleted
+    // Removes any route point that references the given marker UID
+    cleanupRouteReferences(deletedMarkerUid) {
+        try {
+            if (typeof map === 'undefined' || !map) return;
+            
+            // If no route exists, nothing to clean up
+            if (!map.currentRoute || !Array.isArray(map.currentRoute)) return;
+            if (!map._routeSources || !Array.isArray(map._routeSources)) return;
+            
+            // Find indices of route sources that reference the deleted marker
+            const indicesToRemove = [];
+            for (let i = 0; i < map._routeSources.length; i++) {
+                const src = map._routeSources[i];
+                if (src && src.marker && src.marker.uid === deletedMarkerUid) {
+                    indicesToRemove.push(i);
+                }
+            }
+            
+            // Remove route points in reverse order to maintain indices
+            for (let i = indicesToRemove.length - 1; i >= 0; i--) {
+                const idx = indicesToRemove[i];
+                // Remove from _routeSources
+                map._routeSources.splice(idx, 1);
+                // Remove from currentRoute (indices in currentRoute reference _routeSources)
+                const routeIdx = map.currentRoute.indexOf(idx);
+                if (routeIdx !== -1) {
+                    map.currentRoute.splice(routeIdx, 1);
+                }
+                // Adjust remaining indices in currentRoute that were > idx
+                for (let j = 0; j < map.currentRoute.length; j++) {
+                    if (map.currentRoute[j] > idx) {
+                        map.currentRoute[j]--;
+                    }
+                }
+            }
+            
+            // Recalculate route length and update UI
+            if (map.currentRoute.length > 0) {
+                // Recalculate total route length from remaining points
+                let totalLength = 0;
+                for (let i = 0; i < map.currentRoute.length - 1; i++) {
+                    const p1 = map._routeSources[map.currentRoute[i]].marker;
+                    const p2 = map._routeSources[map.currentRoute[i + 1]].marker;
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    totalLength += Math.sqrt(dx * dx + dy * dy);
+                }
+                map.currentRouteLengthNormalized = totalLength;
+                map.currentRouteLength = totalLength * 8192; // MAP_SIZE
+                try { map.saveRouteToStorage(); } catch (e) {}
+                map.render();
+                console.log(`✓ Cleaned up route: removed ${indicesToRemove.length} point(s), ${map.currentRoute.length} remaining`);
+            } else {
+                // No points left, clear the route entirely
+                map.clearRoute();
+                console.log('✓ Route cleared: no valid points remaining after marker deletion');
+            }
+        } catch (e) {
+            console.warn('Failed to cleanup route references:', e);
         }
     }
 };

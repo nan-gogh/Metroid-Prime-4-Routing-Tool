@@ -356,51 +356,13 @@ class InteractiveMap {
         if (exportRouteBtn) {
             exportRouteBtn.addEventListener('click', () => {
                 try {
-                    if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
-                        alert('No computed route to export.');
-                        return;
+                    if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.exportRoute === 'function') {
+                        RouteUtils.exportRoute(map, MarkerUtils);
+                    } else {
+                        alert('Route utilities not available.');
                     }
-                    const pts = [];
-                    for (let i = 0; i < map.currentRoute.length; i++) {
-                        const idx = map.currentRoute[i];
-                        const src = map._routeSources && map._routeSources[idx];
-                        if (!src || !src.marker) continue;
-                        pts.push({ x: Number(src.marker.x), y: Number(src.marker.y) });
-                    }
-                    if (!pts.length) { alert('No valid points to export.'); return; }
-
-                    const now = new Date();
-                    const timestamp = now.getTime();
-                    let hash = '';
-                    try {
-                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.hashMarkerData === 'function') {
-                            // reuse hash function by mapping points to marker-like objects
-                            hash = MarkerUtils.hashMarkerData(pts.map(p => ({ x: p.x, y: p.y })));
-                        }
-                    } catch (e) { hash = ''; }
-
-                                        const exported = now.toISOString();
-                                        // Build a compact export where each point object is a single line
-                                        const pointsJson = pts.map(p => JSON.stringify({ x: p.x, y: p.y })).join(',\n        ');
-                                        const json = `{
-    "exported": "${exported}",
-    "count": ${pts.length},
-    "points": [
-        ${pointsJson}
-    ],
-    "length": ${map.currentRouteLengthNormalized || 0}
-}`;
-                                        const blob = new Blob([json], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    console.log('✓ Exported route (points:', pts.length + ')');
                 } catch (err) {
-                    console.error('Export route failed:', err);
-                    alert('Failed to export route: ' + err.message);
+                    alert('Failed to export route: ' + (err.message || String(err)));
                 }
             });
         }
@@ -417,11 +379,135 @@ class InteractiveMap {
                         if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) {
                             throw new Error('Invalid route file: missing points array');
                         }
-                        const sources = obj.points.map((p, i) => ({ marker: { x: Number(p.x), y: Number(p.y) }, layerKey: 'imported', layerIndex: i }));
+
+                        // Upgrade legacy route points if needed
+                        if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
+                            const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
+                            if (upgrade.upgraded) {
+                                alert(`Upgraded imported route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                                console.log(`✓ Upgraded ${upgrade.count} legacy route points on import`);
+                            }
+                        }
+
+                        // Extract custom markers from the route points (those with 'cm' prefix)
+                        let customMarkersFromRoute = obj.points
+                            .filter(p => p.uid && p.uid.startsWith('cm_'))
+                            .map(p => ({ uid: p.uid, x: Number(p.x), y: Number(p.y) }));
+
+                        // Detect if route's custom markers use legacy incremental UIDs
+                        const routeMarkersAreLegacy = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.isLegacyMarkerFile === 'function')
+                            ? MarkerUtils.isLegacyMarkerFile(customMarkersFromRoute)
+                            : customMarkersFromRoute.some(m => typeof m.uid === 'undefined' || !(/^[A-Za-z]+_[0-9a-fA-F]{8}$/.test(String(m.uid))));
+
+                        // If legacy, regenerate hashed UIDs and update the source points' uid fields
+                        if (routeMarkersAreLegacy) {
+                            const regenerated = customMarkersFromRoute.map(m => ({
+                                uid: (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.generateUID === 'function') ? MarkerUtils.generateUID(m.x, m.y, 'cm') : `cm_${Math.random().toString(16).slice(2,10)}`,
+                                x: m.x,
+                                y: m.y
+                            }));
+                            // Replace uids in obj.points for customMarkers entries by matching coordinates
+                            for (let i = 0; i < obj.points.length; i++) {
+                                const p = obj.points[i];
+                                if (p && p.uid && p.uid.startsWith('cm_')) {
+                                    const match = regenerated.find(r => Math.abs(r.x - Number(p.x)) < 0.0000001 && Math.abs(r.y - Number(p.y)) < 0.0000001);
+                                    if (match) p.uid = match.uid;
+                                }
+                            }
+                                customMarkersFromRoute = regenerated;
+                                alert('Imported route contains legacy custom markers. Please use "Upgrade Markers" in the File Migration section to update them.');
+                                console.log('Imported route contained legacy marker UIDs; regenerated hashed UIDs');
+                        }
+
+                        // If custom markers exist in route, merge them with capacity check
+                        if (customMarkersFromRoute.length > 0) {
+                            const currentMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers))
+                                ? LAYERS.customMarkers.markers
+                                : [];
+                            const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
+                            
+                            // Count only NEW markers (those without matching UIDs)
+                            const newMarkersCount = customMarkersFromRoute.filter(imported => {
+                                return typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.markerExists === 'function'
+                                    ? !MarkerUtils.markerExists(imported.uid, currentMarkers)
+                                    : !currentMarkers.some(current => current.uid === imported.uid);
+                            }).length;
+                            
+                            const totalAfterImport = currentMarkers.length + newMarkersCount;
+                            
+                            if (totalAfterImport > maxMarkers) {
+                                const needToDelete = totalAfterImport - maxMarkers;
+                                alert(
+                                    `Cannot import route custom markers.\n\n` +
+                                    `You have ${currentMarkers.length} markers, route would add ${newMarkersCount} new ones.\n\n` +
+                                    `Total would be ${totalAfterImport}, maximum is ${maxMarkers}.\n\n` +
+                                    `Please delete at least ${needToDelete} marker(s) first.`
+                                );
+                                e.target.value = '';
+                                return;
+                            }
+                            
+                            // Merge markers: replace those with matching UIDs, add new ones
+                            const mergedMarkers = currentMarkers.slice();
+                            for (let i = 0; i < customMarkersFromRoute.length; i++) {
+                                const importedMarker = customMarkersFromRoute[i];
+                                const existingIdx = typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.findMarkerIndex === 'function'
+                                    ? MarkerUtils.findMarkerIndex(importedMarker.uid, mergedMarkers)
+                                    : mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
+                                if (existingIdx >= 0) {
+                                    // Overwrite marker with same UID (hash)
+                                    mergedMarkers[existingIdx] = importedMarker;
+                                } else {
+                                    // Add new marker
+                                    mergedMarkers.push(importedMarker);
+                                }
+                            }
+                            
+                            try {
+                                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
+                                    MarkerUtils.mergeCustomMarkers(mergedMarkers);
+                                } else {
+                                    if (LAYERS.customMarkers) {
+                                        LAYERS.customMarkers.markers = mergedMarkers;
+                                        if (typeof map !== 'undefined' && map) {
+                                            map.customMarkers = LAYERS.customMarkers.markers;
+                                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                                            map.render();
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Failed to merge custom markers from route:', e);
+                            }
+                        }
+
+                        // Build sources from all points in the route (derive layer from UID prefix)
+                        const sources = [];
+                        for (let i = 0; i < obj.points.length; i++) {
+                            const p = obj.points[i];
+                            if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+                                console.warn('Route contains invalid point at index', i);
+                                continue;
+                            }
+                            const layerKey = (typeof RouteUtils !== 'undefined' && typeof RouteUtils.findLayerKeyByPrefix === 'function')
+                                ? RouteUtils.findLayerKeyByPrefix(p.uid, LAYERS)
+                                : 'unknown';
+                            sources.push({
+                                marker: {
+                                    uid: p.uid || '',
+                                    x: Number(p.x),
+                                    y: Number(p.y)
+                                },
+                                layerKey: layerKey,
+                                layerIndex: i
+                            });
+                        }
                         const routeIndices = sources.map((_, i) => i);
                         const length = typeof obj.length === 'number' ? obj.length : 0;
+
+                        // Set the route with all points
                         map.setRoute(routeIndices, length, sources);
-                        console.log('✓ Imported route (points:', sources.length + ')');
+                        console.log('✓ Imported route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
                     } catch (err) {
                         console.error('Import route failed:', err);
                         alert('Failed to import route: ' + (err.message || String(err)));
@@ -429,6 +515,7 @@ class InteractiveMap {
                 };
                 reader.onerror = () => alert('Failed to read file');
                 reader.readAsText(file);
+                e.target.value = '';
             });
         }
 
@@ -1388,10 +1475,16 @@ class InteractiveMap {
         // Stop animated route when cleared
         this.stopRouteAnimation();
         // Remove persisted route when cleared
-        try { localStorage.removeItem('mp4_saved_route'); } catch (e) {}
+        try {
+            if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.clearRoute === 'function') {
+                RouteUtils.clearRoute();
+            } else {
+                localStorage.removeItem('mp4_saved_route');
+            }
+        } catch (e) {}
     }
 
-    // Persist the current route to localStorage as an ordered list of positions
+    // Persist the current route to localStorage as an ordered list of positions with uid and layer info
     saveRouteToStorage() {
         try {
             if (!this.currentRoute || !Array.isArray(this._routeSources) || !this.currentRoute.length) return;
@@ -1400,20 +1493,43 @@ class InteractiveMap {
                 const idx = this.currentRoute[i];
                 const src = this._routeSources && this._routeSources[idx];
                 if (!src || !src.marker) return; // abort if marker is missing
-                pts.push({ x: Number(src.marker.x), y: Number(src.marker.y) });
+                // Store uid and x, y only (layer field removed - derived from UID prefix on load)
+                pts.push({
+                    uid: src.marker.uid || '',
+                    x: Number(src.marker.x),
+                    y: Number(src.marker.y)
+                });
             }
             const payload = { points: pts, length: this.currentRouteLengthNormalized };
-            localStorage.setItem('mp4_saved_route', JSON.stringify(payload));
+            if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.saveRoute === 'function') {
+                RouteUtils.saveRoute(payload);
+            } else {
+                localStorage.setItem('mp4_saved_route', JSON.stringify(payload));
+            }
         } catch (e) {}
     }
 
-    // Attempt to load a previously saved route from localStorage (positions-only) and apply it
+    // Attempt to load a previously saved route from localStorage and apply it
     loadRouteFromStorage() {
         try {
-            const raw = localStorage.getItem('mp4_saved_route');
-            if (!raw) return false;
-            const obj = JSON.parse(raw);
-            if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) return false;
+            const obj = (typeof RouteUtils !== 'undefined' && typeof RouteUtils.loadRoute === 'function')
+                ? RouteUtils.loadRoute()
+                : null;
+            if (!obj) return false;
+            
+            // Upgrade legacy route points if needed
+            if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
+                const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
+                if (upgrade.upgraded) {
+                    alert(`Upgraded saved route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                    console.log(`✓ Upgraded ${upgrade.count} legacy route points to new UID format`);
+                    // Save the upgraded route back to localStorage
+                    if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.saveRoute === 'function') {
+                        RouteUtils.saveRoute(obj);
+                    }
+                }
+            }
+
             const sources = [];
             for (let i = 0; i < obj.points.length; i++) {
                 const p = obj.points[i];
@@ -1421,12 +1537,42 @@ class InteractiveMap {
                     console.warn('Saved route contains invalid point at index', i);
                     return false;
                 }
-                sources.push({ marker: { x: p.x, y: p.y }, layerKey: 'saved', layerIndex: i });
+                // Reconstruct sources with uid and layer info
+                // Extract layer by matching UID prefix
+                const layerKey = (typeof RouteUtils !== 'undefined' && typeof RouteUtils.findLayerKeyByPrefix === 'function')
+                    ? RouteUtils.findLayerKeyByPrefix(p.uid, LAYERS)
+                    : 'unknown';
+                sources.push({
+                    marker: {
+                        uid: p.uid || '',
+                        x: p.x,
+                        y: p.y
+                    },
+                    layerKey: layerKey,
+                    layerIndex: i
+                });
             }
+
+            // Extract custom markers from saved route (those with 'cm' prefix)
+            const customMarkersFromRoute = obj.points
+                .filter(p => p.uid && p.uid.startsWith('cm_'))
+                .map(p => ({ uid: p.uid, x: Number(p.x), y: Number(p.y) }));
+
+            // Merge custom markers if present
+            if (customMarkersFromRoute.length > 0) {
+                try {
+                    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
+                        MarkerUtils.mergeCustomMarkers(customMarkersFromRoute);
+                    }
+                } catch (e) {
+                    console.warn('Failed to merge custom markers from saved route:', e);
+                }
+            }
+
             const routeIndices = sources.map((_, i) => i);
             const length = typeof obj.length === 'number' ? obj.length : 0;
             this.setRoute(routeIndices, length, sources);
-            console.log('Loaded saved route (positions:', sources.length + ')');
+            console.log('Loaded saved route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
             return true;
         } catch (e) {
             console.warn('Failed to load saved route:', e);
@@ -1711,21 +1857,133 @@ async function init() {
     
     document.getElementById('importFile').addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (file && typeof MarkerUtils !== 'undefined') {
-            MarkerUtils.importCustomMarkers(file).then(() => {
-                map.customMarkers = LAYERS.customMarkers.markers;
-                map.updateLayerCounts();
-                map.render();
-                // Reset file input
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const obj = JSON.parse(ev.target.result);
+                let markersToImport = [];
+
+                // Handle different formats
+                if (obj && Array.isArray(obj.markers)) {
+                    // Format: { markers: [...], ... }
+                    markersToImport = obj.markers;
+                } else if (Array.isArray(obj)) {
+                    // Format: bare array
+                    markersToImport = obj;
+                } else {
+                    throw new Error('Invalid marker file: missing markers array');
+                }
+
+                if (!Array.isArray(markersToImport) || markersToImport.length === 0) {
+                    throw new Error('File contains no markers');
+                }
+
+                // Detect legacy marker file (legacy UIDs like cm01, cm02) vs current hashed UIDs
+                const isLegacyMarkersFile = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.isLegacyMarkerFile === 'function')
+                    ? MarkerUtils.isLegacyMarkerFile(markersToImport)
+                    : markersToImport.some(m => typeof m.uid === 'undefined' || !(/^[A-Za-z]+_[0-9a-fA-F]{8}$/.test(String(m.uid))));
+
+                // Build migratedMarkers: for legacy files regenerate hashed UIDs; for modern files keep provided UIDs
+                const migratedMarkers = markersToImport.map(m => {
+                    if (typeof m.x !== 'number' || typeof m.y !== 'number') {
+                        throw new Error('Invalid marker: x and y must be numbers');
+                    }
+                    const x = Number(m.x);
+                    const y = Number(m.y);
+                    let uid;
+                    if (isLegacyMarkersFile) {
+                        uid = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.generateUID === 'function')
+                            ? MarkerUtils.generateUID(x, y, 'cm')
+                            : `cm_${Math.random().toString(16).slice(2, 10)}`;
+                    } else {
+                        uid = (typeof m.uid === 'string' && m.uid) ? m.uid : ((typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.generateUID === 'function') ? MarkerUtils.generateUID(x, y, 'cm') : `cm_${Math.random().toString(16).slice(2, 10)}`);
+                    }
+                    return { uid, x, y };
+                });
+                if (isLegacyMarkersFile) {
+                    alert('Your imported markers file uses legacy format. Please use "Upgrade Markers" in the File Migration section to update it.');
+                    console.log('Imported legacy marker file: regenerated UIDs');
+                }
+
+                // Check if current markers exist
+                const currentMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers))
+                    ? LAYERS.customMarkers.markers
+                    : [];
+                const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
+                
+                // Count only NEW markers (those without matching UIDs)
+                const newMarkersCount = migratedMarkers.filter(imported => {
+                    return typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.markerExists === 'function'
+                        ? !MarkerUtils.markerExists(imported.uid, currentMarkers)
+                        : !currentMarkers.some(current => current.uid === imported.uid);
+                }).length;
+                
+                const totalAfterImport = currentMarkers.length + newMarkersCount;
+
+                if (totalAfterImport > maxMarkers) {
+                    const needToDelete = totalAfterImport - maxMarkers;
+                    alert(
+                        `Cannot import ${migratedMarkers.length} markers.\n\n` +
+                        `You have ${currentMarkers.length} markers, import would add ${newMarkersCount} new ones.\n\n` +
+                        `Total would be ${totalAfterImport}, maximum is ${maxMarkers}.\n\n` +
+                        `Please delete at least ${needToDelete} marker(s) first.`
+                    );
+                    e.target.value = '';
+                    return;
+                }
+
+                // Merge markers: replace those with matching UIDs, add new ones
+                const mergedMarkers = currentMarkers.slice();
+                for (let i = 0; i < migratedMarkers.length; i++) {
+                    const importedMarker = migratedMarkers[i];
+                    const existingIdx = typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.findMarkerIndex === 'function'
+                        ? MarkerUtils.findMarkerIndex(importedMarker.uid, mergedMarkers)
+                        : mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
+                    if (existingIdx >= 0) {
+                        // Overwrite marker with same UID (hash)
+                        mergedMarkers[existingIdx] = importedMarker;
+                    } else {
+                        // Add new marker
+                        mergedMarkers.push(importedMarker);
+                    }
+                }
+                
+                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
+                    MarkerUtils.mergeCustomMarkers(mergedMarkers);
+                } else {
+                    // Fallback if mergeCustomMarkers not available
+                    if (LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = mergedMarkers;
+                        if (typeof map !== 'undefined' && map) {
+                            map.customMarkers = LAYERS.customMarkers.markers;
+                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                            map.render();
+                        }
+                    }
+                }
+
+                console.log('✓ Imported and merged', migratedMarkers.length, 'custom markers');
                 e.target.value = '';
-            }).catch(error => {
-                alert('Import failed: ' + error.message);
+            } catch (error) {
+                console.error('Import failed:', error);
+                alert('Failed to import markers: ' + (error.message || String(error)));
                 e.target.value = '';
-            });
-        }
+            }
+        };
+        reader.onerror = () => {
+            alert('Failed to read file');
+            e.target.value = '';
+        };
+        reader.readAsText(file);
     });
     
     document.getElementById('clearCustom').addEventListener('click', () => {
+        const markerCount = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) ? LAYERS.customMarkers.markers.length : 0;
+        if (markerCount === 0) {
+            alert('No custom markers to clear.');
+            return;
+        }
         if (confirm('Clear all custom markers? This cannot be undone.')) {
             if (typeof MarkerUtils !== 'undefined') {
                 MarkerUtils.clearCustomMarkers();
@@ -1825,6 +2083,10 @@ async function init() {
 
     if (clearRouteBtn) {
         clearRouteBtn.addEventListener('click', () => {
+            if (!map.currentRoute || map.currentRoute.length === 0) {
+                alert('No route to clear.');
+                return;
+            }
             if (confirm('Clear computed route? This cannot be undone.')) {
                 map.clearRoute();
             }
@@ -2010,6 +2272,16 @@ async function init() {
                 map._devStatsInterval = setInterval(upd, 600);
             }
         }
+
+        // GitHub button
+        const githubBtn = document.getElementById('githubBtn');
+        if (githubBtn) {
+            githubBtn.addEventListener('click', () => {
+                window.open('https://github.com/nan-gogh/Metroid-Prime-4-Routing-Tool', '_blank');
+            });
+        }
+
+        // File migration tools removed — routes and markers now upgrade in place on import/load
     } catch (e) {}
 }
 
