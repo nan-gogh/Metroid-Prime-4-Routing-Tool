@@ -135,13 +135,18 @@ class InteractiveMap {
             const folder = this.getTilesetFolder();
             const href = `tiles/${folder}/${size}.avif`;
 
-            // Hint browser to fetch early for prioritized resolutions. Avoid duplicate link tags.
+                    // Hint browser to fetch early for prioritized resolutions. Avoid duplicate link tags.
             try {
                 if (!head.querySelector || !head.querySelector(`link[href="${href}"]`)) {
                     const link = document.createElement('link');
-                    // Use `preload` only if we're still in the page load phase; otherwise use `prefetch`
+                    // Use `preload` only when the resource will be consumed by
+                    // the browser's native image loading (not when we plan to
+                    // `fetch` + `createImageBitmap`, which may not reuse the
+                    // preload and triggers devtool warnings). Otherwise prefer
+                    // `prefetch` which is lower-priority and avoids warnings.
                     const usePreload = (i === initial && (typeof document !== 'undefined' && document.readyState !== 'complete'));
-                    link.rel = usePreload ? 'preload' : 'prefetch';
+                    const willUseNativeImg = !(window.fetch && window.createImageBitmap);
+                    link.rel = (usePreload && willUseNativeImg) ? 'preload' : 'prefetch';
                     link.as = 'image';
                     link.href = href;
                     head.appendChild(link);
@@ -173,10 +178,9 @@ class InteractiveMap {
                             if (this._tilesetGeneration === gen) {
                                 try { this._imageBitmaps[i] = bmp; } catch (e) {}
                                 try { this.images[i] = bmp; } catch (e) {}
-                                try { console.debug && console.debug(`preload: bitmap stored for resIndex=${i} size=${size} folder=${folder}`); } catch (e) {}
                             } else {
                                 try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
-                                try { console.debug && console.debug(`preload: bitmap discarded for resIndex=${i} (generation changed)`); } catch (e) {}
+                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
                             }
                             return;
                         }
@@ -197,7 +201,6 @@ class InteractiveMap {
                                     return;
                                 }
                                 try { this.images[i] = img; } catch (e) {}
-                                try { console.debug && console.debug(`preload: img stored for resIndex=${i} size=${size} folder=${folder}`); } catch (e) {}
                             } catch (e) {}
                         };
                         img.onerror = () => {
@@ -702,11 +705,10 @@ class InteractiveMap {
                         if (this._tilesetGeneration === gen) {
                             try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
                             try { this.images[resolutionIndex] = bmp; } catch (e) {}
-                            try { console.debug && console.debug(`loadImage: bitmap stored for resIndex=${resolutionIndex} size=${size} folder=${folder}`); } catch (e) {}
                         } else {
                             try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
                             this.loadingResolution = null;
-                            try { console.debug && console.debug(`loadImage: bitmap discarded for resIndex=${resolutionIndex} (generation changed)`); } catch (e) {}
+                            try { /* discarded due to generation change */ } catch (e) {}
                             return;
                         }
                         this.loadingResolution = null;
@@ -738,7 +740,7 @@ class InteractiveMap {
                     try {
                         this.images[resolutionIndex] = img;
                         this.loadingResolution = null;
-                        try { console.debug && console.debug(`loadImage: img stored for resIndex=${resolutionIndex} size=${size} folder=${folder}`); } catch (e) {}
+                        try { /* img stored for resolution */ } catch (e) {}
                         const curFolder = this.getTilesetFolder();
                         const imgFolder = img._tilesetFolder || null;
                         if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
