@@ -121,7 +121,16 @@
     <script src="tools/tsp_euclid.js"></script>
     <script src="map.js"></script>
     <script>
+    // Prevent double-click zoom on the entire page
     (function(){
+        let lastClickTime = 0;
+        document.addEventListener('dblclick', function(e) {
+            // Allow double-click zoom only on the map canvas; block everywhere else
+            if (e.target.id !== 'mapCanvas' && e.target.id !== 'mapTiles') {
+                e.preventDefault();
+            }
+        }, false);
+        
         function removeFade(){
             var el = document.getElementById('loadFade');
             if(!el) return;

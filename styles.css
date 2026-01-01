@@ -82,6 +82,8 @@ body {
     padding: 0;
     appearance: none;
     -webkit-appearance: none;
+    /* Prevent browser double-tap zoom on touch devices */
+    touch-action: manipulation;
 }
 
 .sidebar-handle:active,
@@ -216,6 +218,8 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.2s;
+    /* Prevent browser double-tap zoom on touch devices */
+    touch-action: manipulation;
 }
 
 .layer-toggle.pressed,
@@ -266,6 +270,8 @@ body {
     font-size: 13px;
     font-weight: 500;
     transition: all 0.2s;
+    /* Prevent browser double-tap zoom on touch devices */
+    touch-action: manipulation;
 }
 
 .control-btn.pressed,
@@ -373,6 +379,8 @@ body {
     transition: background 150ms ease, transform 120ms ease, border-color 150ms;
     appearance: none;
     -webkit-appearance: none;
+    /* Prevent browser double-tap zoom on touch devices */
+    touch-action: manipulation;
 }
 
 .zoom-btn:active,
