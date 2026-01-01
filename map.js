@@ -384,7 +384,7 @@ class InteractiveMap {
                         if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
                             const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
                             if (upgrade.upgraded) {
-                                alert(`Upgraded imported route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                                alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
                                 console.log(`✓ Upgraded ${upgrade.count} legacy route points on import`);
                             }
                         }
@@ -407,16 +407,20 @@ class InteractiveMap {
                                 y: m.y
                             }));
                             // Replace uids in obj.points for customMarkers entries by matching coordinates
+                            let updatedCount = 0;
                             for (let i = 0; i < obj.points.length; i++) {
                                 const p = obj.points[i];
                                 if (p && p.uid && p.uid.startsWith('cm_')) {
                                     const match = regenerated.find(r => Math.abs(r.x - Number(p.x)) < 0.0000001 && Math.abs(r.y - Number(p.y)) < 0.0000001);
-                                    if (match) p.uid = match.uid;
+                                    if (match) {
+                                        if (p.uid !== match.uid) updatedCount++;
+                                        p.uid = match.uid;
+                                    }
                                 }
                             }
-                                customMarkersFromRoute = regenerated;
-                                alert('Imported route contains legacy custom markers. Please use "Upgrade Markers" in the File Migration section to update them.');
-                                console.log('Imported route contained legacy marker UIDs; regenerated hashed UIDs');
+                            customMarkersFromRoute = regenerated;
+                            alert(`Upgraded custom markers: ${updatedCount} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                            console.log(`Imported route contained legacy marker UIDs; regenerated ${updatedCount} hashed UIDs`);
                         }
 
                         // If custom markers exist in route, merge them with capacity check
@@ -1521,7 +1525,7 @@ class InteractiveMap {
             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
                 const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
                 if (upgrade.upgraded) {
-                    alert(`Upgraded saved route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                    alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
                     console.log(`✓ Upgraded ${upgrade.count} legacy route points to new UID format`);
                     // Save the upgraded route back to localStorage
                     if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.saveRoute === 'function') {
@@ -1902,7 +1906,7 @@ async function init() {
                     return { uid, x, y };
                 });
                 if (isLegacyMarkersFile) {
-                    alert('Your imported markers file uses legacy format. Please use "Upgrade Markers" in the File Migration section to update it.');
+                    alert(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     console.log('Imported legacy marker file: regenerated UIDs');
                 }
 

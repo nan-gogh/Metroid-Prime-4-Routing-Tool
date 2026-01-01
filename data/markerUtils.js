@@ -137,9 +137,9 @@ const MarkerUtils = {
                         imported.push(newMarker);
                     }
                     
-                    // If legacy was detected, notify user
+                    // If legacy was detected, notify user with unified message
                     if (isLegacy && imported.length > 0) {
-                        alert(`Upgraded ${imported.length} custom markers from legacy format on import. UIDs have been regenerated based on position.`);
+                        alert(`Upgraded custom markers: ${imported.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     }
                     
                     // Persist to localStorage
@@ -287,8 +287,8 @@ const MarkerUtils = {
                     for (let i = 0; i < upgradedMarkers.length; i++) {
                         data.push(upgradedMarkers[i]);
                     }
-                    // Notify user of upgrade
-                    alert(`Upgraded ${upgradedMarkers.length} custom markers from legacy format. UIDs have been regenerated based on position.`);
+                    // Notify user of upgrade with unified message
+                    alert(`Upgraded custom markers: ${upgradedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     console.log(`✓ Upgraded ${upgradedMarkers.length} legacy custom markers to hashed UIDs`);
                 }
             } catch (e) {
