@@ -173,8 +173,10 @@ class InteractiveMap {
                             if (this._tilesetGeneration === gen) {
                                 try { this._imageBitmaps[i] = bmp; } catch (e) {}
                                 try { this.images[i] = bmp; } catch (e) {}
+                                try { console.debug && console.debug(`preload: bitmap stored for resIndex=${i} size=${size} folder=${folder}`); } catch (e) {}
                             } else {
                                 try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                                try { console.debug && console.debug(`preload: bitmap discarded for resIndex=${i} (generation changed)`); } catch (e) {}
                             }
                             return;
                         }
@@ -195,6 +197,7 @@ class InteractiveMap {
                                     return;
                                 }
                                 try { this.images[i] = img; } catch (e) {}
+                                try { console.debug && console.debug(`preload: img stored for resIndex=${i} size=${size} folder=${folder}`); } catch (e) {}
                             } catch (e) {}
                         };
                         img.onerror = () => {
@@ -679,7 +682,7 @@ class InteractiveMap {
                         bmp = null;
                     }
 
-                    if (bmp) {
+                        if (bmp) {
                         try { bmp._tilesetFolder = folder; } catch (e) {}
                         // Close previous ImageBitmap if we are replacing, but avoid
                         // closing bitmaps that are currently referenced elsewhere
@@ -699,9 +702,11 @@ class InteractiveMap {
                         if (this._tilesetGeneration === gen) {
                             try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
                             try { this.images[resolutionIndex] = bmp; } catch (e) {}
+                            try { console.debug && console.debug(`loadImage: bitmap stored for resIndex=${resolutionIndex} size=${size} folder=${folder}`); } catch (e) {}
                         } else {
                             try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
                             this.loadingResolution = null;
+                            try { console.debug && console.debug(`loadImage: bitmap discarded for resIndex=${resolutionIndex} (generation changed)`); } catch (e) {}
                             return;
                         }
                         this.loadingResolution = null;
@@ -733,6 +738,7 @@ class InteractiveMap {
                     try {
                         this.images[resolutionIndex] = img;
                         this.loadingResolution = null;
+                        try { console.debug && console.debug(`loadImage: img stored for resIndex=${resolutionIndex} size=${size} folder=${folder}`); } catch (e) {}
                         const curFolder = this.getTilesetFolder();
                         const imgFolder = img._tilesetFolder || null;
                         if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
@@ -783,7 +789,9 @@ class InteractiveMap {
     }
 
     setTilesetGrayscale(enabled) {
-        this.tilesetGrayscale = !!enabled;
+        enabled = !!enabled;
+        if (this.tilesetGrayscale === enabled) return;
+        this.tilesetGrayscale = enabled;
         try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
         try {
             // increment generation and abort previous loads so we don't mix tilesets
