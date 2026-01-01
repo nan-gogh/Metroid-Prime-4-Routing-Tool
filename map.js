@@ -1876,6 +1876,78 @@ async function init() {
     // Always start with the sidebar open on page load
     setSidebarCollapsed(false, false);
 
+    // Keyboard shortcuts for UI: toggle sidebar and arrow-key panning
+    try {
+        document.addEventListener('keydown', (e) => {
+            // Ignore when typing in form controls, buttons, links or contenteditable elements
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.tagName === 'BUTTON' || active.tagName === 'A' || active.isContentEditable)) return;
+
+            // Toggle sidebar with Space only (avoid accidental toggles)
+            if (e.code === 'Space' || e.key === ' ') {
+                try {
+                    const collapsed = app.classList.contains('sidebar-collapsed');
+                    setSidebarCollapsed(!collapsed);
+                    e.preventDefault();
+                } catch (err) {}
+                return;
+            }
+
+            // Tileset shortcuts: '1' -> Satellite, '2' -> Holographic, 'g' -> toggle grayscale
+            try {
+                if (e.key === '1') {
+                    try { map.setTileset('sat'); } catch (err) {}
+                    // update UI buttons if present
+                    try {
+                        const sat = document.getElementById('tilesetSatBtn');
+                        const holo = document.getElementById('tilesetHoloBtn');
+                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
+                        if (sat) { sat.classList.add('pressed'); sat.setAttribute('aria-pressed', 'true'); }
+                        if (holo) { holo.classList.remove('pressed'); holo.setAttribute('aria-pressed', 'false'); }
+                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                    } catch (err) {}
+                    e.preventDefault();
+                    return;
+                } else if (e.key === '2') {
+                    try { map.setTileset('holo'); } catch (err) {}
+                    try {
+                        const sat = document.getElementById('tilesetSatBtn');
+                        const holo = document.getElementById('tilesetHoloBtn');
+                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
+                        if (holo) { holo.classList.add('pressed'); holo.setAttribute('aria-pressed', 'true'); }
+                        if (sat) { sat.classList.remove('pressed'); sat.setAttribute('aria-pressed', 'false'); }
+                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                    } catch (err) {}
+                    e.preventDefault();
+                    return;
+                } else if (e.key === 'g' || e.key === 'G') {
+                    try { map.setTilesetGrayscale(!map.tilesetGrayscale); } catch (err) {}
+                    try {
+                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
+                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                    } catch (err) {}
+                    e.preventDefault();
+                    return;
+                }
+            } catch (err) {}
+
+            // Arrow keys + WASD: pan by a fraction of viewport (Shift for larger steps)
+            const stepFrac = e.shiftKey ? 0.25 : 0.08;
+            let moved = false;
+            try {
+                const key = e.key;
+                if (key === 'ArrowLeft' || key === 'a' || key === 'A') { map.panX += Math.round(map.canvas.clientWidth * stepFrac); moved = true; }
+                else if (key === 'ArrowRight' || key === 'd' || key === 'D') { map.panX -= Math.round(map.canvas.clientWidth * stepFrac); moved = true; }
+                else if (key === 'ArrowUp' || key === 'w' || key === 'W') { map.panY += Math.round(map.canvas.clientHeight * stepFrac); moved = true; }
+                else if (key === 'ArrowDown' || key === 's' || key === 'S') { map.panY -= Math.round(map.canvas.clientHeight * stepFrac); moved = true; }
+            } catch (err) {}
+
+            if (moved) {
+                try { e.preventDefault(); map.updateResolution(); map.render(); } catch (err) {}
+            }
+        });
+    } catch (e) {}
+
     // Bind dev sidebar controls (if present)
     try {
             const devCb = document.getElementById('dev_lowSpec_toggle');
