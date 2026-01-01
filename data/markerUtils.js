@@ -78,7 +78,7 @@ const MarkerUtils = {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `custom-markers-${timestamp}-${dataHash}.json`;
+        a.download = `markers-${timestamp}-${dataHash}.json`;
         a.click();
         URL.revokeObjectURL(url);
         

@@ -154,7 +154,7 @@ Then visit `http://localhost:8080`.
 - **Delete**: Click/tap a selected custom marker to remove it
 - **Export Markers**: Downloads JSON file with timestamp + data hash filename
   - Format: `{ exported, count, markers: [{ uid, x, y }] }`
-  - Filename: `custom-markers-{timestamp}-{hash}.json`
+  - Filename: `markers-{timestamp}-{hash}.json`
 - **Import Markers**: 
   - Load JSON file via file picker
   - Validates markers (requires numeric x/y coordinates)
