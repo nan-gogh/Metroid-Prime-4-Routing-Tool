@@ -1409,9 +1409,7 @@ class InteractiveMap {
             const y = m.y * MAP_SIZE * this.zoom + this.panY;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        // close loop
-        const firstSrc = this._routeSources[this.currentRoute[0]];
-        if (firstSrc && firstSrc.marker) ctx.lineTo(firstSrc.marker.x * MAP_SIZE * this.zoom + this.panX, firstSrc.marker.y * MAP_SIZE * this.zoom + this.panY);
+        // Do not close the loop; draw only the polyline between points
         ctx.stroke();
         // reset dash state so other drawings are unaffected
         ctx.setLineDash([]);
@@ -2035,8 +2033,26 @@ async function init() {
                     const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
                     const result = TSPEuclid.solveTSPAdvanced(points, { restarts: 24, threeOptIters: Math.max(2000, points.length * 30) });
                     if (result && Array.isArray(result.tour)) {
-                        map.setRoute(result.tour, result.length, sources);
-                        console.log('Improved route length (normalized):', result.length, 'tour size:', result.tour.length);
+                        // Compute non-looping length (sum of consecutive segments only)
+                        let length = 0;
+                        try {
+                            const tour = result.tour;
+                            if (Array.isArray(tour) && tour.length > 1) {
+                                for (let i = 0; i < tour.length - 1; i++) {
+                                    const a = points[tour[i]];
+                                    const b = points[tour[i + 1]];
+                                    const dx = b.x - a.x;
+                                    const dy = b.y - a.y;
+                                    length += Math.sqrt(dx * dx + dy * dy);
+                                }
+                            } else {
+                                length = 0;
+                            }
+                        } catch (e) {
+                            length = (typeof result.length === 'number') ? result.length : 0;
+                        }
+                        map.setRoute(result.tour, length, sources);
+                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', result.tour.length);
                     } else {
                         alert('Advanced solver returned no route.');
                     }
