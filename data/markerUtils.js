@@ -66,17 +66,20 @@ const MarkerUtils = {
                         }
                         
                         if (LAYERS.customMarkers.markers.length >= (map?.layerConfig?.customMarkers?.maxMarkers || 50)) {
-                            console.warn('⚠ Reached max markers limit, stopping import');
                             break;
                         }
                         
-                        // Use imported UID if it starts with "cm", otherwise generate new
-                        let uid = marker.uid;
-                        if (!uid || !uid.startsWith('cm')) {
-                            uid = MarkerUtils.generateUID();
-                        } else if (LAYERS.customMarkers.markers.some(m => m.uid === uid)) {
-                            // UID conflict, generate new one
-                            uid = MarkerUtils.generateUID();
+                        // Always generate position-based UID with layer prefix
+                        const prefix = LAYERS.customMarkers?.prefix || 'cm';
+                        let uid = MarkerUtils.generateUID(marker.x, marker.y, prefix);
+                        // Check for collision
+                        if (LAYERS.customMarkers.markers.some(m => m.uid === uid)) {
+                            // In extremely rare case of hash collision, append a counter
+                            let counter = 1;
+                            while (LAYERS.customMarkers.markers.some(m => m.uid === `${uid}_${counter}`)) {
+                                counter++;
+                            }
+                            uid = `${uid}_${counter}`;
                         }
                         
                         const newMarker = { uid, x: marker.x, y: marker.y };
@@ -107,25 +110,32 @@ const MarkerUtils = {
         });
     },
     
-    // Generate next available UID
-    generateUID() {
-        const existing = LAYERS.customMarkers.markers.map(m => m.uid);
-        let num = 1;
-        while (existing.includes(`cm${String(num).padStart(2, '0')}`)) {
-            num++;
+    // Generate position-based UID using coordinate hash with layer prefix
+    // Prefix defaults to 'm' but should be taken from layer definition
+    generateUID(x, y, prefix = 'm') {
+        // Hash coordinates to deterministic UID
+        // Combine coordinates into a high-precision string for stable hash
+        const coordStr = `${x.toFixed(10)},${y.toFixed(10)}`;
+        // Simple but effective hash function (DJB2-like)
+        let hash = 5381;
+        for (let i = 0; i < coordStr.length; i++) {
+            hash = ((hash << 5) + hash) + coordStr.charCodeAt(i);
+            hash = hash & hash; // Convert to 32-bit integer
         }
-        return `cm${String(num).padStart(2, '0')}`;
+        // Convert to 8-character hex, always positive
+        const hex = Math.abs(hash).toString(16).padStart(8, '0').slice(-8);
+        return `${prefix}_${hex}`;
     },
     
     // Add a new custom marker
     addCustomMarker(x, y) {
         const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
         if (LAYERS.customMarkers.markers.length >= maxMarkers) {
-            console.warn('⚠ Max markers limit reached');
             return null;
         }
         
-        const uid = MarkerUtils.generateUID();
+        const prefix = LAYERS.customMarkers?.prefix || 'cm';
+        const uid = MarkerUtils.generateUID(x, y, prefix);
         const marker = { uid, x, y };
         LAYERS.customMarkers.markers.push(marker);
         MarkerUtils.saveToLocalStorage();
@@ -138,7 +148,6 @@ const MarkerUtils = {
             }
         } catch (e) {}
 
-        console.log('✓ Added custom marker:', uid);
         return marker;
     },
     
@@ -156,7 +165,6 @@ const MarkerUtils = {
                     map.render();
                 }
             } catch (e) {}
-            console.log('✓ Deleted marker:', uid);
             return true;
         }
         return false;
@@ -175,8 +183,6 @@ const MarkerUtils = {
                 map.render();
             }
         } catch (e) {}
-
-        console.log('✓ Cleared all', count, 'custom markers');
     },
     
     // Save to localStorage
