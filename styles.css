@@ -245,6 +245,24 @@ body {
     color: #888;
 }
 
+/* Data Miners section */
+.dataminers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dataminer {
+    padding: 8px 12px;
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: 6px;
+    font-size: 13px;
+    color: #22d3ee;
+    text-align: center;
+    font-weight: 500;
+}
+
 /* Control buttons */
 .control-btn {
     width: 100%;
