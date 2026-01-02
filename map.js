@@ -112,10 +112,19 @@ class InteractiveMap {
         // Setup
         this.resize();
         this.bindEvents();
-        // Fit the full map into the container on initial load so we pick a sensible resolution
+        // Fit the full map into the container on initial load so we pick a sensible resolution.
+        // Reserve padding for axis labels so indices are visible on load.
         const cssWidth = this.canvas.parentElement.clientWidth;
         const cssHeight = this.canvas.parentElement.clientHeight;
-        const fitZoom = Math.min(cssWidth / MAP_SIZE, cssHeight / MAP_SIZE);
+        // Assume the maximum label font size used by `renderAxisLabels()` (clamped there).
+        const labelFontMax = 48;
+        const labelPadding = 8;
+        const halfW = labelFontMax * 0.6; // approx half-width of label
+        const halfH = labelFontMax / 2;
+        // Available space after reserving label margins on both sides
+        const availW = Math.max(32, cssWidth - 2 * (labelPadding + halfW));
+        const availH = Math.max(32, cssHeight - 2 * (labelPadding + halfH));
+        const fitZoom = Math.min(availW / MAP_SIZE, availH / MAP_SIZE);
         this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
         this.centerMap();
         this.preloadAllMapImages();
@@ -695,7 +704,14 @@ class InteractiveMap {
         // Reset view to the same initial fit used on page load (fit full map into container)
         const cssWidth = this.canvas.parentElement.clientWidth;
         const cssHeight = this.canvas.parentElement.clientHeight;
-        const fitZoom = Math.min(cssWidth / MAP_SIZE, cssHeight / MAP_SIZE);
+        // Reserve padding for axis labels (match constructor logic)
+        const labelFontMax = 48;
+        const labelPadding = 8;
+        const halfW = labelFontMax * 0.6;
+        const halfH = labelFontMax / 2;
+        const availW = Math.max(32, cssWidth - 2 * (labelPadding + halfW));
+        const availH = Math.max(32, cssHeight - 2 * (labelPadding + halfH));
+        const fitZoom = Math.min(availW / MAP_SIZE, availH / MAP_SIZE);
         this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
         this.centerMap();
         this.updateResolution();
