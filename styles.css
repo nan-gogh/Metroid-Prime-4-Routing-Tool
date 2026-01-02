@@ -222,13 +222,15 @@ body {
 }
 
 .layer-icon {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     background: #4ade80;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 14px;
+    line-height: 1;
 }
 
 .layer-info {
@@ -416,7 +418,7 @@ body {
     font-size: 13px;
     color: #e2e2e2;
     pointer-events: none;
-    z-index: 1000;
+    z-index: 199;
     display: none;
     white-space: nowrap;
 }

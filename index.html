@@ -27,6 +27,16 @@
             <div class="controls">
 
                 <div class="control-group">
+                    <div style="margin-bottom:8px;">
+                        <label class="layer-toggle dev-toggle" id="saveDataToggle_label">
+                            <input type="checkbox" id="saveDataToggle">
+                            <div class="layer-icon" style="background:#888; font-size:14px;">💾</div>
+                            <div class="layer-info">
+                                <div class="layer-name">Local Storage</div>
+                                <div class="layer-count">Consent for local saves</div>
+                            </div>
+                        </label>
+                    </div>
                     <h3>Layers</h3>
                     <div id="layerList"></div>
                 </div>
@@ -58,6 +68,12 @@
                     </div>
                 </div>
 
+                <div class="control-group" id="linksSection">
+                    <h3>Links</h3>
+                    <button id="githubBtn" class="control-btn">GitHub Repository</button>
+                    <button id="discordBtn" class="control-btn">Discord Community</button>
+                </div>
+
                 <div class="control-group" id="dataminersSection">
                     <h3>Contributors</h3>
                     <div class="dataminers-list">
@@ -83,14 +99,13 @@
                         <div class="dev-row"><div class="dev-label">Active fetches</div><div class="dev-value" id="dev_imageControllers">0</div></div>
                         <div class="dev-row"><div class="dev-label">Cached bitmaps</div><div class="dev-value" id="dev_imageBitmaps">0</div></div>
                     </div>
-                    <button id="githubBtn" class="control-btn" style="width: 100%; margin-top: 10px;">GitHub Repository</button>
                 </div>
             </div>
             
                 <div class="hints">
                     <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
                     <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                    <span class="hint-group"><kbd>Space</kbd> <span class="hint-label">Toggle sidebar</span></span>
+                    <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
                     <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
                     <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
                 </div>
@@ -132,6 +147,7 @@
     <script src="data/layers/geCrystallization3.js"></script>
     <script src="data/layers/customMarkers.js"></script>
     <script src="data/layers/route.js"></script>
+    <script src="data/storageHelper.js"></script>
     <script src="data/markerUtils.js"></script>
     <script src="data/routeUtils.js"></script>
     <script src="tools/tsp_euclid.js"></script>

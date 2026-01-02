@@ -144,16 +144,27 @@ const RouteUtils = {
     // Save route to localStorage
     saveRoute(routeData) {
         const payload = { points: routeData.points, length: routeData.length };
-        localStorage.setItem('mp4_saved_route', JSON.stringify(payload));
+        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+            window._mp4Storage.saveSetting('mp4_saved_route', payload);
+        } else {
+            try { localStorage.setItem('mp4_saved_route', JSON.stringify(payload)); } catch (e) {}
+        }
         console.log('✓ Saved route to localStorage');
     },
 
     // Load route from localStorage
     loadRoute() {
         try {
-            const raw = localStorage.getItem('mp4_saved_route');
-            if (!raw) return null;
-            const obj = JSON.parse(raw);
+            let obj = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                obj = window._mp4Storage.loadSetting('mp4_saved_route');
+            } else {
+                try {
+                    const raw = localStorage.getItem('mp4_saved_route');
+                    obj = raw ? JSON.parse(raw) : null;
+                } catch (e) { obj = null; }
+            }
+            if (!obj) return null;
             if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) return null;
             return obj;
         } catch (e) {
@@ -164,7 +175,12 @@ const RouteUtils = {
 
     // Clear route from localStorage
     clearRoute() {
-        localStorage.removeItem('mp4_saved_route');
+        try {
+            // Remove persisted route key unconditionally so Clear Route always clears saved data
+            try { localStorage.removeItem('mp4_saved_route'); } catch (e) {}
+            // Also attempt to clear via helper if present
+            try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_saved_route', null); } catch (e) {}
+        } catch (e) {}
         console.log('✓ Cleared route from localStorage');
     }
 };

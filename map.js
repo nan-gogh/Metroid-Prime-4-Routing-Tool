@@ -101,6 +101,8 @@ class InteractiveMap {
         };
         // Touch hit padding (CSS pixels) to make tapping easier on mobile
         this.touchPadding = 0;
+        // Wheel save timer used to delay saving until wheel stops
+        this._wheelSaveTimer = null;
         // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
         // 1 = markers follow `getDetailScale()` fully. Use <1 to make markers shrink less.
         this.markerShrinkFactor = 0.6;
@@ -108,9 +110,25 @@ class InteractiveMap {
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
         // Tileset selection (sat / holo). Persisted in localStorage as 'mp4_tileset'
-        try { this.tileset = localStorage.getItem('mp4_tileset') || 'sat'; } catch (e) { this.tileset = 'sat'; }
+        try {
+            let t = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                t = window._mp4Storage.loadSetting('mp4_tileset');
+            } else {
+                try { t = localStorage.getItem('mp4_tileset'); } catch (e) { t = null; }
+            }
+            this.tileset = t || 'sat';
+        } catch (e) { this.tileset = 'sat'; }
         // Optional grayscale flag for tiles; persisted as 'mp4_tileset_grayscale'
-        try { this.tilesetGrayscale = localStorage.getItem('mp4_tileset_grayscale') === '1'; } catch (e) { this.tilesetGrayscale = false; }
+        try {
+            let g = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                g = window._mp4Storage.loadSetting('mp4_tileset_grayscale');
+            } else {
+                try { g = localStorage.getItem('mp4_tileset_grayscale'); } catch (e) { g = null; }
+            }
+            this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
+        } catch (e) { this.tilesetGrayscale = false; }
         
         // Setup
         this.resize();
@@ -276,6 +294,13 @@ class InteractiveMap {
             this.render();
             // Update hover/cursor state after zoom so cursor matches visual marker size
             try { this.checkMarkerHover(mouseX, mouseY); } catch (err) {}
+            // Debounce wheel until it stops, then save once
+            try { if (this._wheelSaveTimer) clearTimeout(this._wheelSaveTimer); } catch (e) {}
+            try {
+                this._wheelSaveTimer = setTimeout(() => {
+                    try { this.saveViewToStorage(); } catch (e) {}
+                }, 150);
+            } catch (e) {}
         });
         // Pointer events (unified for mouse + touch + pen)
         this.canvas.addEventListener('pointerdown', (e) => {
@@ -566,6 +591,7 @@ class InteractiveMap {
                 // update cursor based on whether any marker is under the pointer
                 const under = this.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
+                try { this.saveViewToStorage(); } catch (err) {}
 
                 // short tap (no movement, short press) — let `click` handler manage selection/placement
             }
@@ -706,6 +732,7 @@ class InteractiveMap {
                 localY = rect.height / 2;
             }
             this.checkMarkerHover(localX, localY);
+            try { this.saveViewToStorage(); } catch (err) {}
         } catch (err) {}
     }
     
@@ -734,6 +761,7 @@ class InteractiveMap {
                 localY = rect.height / 2;
             }
             this.checkMarkerHover(localX, localY);
+            try { this.saveViewToStorage(); } catch (err) {}
         } catch (err) {}
     }
     
@@ -767,9 +795,48 @@ class InteractiveMap {
                 localY = rect.height / 2;
             }
             this.checkMarkerHover(localX, localY);
+            try { this.saveViewToStorage(); } catch (err) {}
         } catch (err) {}
     }
     
+    // Save / restore helpers for map view (panX, panY, zoom)
+    scheduleSaveMapView() {
+        try {
+            if (this._saveViewTimer) clearTimeout(this._saveViewTimer);
+        } catch (e) {}
+        try {
+            this._saveViewTimer = setTimeout(() => {
+                try { this.saveViewToStorage(); } catch (e) {}
+            }, 300);
+        } catch (e) {}
+    }
+
+    saveViewToStorage() {
+        try {
+            const obj = { panX: Number(this.panX || 0), panY: Number(this.panY || 0), zoom: Number(this.zoom || 0) };
+            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                window._mp4Storage.saveSetting('mp4_map_view', obj);
+            } else {
+                try { localStorage.setItem('mp4_map_view', JSON.stringify(obj)); } catch (e) {}
+            }
+        } catch (e) {}
+    }
+
+    loadViewFromStorage() {
+        try {
+            const v = loadMapViewFromStorage();
+            if (!v || typeof v !== 'object') return false;
+            if (typeof v.zoom === 'number' && Number.isFinite(v.zoom)) {
+                this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom));
+            }
+            if (typeof v.panX === 'number' && Number.isFinite(v.panX)) this.panX = v.panX;
+            if (typeof v.panY === 'number' && Number.isFinite(v.panY)) this.panY = v.panY;
+            try { this.updateResolution(); } catch (e) {}
+            try { this.render(); } catch (e) {}
+            return true;
+        } catch (e) { return false; }
+    }
+
     loadInitialImage() {
         const needed = this.getNeededResolution();
         this.loadImage(needed);
@@ -908,7 +975,7 @@ class InteractiveMap {
         // Increment generation and abort any in-flight tile loads from previous tileset
         try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
         try { this._abortAndCleanupTileLoads(); } catch (e) {}
-        try { localStorage.setItem('mp4_tileset', tileset); } catch (e) {}
+                    try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_tileset', tileset); /* do not write without consent/helper */ } catch (e) {}
         // Clear cached images and reload (folder may change depending on
         // whether grayscale variants are enabled)
         this.images = {};
@@ -933,7 +1000,7 @@ class InteractiveMap {
         enabled = !!enabled;
         if (this.tilesetGrayscale === enabled) return;
         this.tilesetGrayscale = enabled;
-        try { localStorage.setItem('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); } catch (e) {}
+        try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_tileset_grayscale', this.tilesetGrayscale ? '1' : '0'); /* do not write without consent/helper */ } catch (e) {}
         try {
             // increment generation and abort previous loads so we don't mix tilesets
             try { this._tilesetGeneration = (this._tilesetGeneration || 0) + 1; } catch (e) {}
@@ -1351,10 +1418,8 @@ class InteractiveMap {
             ctx.save();
             // Scale opacity with zoom for visibility at all levels
             const opacity = Math.min(0.6, 0.15 + this.zoom * 0.5);
-            // Black for satellite view, bright cyan for holo
-            const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
-            const baseColor = isSatellite ? 'rgba(0, 0, 0, ' : 'rgba(34, 211, 238, ';
-            ctx.strokeStyle = baseColor + opacity + ')';
+            // Cyan gridlines for both satellite and holo views
+            ctx.strokeStyle = 'rgba(34, 211, 238, ' + opacity + ')';
             ctx.lineWidth = 2;
             
             // Vertical center line (clipped to map area)
@@ -1391,10 +1456,8 @@ class InteractiveMap {
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
         const opacity = Math.min(0.4, 0.05 + this.zoom * 0.3);
-        // Black for satellite view, bright cyan for holo
-        const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
-        const baseColor = isSatellite ? 'rgba(0, 0, 0, ' : 'rgba(34, 211, 238, ';
-        ctx.strokeStyle = baseColor + 1.0 + ')';
+        // Cyan gridlines for both satellite and holo views
+        ctx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
         ctx.lineWidth = 1;
         
         // Draw vertical grid lines
@@ -1451,17 +1514,15 @@ class InteractiveMap {
         ctx.font = `${fontSize}px Arial`;
         ctx.textBaseline = 'middle';
         
-        // Determine color based on tileset
-        const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
-        const labelColor = isSatellite ? 'rgba(255, 255, 255, 0.95)' : 'rgba(34, 211, 238, 0.85)';
-        ctx.fillStyle = labelColor;
+        // Always use cyan for labels
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.85)';
 
         // padding from map edge (pixels) and half-dimensions to keep label fully outside
         const padding = 8;
         const halfH = fontSize / 2;
         const halfW = fontSize * 0.6; // approximate half-width for centered digits
 
-        // Draw X-axis labels (1-8) — centered on each column, placed fully outside
+        // Draw X-axis labels (A-H) — centered on each column, placed fully outside
         ctx.textAlign = 'center';
         for (let i = 0; i < 8; i++) {
             const mapX = gridSpacing * (i + 0.5); // Center of each cell
@@ -1472,11 +1533,11 @@ class InteractiveMap {
 
             // Draw above the map (y placed so label bottom is at map top - padding)
             const yAbove = mapScreenTop - padding - halfH;
-            if (yAbove >= 0) ctx.fillText(String(i + 1), screenX, yAbove);
+            if (yAbove >= 0) ctx.fillText(String.fromCharCode(65 + i), screenX, yAbove);
 
             // Draw below the map (y placed so label top is at map bottom + padding)
             const yBelow = mapScreenBottom + padding + halfH;
-            if (yBelow <= cssHeight) ctx.fillText(String(i + 1), screenX, yBelow);
+            if (yBelow <= cssHeight) ctx.fillText(String.fromCharCode(65 + i), screenX, yBelow);
         }
 
         // Draw Y-axis labels (1-8) — centered on each row, placed fully outside
@@ -1694,7 +1755,17 @@ class InteractiveMap {
             const y = m.y * MAP_SIZE * this.zoom + this.panY;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        // Do not close the loop; draw only the polyline between points
+        // Close the loop if no start point was provided (full loop); otherwise open polyline
+        if (!this._routeGeneratedWithStartPoint && n > 0) {
+            const firstIdx = this.currentRoute[0];
+            const firstSrc = this._routeSources[firstIdx];
+            const firstM = firstSrc && firstSrc.marker;
+            if (firstM) {
+                const x = firstM.x * MAP_SIZE * this.zoom + this.panX;
+                const y = firstM.y * MAP_SIZE * this.zoom + this.panY;
+                ctx.lineTo(x, y);
+            }
+        }
         ctx.stroke();
         // reset dash state so other drawings are unaffected
         ctx.setLineDash([]);
@@ -1727,6 +1798,8 @@ class InteractiveMap {
         // normalized length and pixel length for compatibility.
         this.currentRouteLengthNormalized = typeof lengthNormalized === 'number' ? lengthNormalized : 0;
         this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
+        // Reset the start-point flag when a new route is set (will be overridden by generation if applicable)
+        this._routeGeneratedWithStartPoint = false;
         // Update route length display in sidebar
         try {
             const el = document.getElementById('routeLength');
@@ -1790,8 +1863,10 @@ class InteractiveMap {
             const payload = { points: pts, length: this.currentRouteLengthNormalized };
             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.saveRoute === 'function') {
                 RouteUtils.saveRoute(payload);
+            } else if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                window._mp4Storage.saveSetting('mp4_saved_route', payload);
             } else {
-                localStorage.setItem('mp4_saved_route', JSON.stringify(payload));
+                // No storage helper available -> do not persist without explicit consent
             }
         } catch (e) {}
     }
@@ -1859,6 +1934,16 @@ class InteractiveMap {
             const routeIndices = sources.map((_, i) => i);
             const length = typeof obj.length === 'number' ? obj.length : 0;
             this.setRoute(routeIndices, length, sources);
+            // Load the loop flag from localStorage (persisted separately from route data)
+            try {
+                let loopFlag = null;
+                if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                    loopFlag = window._mp4Storage.loadSetting('mp4_route_looping_flag');
+                } else {
+                    try { loopFlag = localStorage.getItem('mp4_route_looping_flag'); } catch (e) { loopFlag = null; }
+                }
+                this._routeGeneratedWithStartPoint = (loopFlag === '1' || loopFlag === 1 || loopFlag === true);
+            } catch (e) { /* default to false */ }
             console.log('Loaded saved route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
             return true;
         } catch (e) {
@@ -1905,9 +1990,14 @@ let map;
 // LocalStorage helpers for layer visibility persistence
 function loadLayerVisibilityFromStorage() {
     try {
-        const s = localStorage.getItem('mp4_layerVisibility');
+        let s = null;
+        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+            s = window._mp4Storage.loadSetting('mp4_layerVisibility');
+        } else {
+            try { s = localStorage.getItem('mp4_layerVisibility'); } catch (e) { s = null; }
+        }
         if (!s) return null;
-        return JSON.parse(s);
+        return (typeof s === 'string') ? JSON.parse(s) : s;
     } catch (e) {
         return null;
     }
@@ -1915,7 +2005,37 @@ function loadLayerVisibilityFromStorage() {
 
 function saveLayerVisibilityToStorage(obj) {
     try {
-        localStorage.setItem('mp4_layerVisibility', JSON.stringify(obj || {}));
+        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+            window._mp4Storage.saveSetting('mp4_layerVisibility', obj || {});
+        } else {
+            try { localStorage.setItem('mp4_layerVisibility', JSON.stringify(obj || {})); } catch (e) {}
+        }
+    } catch (e) {}
+}
+
+// Map view persistence (consent-gated). Stores an object {panX, panY, zoom}
+function loadMapViewFromStorage() {
+    try {
+        let s = null;
+        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+            s = window._mp4Storage.loadSetting('mp4_map_view');
+        } else {
+            try { s = localStorage.getItem('mp4_map_view'); } catch (e) { s = null; }
+        }
+        if (!s) return null;
+        return (typeof s === 'string') ? JSON.parse(s) : s;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveMapViewToStorage(obj) {
+    try {
+        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+            window._mp4Storage.saveSetting('mp4_map_view', obj || null);
+        } else {
+            try { localStorage.setItem('mp4_map_view', JSON.stringify(obj || null)); } catch (e) {}
+        }
     } catch (e) {}
 }
 
@@ -1948,7 +2068,9 @@ async function initializeLayerIcons() {
     // Always append it at the end of the ordered list.
     const hasGrid = orderedEntries.some(e => e[0] === 'grid');
     if (!hasGrid) {
-        const gridEntry = ['grid', { name: 'Grid', icon: '▦', color: '#4c4c4cff' }];
+        // Use a darker teal backdrop so the white icon remains visible,
+        // and explicitly set the icon color to match the gridlines (cyan).
+        const gridEntry = ['grid', { name: 'Grid', icon: '▦', color: '#155962ff', iconColor: '#22d3ee' }];
         orderedEntries.push(gridEntry);
     }
 
@@ -1972,6 +2094,8 @@ async function initializeLayerIcons() {
         iconDiv.className = 'layer-icon';
         if (layer.icon) iconDiv.textContent = layer.icon;
         if (layer.color) iconDiv.style.backgroundColor = layer.color;
+        // allow a separate icon color (useful for white icons on colored backdrops)
+        if (layer.iconColor) iconDiv.style.color = layer.iconColor;
         label.appendChild(iconDiv);
 
         // info
@@ -2114,6 +2238,106 @@ async function init() {
     initializeLayerIcons();
     // Attempt to restore a previously saved route (if any)
     try { map.loadRouteFromStorage(); } catch (e) {}
+    // Attempt to restore saved map view (pan/zoom) when consent is present
+    try {
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        if (consent && map && typeof map.loadViewFromStorage === 'function') {
+            try { map.loadViewFromStorage(); } catch (e) {}
+        }
+    } catch (e) {}
+    // Wire the compact Save-data toggle and Clear button (consent-aware)
+    try {
+        const saveToggle = document.getElementById('saveDataToggle');
+        if (saveToggle) {
+            // Initialize toggle state from consent flag
+            const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+            saveToggle.checked = !!consent;
+            saveToggle.addEventListener('change', async (ev) => {
+                const on = !!ev.target.checked;
+                if (on) {
+                    // Ask for confirmation before enabling consent
+                    const confirmMsg = '"Local Storage" will save:\n\n' +
+                        '• Map position, zoom, and preferences\n' +
+                        '• Layer visibility settings\n' +
+                        '• Custom markers and routes\n\n' +
+                        'Your data stays on this device and is never sent to servers.\n\n' +
+                        'Do you want to enable local storage?';
+                    if (!confirm(confirmMsg)) {
+                        // User cancelled; restore toggle to unchecked
+                        try { ev.target.checked = false; } catch (e) {}
+                        return;
+                    }
+                }
+                try {
+                    if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') {
+                        window._mp4Storage.setStorageConsent(on);
+                    } else {
+                        if (on) localStorage.setItem('mp4_storage_consent', '1'); else localStorage.removeItem('mp4_storage_consent');
+                    }
+                } catch (e) {}
+                if (on) {
+                    // When enabling consent, immediately persist current app state (preferences, markers, route)
+                    try {
+                        // tileset preferences
+                        try {
+                            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                                window._mp4Storage.saveSetting('mp4_tileset', (map && map.tileset) ? map.tileset : 'sat');
+                                window._mp4Storage.saveSetting('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0');
+                            } else {
+                                try { localStorage.setItem('mp4_tileset', (map && map.tileset) ? map.tileset : 'sat'); } catch (e) {}
+                                try { localStorage.setItem('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0'); } catch (e) {}
+                            }
+                        } catch (e) {}
+
+                        // layer visibility
+                        try { saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) {}
+
+                        // custom markers
+                        try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
+
+                        // current route
+                        try { if (map && typeof map.saveRouteToStorage === 'function') map.saveRouteToStorage(); } catch (e) {}
+
+                        // current map view (pan/zoom)
+                        try { if (map && typeof map.saveViewToStorage === 'function') map.saveViewToStorage(); } catch (e) {}
+
+                        // route animation direction
+                        try {
+                            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                                window._mp4Storage.saveSetting('routeDir', String(map && map._routeAnimationDirection ? map._routeAnimationDirection : 1));
+                            } else {
+                                try { localStorage.setItem('routeDir', String(map && map._routeAnimationDirection ? map._routeAnimationDirection : 1)); } catch (e) {}
+                            }
+                        } catch (e) {}
+                    } catch (e) {}
+                    // Refresh UI counts to reflect that data has been saved
+                    try { map.updateLayerCounts(); } catch (e) {}
+                } else {
+                    // Ask for confirmation before permanently deleting saved local data
+                    const confirmMsg = 'Unchecking "Save data locally" will permanently delete saved local data (markers, routes, preferences) on this device.\n\nDo you want to continue?';
+                    if (!confirm(confirmMsg)) {
+                        // User cancelled; restore toggle and keep consent enabled
+                        try { ev.target.checked = true; } catch (e) {}
+                        try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
+                    } else {
+                        // User confirmed deletion: remove known keys then reload page
+                        try {
+                            if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
+                                window._mp4Storage.clearSavedData(true);
+                            } else {
+                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','routeDir','mp4_storage_consent'];
+                                for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
+                            }
+                        } catch (e) {}
+                        // Ensure toggle appears unchecked then reload so app starts fresh
+                        try { if (saveToggle) saveToggle.checked = false; } catch (e) {}
+                        try { location.reload(); } catch (e) { /* fallback: continue without reload */ }
+                    }
+                }
+            });
+        }
+        // no separate Clear button — deletion handled via consent toggle
+    } catch (e) {}
     // Ensure the sidebar counts reflect current map state now that elements exist
     try { map.updateLayerCounts(); } catch (e) {}
     
@@ -2405,7 +2629,24 @@ async function init() {
                             length = (typeof result.length === 'number') ? result.length : 0;
                         }
                         map.setRoute(finalTour, length, sources);
-                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', finalTour.length);
+                        // Track whether this route was generated with a start point
+                        map._routeGeneratedWithStartPoint = (selectedMarkerIndex >= 0);
+                        // Persist the loop flag to localStorage (separate from route data, not exported)
+                        try {
+                            const flagValue = map._routeGeneratedWithStartPoint ? '1' : '0';
+                            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                                window._mp4Storage.saveSetting('mp4_route_looping_flag', flagValue);
+                            } else {
+                                try { localStorage.setItem('mp4_route_looping_flag', flagValue); } catch (e) {}
+                            }
+                        } catch (e) {}
+                        // Deselect the marker after route is computed
+                        try {
+                            map.selectedMarker = null;
+                            map.selectedMarkerLayer = null;
+                            map.hideTooltip();
+                        } catch (e) {}
+                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', finalTour.length, 'start point:', (selectedMarkerIndex >= 0));
                     } else {
                         alert('Advanced solver returned no route.');
                     }
@@ -2439,7 +2680,7 @@ async function init() {
                 toggleDirBtn.addEventListener('click', () => {
                     // Coerce current value to number then flip between 1 and -1
                     map._routeAnimationDirection = (Number(map._routeAnimationDirection) === 1) ? -1 : 1;
-                    try { localStorage.setItem('routeDir', String(map._routeAnimationDirection)); } catch (e) {}
+                    try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('routeDir', String(map._routeAnimationDirection)); /* do not write without consent/helper */ } catch (e) {}
                     // Flip internal dash offset so the dash pattern continues smoothly
                     try {
                         map._routeDashOffset = (1000000 - (Number(map._routeDashOffset) || 0)) % 1000000;
@@ -2651,6 +2892,14 @@ async function init() {
         if (githubBtn) {
             githubBtn.addEventListener('click', () => {
                 window.open('https://github.com/nan-gogh/Metroid-Prime-4-Routing-Tool', '_blank');
+            });
+        }
+
+        // Discord button
+        const discordBtn = document.getElementById('discordBtn');
+        if (discordBtn) {
+            discordBtn.addEventListener('click', () => {
+                window.open('https://discord.gg/AwqA6987ta', '_blank');
             });
         }
 

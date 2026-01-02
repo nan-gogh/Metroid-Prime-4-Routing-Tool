@@ -234,7 +234,14 @@ const MarkerUtils = {
         const count = LAYERS.customMarkers.markers.length;
         const uidsToRemove = LAYERS.customMarkers.markers.map(m => m.uid);
         LAYERS.customMarkers.markers.length = 0;
-        MarkerUtils.saveToLocalStorage();
+        // Persist removal via consent-aware helper when available
+        try {
+            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                window._mp4Storage.saveSetting('mp4_customMarkers', []);
+            }
+        } catch (e) {}
+        // Ensure persisted key is removed unconditionally so Clear Markers always clears saved data
+        try { localStorage.removeItem('mp4_customMarkers'); } catch (e) {}
         
         // Clean up route references for all removed markers
         for (let i = 0; i < uidsToRemove.length; i++) {
@@ -254,7 +261,11 @@ const MarkerUtils = {
     // Save to localStorage
     saveToLocalStorage() {
         try {
-            localStorage.setItem('mp4_customMarkers', JSON.stringify(LAYERS.customMarkers.markers));
+            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                window._mp4Storage.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+            } else {
+                // Do not persist without consent/helper
+            }
         } catch (e) {
             console.error('✗ Failed to save to localStorage:', e);
         }
@@ -263,9 +274,16 @@ const MarkerUtils = {
     // Load custom markers from localStorage into LAYERS and update map/UI
     loadFromLocalStorage() {
         try {
-            const saved = localStorage.getItem('mp4_customMarkers');
-            if (!saved) return [];
-            const data = JSON.parse(saved);
+            let data = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                data = window._mp4Storage.loadSetting('mp4_customMarkers');
+            } else {
+                try {
+                    const saved = localStorage.getItem('mp4_customMarkers');
+                    data = saved ? JSON.parse(saved) : null;
+                } catch (e) { data = null; }
+            }
+            if (!data) return [];
             if (!Array.isArray(data)) return [];
 
             // If the saved data appears to be legacy (legacy UIDs / missing uid),
