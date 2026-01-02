@@ -101,6 +101,9 @@ class InteractiveMap {
         };
         // Touch hit padding (CSS pixels) to make tapping easier on mobile
         this.touchPadding = 0;
+        // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
+        // 1 = markers follow `getDetailScale()` fully. Use <1 to make markers shrink less.
+        this.markerShrinkFactor = 0.6;
         
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
@@ -271,6 +274,8 @@ class InteractiveMap {
             
             this.updateResolution();
             this.render();
+            // Update hover/cursor state after zoom so cursor matches visual marker size
+            try { this.checkMarkerHover(mouseX, mouseY); } catch (err) {}
         });
         // Pointer events (unified for mouse + touch + pen)
         this.canvas.addEventListener('pointerdown', (e) => {
@@ -345,6 +350,12 @@ class InteractiveMap {
 
                 this.updateResolution();
                 this.render();
+                // Update hover state using current pinch midpoint so cursor updates during pinch-zoom
+                try {
+                    const midLocalX = this.pinch.lastMidX - rect.left;
+                    const midLocalY = this.pinch.lastMidY - rect.top;
+                    this.checkMarkerHover(midLocalX, midLocalY);
+                } catch (err) {}
                 return;
             }
 
@@ -683,6 +694,19 @@ class InteractiveMap {
         
         this.updateResolution();
         this.render();
+        // Update cursor hover after programmatic zoom
+        try {
+            const rect = this.canvas.getBoundingClientRect();
+            let localX, localY;
+            if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
+                localX = this.lastMouseX - rect.left;
+                localY = this.lastMouseY - rect.top;
+            } else {
+                localX = rect.width / 2;
+                localY = rect.height / 2;
+            }
+            this.checkMarkerHover(localX, localY);
+        } catch (err) {}
     }
     
     zoomOut() {
@@ -698,6 +722,19 @@ class InteractiveMap {
         
         this.updateResolution();
         this.render();
+        // Update cursor hover after programmatic zoom
+        try {
+            const rect = this.canvas.getBoundingClientRect();
+            let localX, localY;
+            if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
+                localX = this.lastMouseX - rect.left;
+                localY = this.lastMouseY - rect.top;
+            } else {
+                localX = rect.width / 2;
+                localY = rect.height / 2;
+            }
+            this.checkMarkerHover(localX, localY);
+        } catch (err) {}
     }
     
     resetView() {
@@ -718,6 +755,19 @@ class InteractiveMap {
         // Ensure an appropriately-sized tile image is loaded for the reset view
         try { this.loadInitialImage(); } catch (e) {}
         this.render();
+        // Update cursor hover after resetting view
+        try {
+            const rect = this.canvas.getBoundingClientRect();
+            let localX, localY;
+            if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
+                localX = this.lastMouseX - rect.left;
+                localY = this.lastMouseY - rect.top;
+            } else {
+                localX = rect.width / 2;
+                localY = rect.height / 2;
+            }
+            this.checkMarkerHover(localX, localY);
+        } catch (err) {}
     }
     
     loadInitialImage() {
@@ -1501,17 +1551,49 @@ class InteractiveMap {
         const minSize = Math.max(2, 3 * this.zoom);
         // Lower maximum to keep sizes more compact at high zoom
         const maxSize = 80;
-        return Math.max(minSize, Math.min(maxSize, computed));
+        // Apply detail-scale so node dots shrink slightly as user zooms in
+        const scale = this.getDetailScale ? this.getDetailScale() : 1;
+        const sized = computed * scale;
+        return Math.max(minSize, Math.min(maxSize, sized));
+    }
+
+    // Compute a small detail scale factor that slightly reduces marker/route
+    // visuals when zoomed in to improve detailed viewing. Returns a value
+    // in (0.6..1], where 1 means no shrink (zoom <= 1) and lower values
+    // shrink visuals progressively for higher zoom levels.
+    getDetailScale() {
+        try {
+            const z = (typeof this.zoom === 'number' && this.zoom > 0) ? this.zoom : 1;
+                // Increase shrink intensity: allow smaller minimum and faster falloff
+                const min = 0.1; // don't shrink beyond this
+                const exp = 0.7; // exponent controls how quickly it shrinks
+            const val = Math.pow(z, -exp);
+            // Clamp to [min, 1]
+            return Math.max(min, Math.min(1, val));
+        } catch (e) { return 1; }
     }
 
     // Hit radius used for interaction (render radius + touch padding)
     getHitRadius() {
-        return this.getBaseMarkerRadius() + (this.touchPadding || 0);
+        try {
+            const base = this.getBaseMarkerRadius();
+            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
+            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
+            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
+            const scaled = Math.max(1, base * markerScale);
+            return scaled + (this.touchPadding || 0);
+        } catch (e) {
+            return this.getBaseMarkerRadius() + (this.touchPadding || 0);
+        }
     }
     
     renderMarkers() {
         const ctx = this.ctx;
         const baseSize = this.getBaseMarkerRadius();
+        const detailScale = this.getDetailScale();
+        // Reduce marker shrink effect so markers remain more readable at high zoom.
+        const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
+        const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
         const cssWidth = this.canvas.clientWidth;
         const cssHeight = this.canvas.clientHeight;
         // Generic rendering for all point-marker layers defined in LAYERS.
@@ -1533,15 +1615,15 @@ class InteractiveMap {
                 if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
 
                 const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
-                const size = isSelected ? baseSize * 1.3 : baseSize;
+                // Base size already considers route-node sizing; apply detailScale
+                // here to ensure marker visuals shrink uniformly when zoomed in.
+                const rawSize = isSelected ? baseSize * 1.3 : baseSize;
+                const size = Math.max(1, rawSize * markerScale);
 
                 ctx.beginPath();
                 ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
                 ctx.fillStyle = isSelected ? this.lightenColor(color, 30) : color;
                 ctx.fill();
-                ctx.strokeStyle = isSelected ? this.lightenColor(color, 50) : this.darkenColor(color, 50);
-                ctx.lineWidth = isSelected ? 2 : 1.5;
-                ctx.stroke();
             }
         }
     }
@@ -1587,13 +1669,15 @@ class InteractiveMap {
         // Use fully opaque stroke color for the route (no transparency)
         if (routeHex) ctx.strokeStyle = hexToRgba(routeHex, 1);
         // Use configurable `routeLineWidth` (base CSS pixels) scaled by zoom
+        // and reduced slightly when zoomed in so strokes remain crisp.
         const baseLine = (typeof this.routeLineWidth === 'number') ? this.routeLineWidth : 3;
-        ctx.lineWidth = Math.max(2, baseLine * this.zoom);
+        const detailScale = this.getDetailScale();
+        ctx.lineWidth = Math.max(1, baseLine * this.zoom * detailScale);
         // configure dashed stroke for animated route (shorter dashes; scale with zoom and base line width)
         const spacingScale = Math.max(0.35, baseLine / 5);
         // Use smaller base multipliers so dashes are shorter and tighter
-        const dashLen = Math.max(3, 8 * this.zoom * spacingScale);
-        const gapLen = Math.max(3, 6 * this.zoom * spacingScale);
+        const dashLen = Math.max(3, 8 * this.zoom * spacingScale * detailScale);
+        const gapLen = Math.max(3, 6 * this.zoom * spacingScale * detailScale);
         if (routeHex) {
             ctx.setLineDash([dashLen, gapLen]);
             ctx.lineDashOffset = -this._routeDashOffset;
