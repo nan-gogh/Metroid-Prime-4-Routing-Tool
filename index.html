@@ -97,27 +97,25 @@
                         <div class="dev-row"><div class="dev-label">Decoders active</div><div class="dev-value" id="dev_bitmapActive">0</div></div>
                         <div class="dev-row"><div class="dev-label">Decode queue</div><div class="dev-value" id="dev_bitmapQueue">0</div></div>
                         <div class="dev-row"><div class="dev-label">Active fetches</div><div class="dev-value" id="dev_imageControllers">0</div></div>
-                        <div class="dev-row"><div class="dev-label">Cached bitmaps</div><div class="dev-value" id="dev_imageBitmaps">0</div></div>
+                            <div class="dev-row"><div class="dev-label">Cached bitmaps</div><div class="dev-value" id="dev_imageBitmaps">0</div></div>
+                            <div class="dev-row"><div class="dev-label">Zoom</div><div class="dev-value" id="zoomStatus">10%</div></div>
+                            <div class="dev-row"><div class="dev-label">Resolution</div><div class="dev-value" id="resolutionStatus">256px</div></div>
                     </div>
                 </div>
             </div>
             
-                <div class="hints">
-                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
-                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                    <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
-                    <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
-                    <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
+                <div class="hints" id="hintsFooter">
+                    <div class="hints-list" id="hintsList">
+                        <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>E</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+                        <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
+                        <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
+                        <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
+                        <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
+                    </div>
                 </div>
+                <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList">Hints</button>
             
-            <div class="status-bar">
-                <div class="status-item">
-                    Zoom: <span class="status-value" id="zoomStatus">10%</span>
-                </div>
-                <div class="status-item">
-                    Res: <span class="status-value" id="resolutionStatus">256px</span>
-                </div>
-            </div>
+            <!-- Status bar removed from footer; Zoom/Res moved into Dev Tools for developer visibility -->
         </aside>
         
         <!-- Sidebar toggle handle will be placed inside zoom-controls (static, no animation) -->

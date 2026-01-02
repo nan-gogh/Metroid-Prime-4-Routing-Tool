@@ -9,7 +9,7 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🔍 **Adaptive resolution system**: 6 tile resolutions (256px → 8192px) auto-load based on zoom level
 - ⌨️ **Keyboard shortcuts**: 
   - `W`/`A`/`S`/`D` or Arrow Keys: Pan (hold Shift for larger steps)
-  - `+`/`-` or Scroll: Zoom in/out
+  - `+`/`-`/`E`/`Q` or Scroll: Zoom in/out
   - `0` or `⌂`: Reset view to center
   - `Space`: Toggle sidebar
   - `1`: Switch to Satellite tileset
@@ -24,6 +24,9 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 💾 **Persistence**: Tileset and grayscale preferences saved to `localStorage`
 - ⚡ **Smart preloading**: Generation-tagged tile loading prevents stale tiles during tileset switches
 - 🚫 **Abort controllers**: In-flight tile fetches are cancelled when switching tilesets
+
+### Grid Overlay
+- ▫ **Toggleable grid overlay**: An 8x8 grid can be toggled from the sidebar to help plan routes and reference areas. Grid lines are drawn in cyan for high contrast on both tilesets, and the sidebar includes a Grid toggle with a distinct backdrop for quick access.
 
 ### Marker System
 - 💎 **GE Crystallization Layers**: Multi-layer GE Crystallization markers, representing the three phases in which GE Crystals spawn (392 total unique markers)
@@ -55,6 +58,14 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
   - Respects max marker limit during import
 - 🧹 **Clear All**: Remove all custom markers with confirmation prompt
 
+### Privacy & Local Storage Consent
+- 🔒 **Local Storage Consent**: Non-essential persistence (map view, routes, custom markers, and UI preferences) is gated behind a user-controlled consent toggle in the sidebar. Enabling the toggle shows a short confirmation explaining what is stored locally (device-only) and allows cancelling if you prefer no on-device storage.
+- 💾 **Map view persistence**: When consent is enabled the current map pan and zoom are saved and restored on reload so you return to the same view.
+- 🧾 **Route loop preference**: The route generation records whether a start point was used and preserves the looping behavior across sessions so routes generated with a chosen start stay consistent after reload.
+
+- 🗂️ **Layer visibility**: When consent is enabled the sidebar's layer visibility state is saved so which marker layers you had shown/hidden will be restored on reload.
+- 🗺️ **Tileset & Grayscale preferences**: Tileset choice and the grayscale toggle are persisted when consent is enabled, returning you to the same map style on subsequent visits.
+
 ### Routing System
 - 🧭 **Euclidean TSP Solver** (`tools/tsp_euclid.js`):
   - Nearest-neighbor seeding for initial tour
@@ -73,6 +84,8 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 📥 **Import route**: Load previously exported routes
 - 🗑️ **Clear route**: Remove route visualization with confirmation
 - 🔄 **Auto-enable route layer**: Route layer automatically enabled when computing/importing
+
+- 🔁 **Looping behavior**: If you selected a marker as the start point the route will preserve that start and will not automatically close into a loop; if no start point was selected the algorithm produces a closed (looping) tour. The generation-time choice is preserved across sessions.
 
 ### Performance Optimization
 - 🧩 **Dual canvas architecture**: Separate canvases for tiles (background) and overlays (routes/markers)
@@ -95,6 +108,8 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🎨 **Responsive layout**: Sidebar adapts to screen size
 - 🔔 **Status bar**: Real-time display of current zoom level and active tile resolution
 - ℹ️ **Keyboard hints**: On-screen reference for all shortcuts
+ - ♟️ **Grid coordinates**: The map displays chessboard-style coordinates (X: A–H, Y: 1–8) for easy reference when using the grid overlay.
+ - 🧭 **Tooltip stacking**: Tooltips' z-index is tuned so they sit below the sidebar to avoid overlap with UI panels.
 - 🎯 **Accessibility**: ARIA labels, semantic HTML, keyboard navigation support
 
 ### Technical Architecture
@@ -118,6 +133,8 @@ npx serve
 
 Then visit `http://localhost:8080`.
 
+The sidebar includes a **Links** section with quick access to the project's GitHub repository and a Discord community invite.
+
 ### Navigation Controls
 
 **Mouse/Trackpad:**
@@ -137,6 +154,7 @@ Then visit `http://localhost:8080`.
 - `W`/`A`/`S`/`D` or Arrow Keys: Pan map
 - `Shift` + Arrow/WASD: Pan faster
 - `+` / `-`: Zoom in/out
+ - `E` / `Q`: Zoom in/out (E = zoom in, Q = zoom out)
 - `0` or `⌂`: Reset view
 - `Space`: Toggle sidebar
 - `1`: Switch to Satellite tileset

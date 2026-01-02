@@ -1163,9 +1163,9 @@ class InteractiveMap {
         const cssWidth = (this.canvasTiles || this.canvas).clientWidth;
         const cssHeight = (this.canvasTiles || this.canvas).clientHeight;
 
-        // Clear background
+        // Clear background (use app theme dark-blue to match page background)
         try {
-            ctxT.fillStyle = '#0a0a0a';
+            ctxT.fillStyle = '#041018';
             ctxT.fillRect(0, 0, cssWidth, cssHeight);
         } catch (e) {}
 
@@ -2255,13 +2255,15 @@ async function init() {
             saveToggle.addEventListener('change', async (ev) => {
                 const on = !!ev.target.checked;
                 if (on) {
-                    // Ask for confirmation before enabling consent
-                    const confirmMsg = '"Local Storage" will save:\n\n' +
-                        '• Map position, zoom, and preferences\n' +
-                        '• Layer visibility settings\n' +
-                        '• Custom markers and routes\n\n' +
-                        'Your data stays on this device and is never sent to servers.\n\n' +
-                        'Do you want to enable local storage?';
+                    // Ask for concise confirmation before enabling consent (mobile-friendly)
+                    const confirmMsg = 'Enable local storage? It stores the following on this device only:\n\n' +
+                        '• Map view (position & zoom)\n' +
+                        '• Layer visibility\n' +
+                        '• Tileset & grayscale setup\n' +
+                        '• Custom markers & routes\n' +
+                        '• Route direction\n' +
+                        '• Route looping\n\n' +
+                        'Tap OK to enable or Cancel to keep storage off.';
                     if (!confirm(confirmMsg)) {
                         // User cancelled; restore toggle to unchecked
                         try { ev.target.checked = false; } catch (e) {}
@@ -2314,7 +2316,14 @@ async function init() {
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
                     // Ask for confirmation before permanently deleting saved local data
-                    const confirmMsg = 'Unchecking "Save data locally" will permanently delete saved local data (markers, routes, preferences) on this device.\n\nDo you want to continue?';
+                    const confirmMsg = 'Disable local storage? This will permanently delete the following saved data from this device:\n\n' +
+                        '• Map view (position & zoom)\n' +
+                        '• Layer visibility\n' +
+                        '• Tileset & grayscale setup\n' +
+                        '• Custom markers & routes\n' +
+                        '• Route direction\n' +
+                        '• Route looping\n\n' +
+                        'Tap OK to delete saved data and continue, or Cancel to keep it.';
                     if (!confirm(confirmMsg)) {
                         // User cancelled; restore toggle and keep consent enabled
                         try { ev.target.checked = true; } catch (e) {}
@@ -2770,7 +2779,17 @@ async function init() {
             }
 
             // Tileset shortcuts: '1' -> Satellite, '2' -> Holographic, 'g' -> toggle grayscale
+            // Zoom shortcuts: 'q' -> Zoom In, 'e' -> Zoom Out (case-insensitive)
             try {
+                if (e.key === 'q' || e.key === 'Q') {
+                    try { map.zoomOut(); } catch (err) {}
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                } else if (e.key === 'e' || e.key === 'E') {
+                    try { map.zoomIn(); } catch (err) {}
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                }
                 if (e.key === '1') {
                     try { map.setTileset('sat'); } catch (err) {}
                     // update UI buttons if present
@@ -2937,6 +2956,25 @@ async function init() {
         }
         
         updateContributorShine();
+
+        // Hints toggle: expand/collapse hints list in footer to free sidebar space on small screens
+        try {
+            const hintsToggle = document.getElementById('hintsToggleBtn');
+            const sidebarEl = document.querySelector('.sidebar');
+            if (hintsToggle && sidebarEl) {
+                hintsToggle.addEventListener('click', () => {
+                    const isOpen = sidebarEl.classList.toggle('hints-open');
+                    hintsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                    // Mirror visual pressed state like other toggle buttons
+                    try { hintsToggle.classList.toggle('pressed', !!isOpen); } catch (e) {}
+                    try {
+                        const hintsList = document.getElementById('hintsList');
+                        if (hintsList) hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+                    } catch (e) {}
+                    try { if (map && typeof map.resize === 'function') map.resize(); } catch (e) {}
+                });
+            }
+        } catch (e) {}
 
         // File migration tools removed — routes and markers now upgrade in place on import/load
     } catch (e) {}
