@@ -1630,19 +1630,15 @@ async function initializeLayerIcons() {
         // that should live in a data file. `data/route.js` should provide `LAYERS.route`.
         layerEntries.push(['route', { name: 'Route', icon: '➤', color: '#ffa500' }]);
     }*/
-    // Ensure route and greenCrystals appear at the top of the list (route first).
-    const preferred = ['route', 'greenCrystals'];
+    // Ensure route layer always appears at the top of the list
+    const preferred = ['route'];
     const orderedEntries = [];
-    // push preferred keys in order if present
-    for (let i = 0; i < preferred.length; i++) {
-        const key = preferred[i];
-        const idx = layerEntries.findIndex(e => e[0] === key);
-        if (idx >= 0) orderedEntries.push(layerEntries[idx]);
-    }
-    // append remaining entries in original order
+    // push route first if it exists
+    const routeIdx = layerEntries.findIndex(e => e[0] === 'route');
+    if (routeIdx >= 0) orderedEntries.push(layerEntries[routeIdx]);
+    // append all other entries in original order (no hardcoding needed)
     for (let i = 0; i < layerEntries.length; i++) {
-        const k = layerEntries[i][0];
-        if (!preferred.includes(k)) orderedEntries.push(layerEntries[i]);
+        if (layerEntries[i][0] !== 'route') orderedEntries.push(layerEntries[i]);
     }
 
     orderedEntries.forEach(([layerKey, layer]) => {
@@ -2329,6 +2325,43 @@ async function init() {
                 window.open('https://github.com/nan-gogh/Metroid-Prime-4-Routing-Tool', '_blank');
             });
         }
+
+        // Update contributor shine effect dynamically
+        function updateContributorShine() {
+            const rows = document.querySelectorAll('.dataminer-row');
+            const totalRows = rows.length;
+            
+            rows.forEach((row, index) => {
+                // Calculate shine intensity from 100% (top) to ~30% (bottom)
+                const progress = totalRows > 1 ? index / (totalRows - 1) : 0;
+                const opacity = 1 - (progress * 0.7); // Range: 1.0 to 0.3
+                
+                const bgOpacity = (18 * opacity) / 100; // Range: 0.18 to 0.054
+                const borderOpacity = (25 * opacity) / 100; // Range: 0.25 to 0.075
+                const shadowOpacity = (15 * opacity) / 100; // Range: 0.15 to 0.045
+                
+                row.style.background = `rgba(34, 211, 238, ${bgOpacity})`;
+                row.style.borderColor = `rgba(34, 211, 238, ${borderOpacity})`;
+                row.style.boxShadow = `0 0 ${Math.max(2, 12 * opacity)}px rgba(34, 211, 238, ${shadowOpacity})`;
+                
+                // Apply color gradient: top entry gets bright cyan, fades to muted
+                const label = row.querySelector('.dataminer-label');
+                if (label) {
+                    if (index === 0) {
+                        // First entry: bright cyan with bold weight
+                        label.style.color = '#22d3ee';
+                        label.style.fontWeight = '600';
+                    } else {
+                        // Subsequent entries: fade to muted gray based on position
+                        const colorOpacity = 1 - (progress * 0.5); // Range: 1.0 to 0.5
+                        label.style.color = `rgba(159, 185, 201, ${colorOpacity})`;
+                        label.style.fontWeight = '400';
+                    }
+                }
+            });
+        }
+        
+        updateContributorShine();
 
         // File migration tools removed — routes and markers now upgrade in place on import/load
     } catch (e) {}

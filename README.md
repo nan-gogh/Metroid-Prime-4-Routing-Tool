@@ -26,12 +26,12 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🚫 **Abort controllers**: In-flight tile fetches are cancelled when switching tilesets
 
 ### Marker System
-- 💎 **Green Crystals layer**: 154 pre-defined collectible markers with position-based UIDs
+- 💎 **GE Crystallization Layers**: Multi-layer GE Crystallization markers, representing the three phases in which GE Crystals spawn (392 total unique markers)
 - 📍 **Custom Markers**: User-placed markers with tap/click placement
   - Quick tap on empty map space places a marker (when Custom Markers layer is visible)
   - Max limit: 50 custom markers (configurable)
   - Position-based UID generation: deterministic hash from coordinates (`cm_xxxxxxxx` format)
-  - Layer-defined prefixes: Each layer specifies its own UID prefix (`cm` for custom, `gc` for green crystals)
+  - Layer-defined prefixes: Each layer specifies its own UID prefix (`cm` for custom, `gc1`/`gc2`/`gc3` for crystallization layers)
   - UIDs regenerated on import for backward compatibility with legacy files
 - 🎛️ **Layer visibility toggles**: Show/hide individual marker layers independently
 - 🎨 **Data-driven architecture**: All layers defined in global `LAYERS` object with `name`, `icon`, `color`, `prefix`, and `markers`
@@ -60,7 +60,7 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
   - Nearest-neighbor seeding for initial tour
   - Multi-restart 2-opt local search
   - Optional 3-opt polishing for larger marker sets
-  - Closed tour visiting all visible markers (Green Crystals + Custom Markers)
+  - Closed tour visiting all visible markers (all Crystallization layers + Custom Markers)
 - 📏 **Normalized route length**: Distance displayed with map width = 1 for coordinate-system independence
 - ▶️ **Animated route rendering**: 
   - Dashed stroke with RAF-driven animation
@@ -225,10 +225,14 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 │   └── tsp_euclid.js       # Euclidean TSP solver (NN + 2-opt, 3-opt option)
 ├── data/
 │   ├── init.js             # LAYERS bootstrap
-│   ├── greenCrystals.js    # Green Crystals layer (154 markers with gc_ UIDs)
-│   ├── customMarkers.js    # Custom markers layer definition
-│   ├── route.js            # Route layer metadata (color, name, icon)
-│   └── markerUtils.js      # Marker persistence, import/export, UID generation
+│   ├── markerUtils.js      # Marker persistence, import/export, UID generation
+│   ├── routeUtils.js       # Route utilities (export, import, clearing)
+│   └── layers/
+│       ├── geCrystallization1.js   # Layer 1 crystals (82 markers with gc1_ UIDs)
+│       ├── geCrystallization2.js   # Layer 2 crystals (135 markers with gc2_ UIDs)
+│       ├── geCrystallization3.js   # Layer 3 crystals (175 markers with gc3_ UIDs)
+│       ├── customMarkers.js        # Custom markers layer definition
+│       └── route.js                # Route layer metadata (color, name, icon)
 └── tiles/                  # Map tiles (256-8192px AVIF format)
     ├── sat/                # Satellite tileset
     ├── holo/               # Holographic tileset
@@ -248,6 +252,13 @@ All point layers are defined in the global `LAYERS` object. Each layer provides:
 **Coordinate system**: Normalized 0-1 range where map width and height = 1
 
 The app renders layers, builds the sidebar, and performs hit-testing dynamically from `LAYERS`, so adding new POI layers requires no changes to `map.js`.
+
+**Crystallization layers** (`data/geCrystallization1.js`, `geCrystallization2.js`, `geCrystallization3.js`):
+- Extracted from PNG images using connected components analysis with color-based filtering
+- Tolerance: ±12 RGB deviation from target green (#6ac77e)
+- Clustering: 15px distance threshold for marker aggregation
+- Each layer maintains unique prefix (`gc1_`, `gc2_`, `gc3_`) for distinction
+- Position-based UID generation from coordinates ensures deterministic identification
 
 **Custom markers** are pure data in `data/customMarkers.js`; `data/markerUtils.js` centralizes:
 - localStorage load/save (`mp4_customMarkers` key)
@@ -300,6 +311,15 @@ The app renders layers, builds the sidebar, and performs hit-testing dynamically
 - Efficient heuristics: O(n²) nearest-neighbor + O(n²) 2-opt per restart
 - Optional 3-opt for diminishing returns on large sets (typically <200 markers)
 - Route animation via RAF (60fps target) with zoom-scaled speed
+
+## Contributors
+
+This tool was developed with contributions from:
+- **NaN Gogh** - Original concept and routing tool development
+- **CrypticJacknife** - Crystal data extraction GOAT
+- **Supreme Dirt** - Crystal data extraction expert
+- **Meta_X** - Crystal data extraction
+- **Tal** - Spark ignition
 
 ## License
 

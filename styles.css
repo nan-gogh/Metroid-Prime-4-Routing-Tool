@@ -247,20 +247,30 @@ body {
 
 /* Data Miners section */
 .dataminers-list {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(34,211,238,0.06);
+    padding: 8px;
+    border-radius: 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
-.dataminer {
-    padding: 8px 12px;
-    background: rgba(34, 211, 238, 0.08);
-    border: 1px solid rgba(34, 211, 238, 0.2);
-    border-radius: 6px;
-    font-size: 13px;
-    color: #22d3ee;
-    text-align: center;
-    font-weight: 500;
+.dataminer-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(34,211,238,0.1);
+    transition: all 200ms ease;
+}
+
+.dataminer-label {
+    color: #9fb9c9;
+    font-size: 12px;
 }
 
 /* Control buttons */
