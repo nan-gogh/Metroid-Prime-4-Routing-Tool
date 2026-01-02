@@ -90,6 +90,8 @@ class InteractiveMap {
         } catch (e) {}
         // Ensure the virtual 'route' layer is present and visible by default
         this.layerVisibility.route = true;
+        // Grid overlay is a runtime layer (can be toggled via `toggleLayer('grid', show)`)
+        this.layerVisibility.grid = true;
         
         // Layer configuration (runtime constraints, not data)
         this.layerConfig = {
@@ -1238,6 +1240,12 @@ class InteractiveMap {
         // Clear overlay (transparent) before drawing route/markers
         try { ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
 
+        // Draw grid overlays (toggleable via `layerVisibility.grid`)
+        if (this.layerVisibility && this.layerVisibility.grid) {
+            this.renderQuadrantGrid();
+            this.renderDetailGrid();
+        }
+
         // Draw markers from all visible layers onto the overlay canvas
         this.renderMarkers();
 
@@ -1251,6 +1259,183 @@ class InteractiveMap {
             const screenY = m.y * MAP_SIZE * this.zoom + this.panY;
             this.showTooltip(m, screenX, screenY, this.selectedMarkerLayer);
         }
+    }
+
+    // Draw the quadrant grid separating the map into 4 equal sections
+    renderQuadrantGrid() {
+        const ctx = this.ctx;
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
+        
+        // Map boundaries in screen coordinates
+        const mapScreenLeft = 0 * this.zoom + this.panX;
+        const mapScreenTop = 0 * this.zoom + this.panY;
+        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
+        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
+        
+        // Map center is at (MAP_SIZE/2, MAP_SIZE/2) in normalized coords
+        // Calculate screen position of center
+        const mapCenterX = (MAP_SIZE / 2) * this.zoom + this.panX;
+        const mapCenterY = (MAP_SIZE / 2) * this.zoom + this.panY;
+        
+        // Only draw grid lines if they're visible on screen
+        if (mapCenterX > mapScreenLeft && mapCenterX < mapScreenRight &&
+            mapCenterY > mapScreenTop && mapCenterY < mapScreenBottom) {
+            
+            ctx.save();
+            // Scale opacity with zoom for visibility at all levels
+            const opacity = Math.min(0.6, 0.15 + this.zoom * 0.5);
+            // Black for satellite view, bright cyan for holo
+            const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
+            const baseColor = isSatellite ? 'rgba(0, 0, 0, ' : 'rgba(34, 211, 238, ';
+            ctx.strokeStyle = baseColor + opacity + ')';
+            ctx.lineWidth = 2;
+            
+            // Vertical center line (clipped to map area)
+            ctx.beginPath();
+            ctx.moveTo(mapCenterX, Math.max(mapScreenTop, 0));
+            ctx.lineTo(mapCenterX, Math.min(mapScreenBottom, cssHeight));
+            ctx.stroke();
+            
+            // Horizontal center line (clipped to map area)
+            ctx.beginPath();
+            ctx.moveTo(Math.max(mapScreenLeft, 0), mapCenterY);
+            ctx.lineTo(Math.min(mapScreenRight, cssWidth), mapCenterY);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+    }
+
+    // Draw fine detail grid covering the map area (8x8 subdivision)
+    renderDetailGrid() {
+        const ctx = this.ctx;
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
+        
+        // Map boundaries in screen coordinates
+        const mapScreenLeft = 0 * this.zoom + this.panX;
+        const mapScreenTop = 0 * this.zoom + this.panY;
+        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
+        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
+        
+        // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
+        const gridSpacing = MAP_SIZE / 8;
+        
+        ctx.save();
+        // Scale opacity with zoom for visibility at all levels
+        const opacity = Math.min(0.4, 0.05 + this.zoom * 0.3);
+        // Black for satellite view, bright cyan for holo
+        const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
+        const baseColor = isSatellite ? 'rgba(0, 0, 0, ' : 'rgba(34, 211, 238, ';
+        ctx.strokeStyle = baseColor + 1.0 + ')';
+        ctx.lineWidth = 1;
+        
+        // Draw vertical grid lines
+        for (let i = 1; i < 8; i++) {
+            const mapX = gridSpacing * i;
+            const screenX = mapX * this.zoom + this.panX;
+            
+            // Only draw if visible on screen and within map area
+            if (screenX > mapScreenLeft && screenX < mapScreenRight) {
+                ctx.beginPath();
+                ctx.moveTo(screenX, Math.max(mapScreenTop, 0));
+                ctx.lineTo(screenX, Math.min(mapScreenBottom, cssHeight));
+                ctx.stroke();
+            }
+        }
+        
+        // Draw horizontal grid lines
+        for (let i = 1; i < 8; i++) {
+            const mapY = gridSpacing * i;
+            const screenY = mapY * this.zoom + this.panY;
+            
+            // Only draw if visible on screen and within map area
+            if (screenY > mapScreenTop && screenY < mapScreenBottom) {
+                ctx.beginPath();
+                ctx.moveTo(Math.max(mapScreenLeft, 0), screenY);
+                ctx.lineTo(Math.min(mapScreenRight, cssWidth), screenY);
+                ctx.stroke();
+            }
+        }
+        
+        this.renderAxisLabels();
+    }
+    
+    // Draw axis index labels for the 8x8 grid
+    renderAxisLabels() {
+        const ctx = this.ctx;
+        const cssWidth = this.canvas.clientWidth;
+        const cssHeight = this.canvas.clientHeight;
+        
+        // Map boundaries in screen coordinates
+        const mapScreenLeft = 0 * this.zoom + this.panX;
+        const mapScreenTop = 0 * this.zoom + this.panY;
+        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
+        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
+        
+        // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
+        const gridSpacing = MAP_SIZE / 8;
+        
+        ctx.save();
+        // Compute a readable font size based on zoom but clamp it
+        const fontMin = 12;
+        const fontMax = 48; // avoid excessively large labels when zooming in
+        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
+        ctx.font = `${fontSize}px Arial`;
+        ctx.textBaseline = 'middle';
+        
+        // Determine color based on tileset
+        const isSatellite = this.tileset === 'sat' || this.tileset === 'sat_bw';
+        const labelColor = isSatellite ? 'rgba(255, 255, 255, 0.95)' : 'rgba(34, 211, 238, 0.85)';
+        ctx.fillStyle = labelColor;
+
+        // padding from map edge (pixels) and half-dimensions to keep label fully outside
+        const padding = 8;
+        const halfH = fontSize / 2;
+        const halfW = fontSize * 0.6; // approximate half-width for centered digits
+
+        // Draw X-axis labels (1-8) — centered on each column, placed fully outside
+        ctx.textAlign = 'center';
+        for (let i = 0; i < 8; i++) {
+            const mapX = gridSpacing * (i + 0.5); // Center of each cell
+            const screenX = mapX * this.zoom + this.panX;
+
+            // Only draw if centered column is within the horizontal viewport
+            if (screenX + halfW < 0 || screenX - halfW > cssWidth) continue;
+
+            // Draw above the map (y placed so label bottom is at map top - padding)
+            const yAbove = mapScreenTop - padding - halfH;
+            if (yAbove >= 0) ctx.fillText(String(i + 1), screenX, yAbove);
+
+            // Draw below the map (y placed so label top is at map bottom + padding)
+            const yBelow = mapScreenBottom + padding + halfH;
+            if (yBelow <= cssHeight) ctx.fillText(String(i + 1), screenX, yBelow);
+        }
+
+        // Draw Y-axis labels (1-8) — centered on each row, placed fully outside
+        ctx.textAlign = 'right';
+        for (let i = 0; i < 8; i++) {
+            const mapY = gridSpacing * (i + 0.5); // Center of each cell
+            const screenY = mapY * this.zoom + this.panY;
+
+            // Only draw if centered row is within vertical viewport
+            if (screenY + halfH < 0 || screenY - halfH > cssHeight) continue;
+
+            // Draw left of the map (x placed so label right edge is at map left - padding)
+            const xLeft = mapScreenLeft - padding - halfW;
+            if (xLeft >= 0) ctx.fillText(String(i + 1), xLeft, screenY);
+
+            // Draw right of the map (x placed so label left edge is at map right + padding)
+            const xRight = mapScreenRight + padding + halfW;
+            if (xRight <= cssWidth) {
+                ctx.textAlign = 'left';
+                ctx.fillText(String(i + 1), xRight, screenY);
+                ctx.textAlign = 'right';
+            }
+        }
+
+        ctx.restore();
     }
     
     // Helper: lighten a hex color by a given percentage
@@ -1639,6 +1824,14 @@ async function initializeLayerIcons() {
     // append all other entries in original order (no hardcoding needed)
     for (let i = 0; i < layerEntries.length; i++) {
         if (layerEntries[i][0] !== 'route') orderedEntries.push(layerEntries[i]);
+    }
+
+    // Insert a runtime-only `grid` layer so users can toggle grid visibility from the sidebar.
+    // Always append it at the end of the ordered list.
+    const hasGrid = orderedEntries.some(e => e[0] === 'grid');
+    if (!hasGrid) {
+        const gridEntry = ['grid', { name: 'Grid', icon: '▦', color: '#4c4c4cff' }];
+        orderedEntries.push(gridEntry);
     }
 
     orderedEntries.forEach(([layerKey, layer]) => {
