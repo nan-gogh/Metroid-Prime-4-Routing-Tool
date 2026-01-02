@@ -2028,19 +2028,48 @@ async function init() {
             const oldText2 = computeImprovedBtn.textContent;
             computeImprovedBtn.textContent = 'Computing (Improved)...';
 
+            // Find index of selected marker in sources array (if any selected)
+            let selectedMarkerIndex = -1;
+            if (map.selectedMarker && map.selectedMarkerLayer) {
+                for (let si = 0; si < sources.length; si++) {
+                    if (sources[si].marker.uid === map.selectedMarker.uid && sources[si].layerKey === map.selectedMarkerLayer) {
+                        selectedMarkerIndex = si;
+                        break;
+                    }
+                }
+            }
+
             setTimeout(() => {
                 try {
                     const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
-                    const result = TSPEuclid.solveTSPAdvanced(points, { restarts: 24, threeOptIters: Math.max(2000, points.length * 30) });
+                    
+                    // If a marker is selected, start the TSP from that marker
+                    const solveOpts = { restarts: 24, threeOptIters: Math.max(2000, points.length * 30) };
+                    if (selectedMarkerIndex >= 0) {
+                        solveOpts.startPoint = selectedMarkerIndex;
+                    }
+                    
+                    const result = TSPEuclid.solveTSPAdvanced(points, solveOpts);
                     if (result && Array.isArray(result.tour)) {
+                        // Rotate tour to start from selected marker if one was selected
+                        let finalTour = result.tour;
+                        if (selectedMarkerIndex >= 0 && result.tour.length > 0) {
+                            // Find position of selected marker in the tour
+                            const selectedPos = result.tour.indexOf(selectedMarkerIndex);
+                            if (selectedPos >= 0 && selectedPos < result.tour.length) {
+                                // Rotate tour so selected marker is at index 0
+                                finalTour = result.tour.slice(selectedPos).concat(result.tour.slice(0, selectedPos));
+                                console.log(`✓ Route starting from selected marker (${map.selectedMarker.uid})`);
+                            }
+                        }
+                        
                         // Compute non-looping length (sum of consecutive segments only)
                         let length = 0;
                         try {
-                            const tour = result.tour;
-                            if (Array.isArray(tour) && tour.length > 1) {
-                                for (let i = 0; i < tour.length - 1; i++) {
-                                    const a = points[tour[i]];
-                                    const b = points[tour[i + 1]];
+                            if (Array.isArray(finalTour) && finalTour.length > 1) {
+                                for (let i = 0; i < finalTour.length - 1; i++) {
+                                    const a = points[finalTour[i]];
+                                    const b = points[finalTour[i + 1]];
                                     const dx = b.x - a.x;
                                     const dy = b.y - a.y;
                                     length += Math.sqrt(dx * dx + dy * dy);
@@ -2051,8 +2080,8 @@ async function init() {
                         } catch (e) {
                             length = (typeof result.length === 'number') ? result.length : 0;
                         }
-                        map.setRoute(result.tour, length, sources);
-                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', result.tour.length);
+                        map.setRoute(finalTour, length, sources);
+                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', finalTour.length);
                     } else {
                         alert('Advanced solver returned no route.');
                     }
