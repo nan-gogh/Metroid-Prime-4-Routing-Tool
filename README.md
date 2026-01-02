@@ -174,6 +174,11 @@ Use the sidebar `Compute Route` button to solve a Traveling Salesman Problem tou
 - Optional 3-opt polishing for larger marker sets (improves solution quality)
 - Implementation: `tools/tsp_euclid.js`
 
+**Route Start Point:**
+- Select a marker on the map to use it as the starting point for route computation
+- The route will begin from the selected marker and visit all other visible markers
+- If no marker is selected, the algorithm will automatically choose an optimal starting point
+
 **Route Features:**
 - **Normalized length**: Distance displayed with map width = 1 (coordinate-system independent)
 - **Animated visualization**: Dashed stroke with requestAnimationFrame-driven offset animation
@@ -320,6 +325,14 @@ This tool was developed with contributions from:
 - **Supreme Dirt** - Crystal data extraction expert
 - **Meta_X** - Crystal data extraction
 - **Tal** - Spark ignition
+
+## Changelog
+
+### v0.5.0 - Infrastructure & Routing Enhancements
+- **Three new GE Crystallization Layers**: Added Layer 1 (82 markers), Layer 2 (135 markers), and Layer 3 (175 markers) for a total of 392 unique collectible markers across all crystallization phases
+- **Route start point selection**: Select a marker on the map to define the starting point for route computation, enabling more flexible pathfinding
+- **Project structure refactor**: Reorganized layer definition files into dedicated `data/layers/` subfolder for improved code organization and maintainability
+- **Contributor leaderboard**: Dynamic shimmer effect for Contributors section, with top contributor highlighted in bright cyan
 
 ## License
 
