@@ -1818,6 +1818,23 @@ class InteractiveMap {
 // Initialize
 let map;
 
+// LocalStorage helpers for layer visibility persistence
+function loadLayerVisibilityFromStorage() {
+    try {
+        const s = localStorage.getItem('mp4_layerVisibility');
+        if (!s) return null;
+        return JSON.parse(s);
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveLayerVisibilityToStorage(obj) {
+    try {
+        localStorage.setItem('mp4_layerVisibility', JSON.stringify(obj || {}));
+    } catch (e) {}
+}
+
 async function initializeLayerIcons() {
     // Dynamically build layer toggle list from `LAYERS` so adding layers is data-driven.
     const container = document.getElementById('layerList');
@@ -1825,6 +1842,7 @@ async function initializeLayerIcons() {
     container.innerHTML = '';
 
     const layerEntries = Object.entries(LAYERS || {});
+    const savedVisibility = loadLayerVisibilityFromStorage() || {};
     // Ensure a 'route' toggle is present even if not defined in LAYERS (virtual layer)
     /*if (!LAYERS.route) {
         // Use a non-mutating fallback so we don't accidentally create runtime data
@@ -1860,7 +1878,9 @@ async function initializeLayerIcons() {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `toggle_${layerKey}`;
-        checkbox.checked = !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
+        // Determine initial checked state: preference order -> saved storage -> runtime map state -> default false
+        const initialChecked = (savedVisibility && Object.prototype.hasOwnProperty.call(savedVisibility, layerKey)) ? !!savedVisibility[layerKey] : !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
+        checkbox.checked = initialChecked;
         label.appendChild(checkbox);
 
         // icon
@@ -1925,10 +1945,9 @@ async function initializeLayerIcons() {
             label.classList.remove('pressed');
         });
 
-        // wire change handler per-layer
+        // wire change handler per-layer (persist state)
         checkbox.addEventListener('change', (e) => {
             const checked = !!e.target.checked;
-            // update runtime visibility and use generic toggle
             if (!map.layerVisibility) map.layerVisibility = {};
             if (layerKey === 'route') {
                 map.layerVisibility.route = checked;
@@ -1936,7 +1955,23 @@ async function initializeLayerIcons() {
             } else {
                 map.toggleLayer(layerKey, checked);
             }
+            // persist updated map.layerVisibility
+            try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
         });
+
+        // Apply saved/initial state to runtime if it differs from current map state
+        try {
+            const current = !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
+            if (initialChecked !== current) {
+                if (!map.layerVisibility) map.layerVisibility = {};
+                if (layerKey === 'route') {
+                    map.layerVisibility.route = initialChecked;
+                    map.render();
+                } else {
+                    map.toggleLayer(layerKey, initialChecked);
+                }
+            }
+        } catch (e) {}
     });
 }
 
@@ -2553,19 +2588,17 @@ async function init() {
                 row.style.borderColor = `rgba(34, 211, 238, ${borderOpacity})`;
                 row.style.boxShadow = `0 0 ${Math.max(2, 12 * opacity)}px rgba(34, 211, 238, ${shadowOpacity})`;
                 
-                // Apply color gradient: top entry gets bright cyan, fades to muted
+                // Apply unified cyan hue: lighter at top, darker toward bottom
                 const label = row.querySelector('.dataminer-label');
                 if (label) {
-                    if (index === 0) {
-                        // First entry: bright cyan with bold weight
-                        label.style.color = '#22d3ee';
-                        label.style.fontWeight = '600';
-                    } else {
-                        // Subsequent entries: fade to muted gray based on position
-                        const colorOpacity = 1 - (progress * 0.5); // Range: 1.0 to 0.5
-                        label.style.color = `rgba(159, 185, 201, ${colorOpacity})`;
-                        label.style.fontWeight = '400';
-                    }
+                    // Base cyan taken from dev-stats numbers: #22d3ee -> HSL(188,86%,53%)
+                    const hue = 188; // cyan-teal hue for #22d3ee
+                    const sat = 86; // saturation percentage for #22d3ee
+                    const lightTop = 50; // lightness for top entry (brighter)
+                    const lightBottom = 30; // lightness for bottom entry (brighter than before)
+                    const lightness = (lightTop - (progress * (lightTop - lightBottom))).toFixed(1);
+                    label.style.color = `hsl(${hue}, ${sat}%, ${lightness}%)`;
+                    label.style.fontWeight = index === 0 ? '600' : '400';
                 }
             });
         }
