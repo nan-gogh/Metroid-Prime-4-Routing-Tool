@@ -59,9 +59,10 @@ const MarkerUtils = {
         const now = new Date();
         const timestamp = now.getTime(); // milliseconds
         
-        // Format markers with each on a single line
-        const markersJson = markers.map(m => 
-            JSON.stringify({ uid: m.uid, x: m.x, y: m.y })
+        // Format markers each on a single line with spaces after colons/commas
+        // to match the style used in static layer files (copy-paste friendly).
+        const markersJson = markers.map(m =>
+            `{"uid": "${m.uid}", "x": ${m.x}, "y": ${m.y}}`
         ).join(',\n    ');
         
         // Manually construct JSON for compact marker formatting

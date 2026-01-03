@@ -251,7 +251,7 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 │   ├── markerUtils.js      # Marker persistence, import/export, UID generation
 │   ├── routeUtils.js       # Route utilities (export, import, clearing)
 │   └── layers/
-│       ├── geCrystallization1.js   # Layer 1 crystals (82 markers with gc1_ UIDs)
+│       ├── geCrystallization1.js   # Layer 1 crystals (84 markers with gc1_ UIDs)
 │       ├── geCrystallization2.js   # Layer 2 crystals (135 markers with gc2_ UIDs)
 │       ├── geCrystallization3.js   # Layer 3 crystals (175 markers with gc3_ UIDs)
 │       ├── customMarkers.js        # Custom markers layer definition
@@ -347,7 +347,7 @@ This tool was developed with contributions from:
 ## Changelog
 
 ### v0.5.0 - Infrastructure & Routing Enhancements
-- **Three new GE Crystallization Layers**: Added Layer 1 (82 markers), Layer 2 (135 markers), and Layer 3 (175 markers) for a total of 392 unique collectible markers across all crystallization phases
+- **Three new GE Crystallization Layers**: Added Layer 1 (84 markers), Layer 2 (135 markers), and Layer 3 (175 markers) for a total of 394 unique collectible markers across all crystallization phases
 - **Route start point selection**: Select a marker on the map to define the starting point for route computation, enabling more flexible pathfinding
 - **Project structure refactor**: Reorganized layer definition files into dedicated `data/layers/` subfolder for improved code organization and maintainability
 - **Contributor leaderboard**: Dynamic shimmer effect for Contributors section, with top contributor highlighted in bright cyan
