@@ -218,9 +218,40 @@ body {
 }
 
 .layer-toggle input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: #22d3ee;
+    width: 20px;
+    height: 20px;
+    /* Use custom appearance so browsers don't render a white box in unchecked state */
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 6px;
+    border: 1px solid rgba(34,211,238,0.10);
+    background-color: rgba(6,20,30,0.45);
+    background-image: linear-gradient(180deg, rgba(6,20,30,0.6) 0%, rgba(4,16,24,0.45) 100%);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.25);
+    display: inline-block;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+
+.layer-toggle input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(34,211,238,0.08), inset 0 -1px 0 rgba(0,0,0,0.25);
+}
+
+.layer-toggle input[type="checkbox"]:checked {
+    background-color: #0891b2;
+    background-image: linear-gradient(180deg, #0891b2 0%, #065666 100%);
+    border-color: #22d3ee;
+    box-shadow: 0 2px 10px rgba(34,211,238,0.12);
+    background-repeat: no-repeat;
+    background-position: center;
+    /* SVG checkmark, white-ish to match theme */
+    background-image: linear-gradient(180deg, #0891b2 0%, #065666 100%), url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><polyline points='3,9 6,12 13,4' stroke='%23e6fffb' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+
+.layer-toggle input[type="checkbox"]:active {
+    transform: scale(0.96);
 }
 
 .layer-icon {
