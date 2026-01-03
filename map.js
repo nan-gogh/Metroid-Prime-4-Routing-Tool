@@ -2725,6 +2725,19 @@ async function init() {
         if (collapsed) {
             app.classList.add('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'false');
+            // Close hints overlay when sidebar collapses
+            try {
+                const hintsOverlay = document.getElementById('hintsOverlay');
+                const hintsToggle = document.getElementById('hintsToggleBtn');
+                if (hintsOverlay) {
+                    hintsOverlay.classList.remove('visible');
+                    hintsOverlay.setAttribute('aria-hidden', 'true');
+                }
+                if (hintsToggle) {
+                    hintsToggle.setAttribute('aria-expanded', 'false');
+                    hintsToggle.classList.remove('pressed');
+                }
+            } catch (e) {}
         } else {
             app.classList.remove('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'true');
@@ -2957,21 +2970,20 @@ async function init() {
         
         updateContributorShine();
 
-        // Hints toggle: expand/collapse hints list in footer to free sidebar space on small screens
+        // Hints toggle: expand/collapse hints overlay on top of sidebar
         try {
             const hintsToggle = document.getElementById('hintsToggleBtn');
-            const sidebarEl = document.querySelector('.sidebar');
-            if (hintsToggle && sidebarEl) {
+            const hintsOverlay = document.getElementById('hintsOverlay');
+            const hintsList = document.getElementById('hintsList');
+            if (hintsToggle && hintsOverlay && hintsList) {
                 hintsToggle.addEventListener('click', () => {
-                    const isOpen = sidebarEl.classList.toggle('hints-open');
+                    const isOpen = hintsOverlay.classList.toggle('visible');
                     hintsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                    hintsOverlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+                    hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     // Mirror visual pressed state like other toggle buttons
                     try { hintsToggle.classList.toggle('pressed', !!isOpen); } catch (e) {}
-                    try {
-                        const hintsList = document.getElementById('hintsList');
-                        if (hintsList) hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-                    } catch (e) {}
-                    try { if (map && typeof map.resize === 'function') map.resize(); } catch (e) {}
+                    // No map.resize() needed — overlay is outside layout flow
                 });
             }
         } catch (e) {}

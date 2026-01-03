@@ -104,20 +104,21 @@
                 </div>
             </div>
             
-                <div class="hints" id="hintsFooter">
-                    <div class="hints-list" id="hintsList">
-                        <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>E</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
-                        <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                        <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
-                        <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
-                        <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
-                    </div>
+            <!-- Hints button at bottom of controls -->
+            <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList">Controls</button>
+
+            <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level -->
+            <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
+                <div class="hints-list" id="hintsList">
+                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>E</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
+                    <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
+                    <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
+                    <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
                 </div>
-                <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList">Hints</button>
-            
-            <!-- Status bar removed from footer; Zoom/Res moved into Dev Tools for developer visibility -->
+            </div>
+
         </aside>
-        
         <!-- Sidebar toggle handle will be placed inside zoom-controls (static, no animation) -->
         
         <main class="map-container">

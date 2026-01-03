@@ -425,19 +425,96 @@ body {
     white-space: nowrap;
 }
 
-/* Keyboard hints */
-.hints {
-    padding: 12px 16px;
+/* Keyboard hints - overlay container (positioned above hints button)
+   Behavior:
+   - Collapsed: container stays at full opacity but only 1px tall; contents are transparent.
+   - Open: container translates up (move up) and expands to full max-height; contents fade in.
+   Timing is arranged so contents fade out first when collapsing, then the container moves down. */
+
+.hints-overlay {
+    position: absolute; /* positioned relative to the sidebar now */
+    bottom: 60px; /* positioned flush above hints button (accounts for button height + margins) */
+    left: 0px; /* nudge left 1px to align with sidebar border */
+    width: calc(100% + 1px);
+    background: linear-gradient(180deg, #0a1929 0%, #041018 100%);
+    border-right: 1px solid #0e4a6e;
     border-top: 1px solid #0e4a6e;
-    font-size: 11px;
-    color: #a0c4d8;
+    z-index: 998;
     display: block;
-    /* reserve space at bottom so absolute footer controls don't overlap content */
-    position: relative;
-    gap: 8px;
+    overflow: hidden; /* hide content during collapsed state */
+    pointer-events: none;
+    opacity: 1; /* container stays visible even when collapsed */
+    max-height: 1px; /* collapsed to a 1px high strip */
+    /* Use clip-path to reveal from the bottom so a 1px strip remains visible while collapsed.
+       Using clip-path gives a clear 'pivot from bottom' reveal without fully scaling the element to zero. */
+    clip-path: inset(calc(100% - 1px) 0 0 0);
+    -webkit-clip-path: inset(calc(100% - 1px) 0 0 0);
+    transition: clip-path 220ms ease 80ms, -webkit-clip-path 220ms ease 80ms, max-height 220ms ease 80ms, opacity 120ms ease 0ms;
+    will-change: clip-path, max-height, opacity;
 }
 
-.hints kbd {
+.hints-overlay.open {
+    /* Opening: reveal via clip-path from bottom to full height */
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    max-height: 420px; /* large enough to contain contents; use overflow-y for scrolling */
+    pointer-events: auto;
+    overflow-y: auto;
+    transition: clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, -webkit-clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, max-height 220ms cubic-bezier(.2,.9,.18,1) 0ms, opacity 120ms ease 0ms;
+}
+
+.hints-overlay.closed {
+    /* Explicit closed state: collapse back to 1px strip (clip-path) */
+    clip-path: inset(calc(100% - 1px) 0 0 0);
+    -webkit-clip-path: inset(calc(100% - 1px) 0 0 0);
+    max-height: 1px;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.hints-overlay.visible {
+    /* Support the existing JS which toggles the `visible` class.
+       Make `.visible` equivalent to `.open` so the overlay reveals via clip-path,
+       expands, and becomes interactive. */
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    max-height: 420px;
+    pointer-events: auto;
+    overflow-y: auto;
+    opacity: 1;
+    transition: clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, -webkit-clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, max-height 220ms cubic-bezier(.2,.9,.18,1) 0ms, opacity 120ms ease 0ms;
+    height: auto; /* fallback for browsers that don't apply clip-path */
+}
+
+/* When sidebar is collapsed, hint overlay is hidden entirely */
+.app-container.sidebar-collapsed .hints-overlay {
+    display: none;
+    opacity: 0;
+}
+
+.hints-list {
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    color: #a0c4d8;
+    opacity: 0; /* contents hidden when overlay is collapsed */
+    transition: opacity 180ms ease; /* fade in/out */
+    pointer-events: none; /* disable interactions when hidden */
+}
+
+/* Hide native scrollbars but keep scrolling functional */
+.hints-overlay {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+}
+.hints-overlay::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+}
+
+.hints-list kbd {
     background: #0e4a6e;
     padding: 2px 6px;
     border-radius: 3px;
@@ -451,54 +528,54 @@ body {
     gap: 4px;
     white-space: nowrap;
 }
+
 .hint-label {
     color: #a0c4d8;
     font-size: 11px;
 }
 
-/* Hints toggle button (compact) */
+/* Hints toggle button (matches .control-btn exactly) */
 .hints-toggle {
-    appearance: none;
-    -webkit-appearance: none;
+    width: calc(100% - 32px); /* account for 16px left + 16px right margin */
+    padding: 10px 12px;
+    margin: 12px 16px 12px 16px;
     background: linear-gradient(135deg, #0d4a6e 0%, #0a2f47 100%);
     border: 1px solid #269cdc;
     color: #22d3ee;
-    font-weight: 600;
-    font-size: 13px;
-    padding: 8px 12px;
+    border-radius: 6px;
     cursor: pointer;
-    border-radius: 8px;
-    display: block;
-    align-items: center;
-    justify-content: center;
-    width: calc(100% - 32px);
-    margin: 8px 16px 12px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    touch-action: manipulation;
 }
-.hints-toggle:active,
-.hints-toggle.pressed { transform: translateY(1px); }
 
-/* Collapsible hints list (default compact) */
+.hints-toggle.pressed,
+.hints-toggle:active {
+    background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
+    border-color: #22d3ee;
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
+}
+
+.hints-toggle:active {
+    transform: scale(0.98);
+}
+
+/* Collapsible hints list (fully hidden by default, expands when visible) */
 .hints-list {
     overflow: hidden;
-    max-height: 0; /* fully collapsed by default for maximum sidebar space */
-    opacity: 0;
-    transition: max-height 260ms ease, opacity 200ms ease;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    pointer-events: none;
+    pointer-events: none; /* default to none; enabled when overlay is open */
 }
 
-/* Expanded state: allow list to grow and push controls above it (not the toggle button) */
-.sidebar.hints-open .hints-list {
-    max-height: 260px; /* allow expansion */
-    opacity: 1;
-    pointer-events: auto;
+.hints-overlay.open .hints-list,
+.hints-overlay.visible .hints-list {
+    opacity: 1; /* fade contents in */
+    pointer-events: auto; /* enable interactions once visible */
+    transition-delay: 220ms; /* wait until container has finished revealing */
 }
-
-/* Reserve bottom padding on sidebar so absolute button and status bar don't overlap content */
-/* no forced extra bottom padding; button flows under hints list */
 
 /* Dev-stats panel (compact rows under low-spec toggle) */
 .dev-stats {
