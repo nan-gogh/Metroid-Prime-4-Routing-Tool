@@ -81,6 +81,9 @@ class InteractiveMap {
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
         this.selectedMarker = null;
         this.selectedMarkerLayer = null;
+        // Dragging state for custom markers
+        this._draggingMarker = null; // { uid, layerKey, pointerId, offsetX, offsetY }
+        this._draggingCandidate = null; // temporary candidate before movement threshold
         
         // Layer visibility state (runtime UI state, separate from data)
         this.layerVisibility = {};
@@ -313,15 +316,35 @@ class InteractiveMap {
             const downTime = Date.now();
             this.pointers.set(e.pointerId, { x: localX, y: localY, clientX: e.clientX, clientY: e.clientY, downTime });
 
-            if (this.pointers.size === 1) {
-                // start single-pointer pan
-                this.isDragging = true;
-                this.lastMouseX = e.clientX;
-                this.lastMouseY = e.clientY;
-                // Track timing for click detection
-                this.pointerDownTime = downTime;
-                this.canvas.style.cursor = 'grabbing';
-            } else if (this.pointers.size === 2) {
+                if (this.pointers.size === 1) {
+                    // Determine whether pointerdown hit a custom marker — if so, mark candidate
+                    // but do not start the drag until movement exceeds threshold. This preserves
+                    // quick-tap behavior (click to delete) when the user just taps.
+                    const hit = this.findMarkerAt(localX, localY);
+                    if (hit && hit.layerKey === 'customMarkers') {
+                        this._draggingCandidate = {
+                            uid: hit.marker.uid,
+                            layerKey: hit.layerKey,
+                            pointerId: e.pointerId,
+                            // pixel offset from marker center to pointer to avoid jump when drag starts
+                            offsetX: localX - (hit.marker.x * MAP_SIZE * this.zoom + this.panX),
+                            offsetY: localY - (hit.marker.y * MAP_SIZE * this.zoom + this.panY),
+                            startClientX: e.clientX,
+                            startClientY: e.clientY
+                        };
+                        this.isDragging = false;
+                        this.pointerDownTime = downTime;
+                        this.canvas.style.cursor = 'grabbing';
+                    } else {
+                        // start single-pointer pan
+                        this.isDragging = true;
+                        this.lastMouseX = e.clientX;
+                        this.lastMouseY = e.clientY;
+                        // Track timing for click detection
+                        this.pointerDownTime = downTime;
+                        this.canvas.style.cursor = 'grabbing';
+                    }
+                } else if (this.pointers.size === 2) {
                 // begin pinch
                 const pts = Array.from(this.pointers.values());
                 const dx = pts[0].clientX - pts[1].clientX;
@@ -344,6 +367,58 @@ class InteractiveMap {
             if (this.pointers.has(e.pointerId)) {
                 const p = this.pointers.get(e.pointerId);
                 p.x = localX; p.y = localY; p.clientX = e.clientX; p.clientY = e.clientY;
+            }
+
+            // If we have a dragging candidate for this pointer, promote to active drag
+            const MOVE_THRESHOLD = 8; // pixels
+            if (this._draggingCandidate && e.pointerId === this._draggingCandidate.pointerId) {
+                const dx = e.clientX - this._draggingCandidate.startClientX;
+                const dy = e.clientY - this._draggingCandidate.startClientY;
+                if (Math.hypot(dx, dy) > MOVE_THRESHOLD) {
+                    // Promote candidate to active dragging marker and cancel click
+                    this._draggingMarker = {
+                        uid: this._draggingCandidate.uid,
+                        layerKey: this._draggingCandidate.layerKey,
+                        pointerId: this._draggingCandidate.pointerId,
+                        offsetX: this._draggingCandidate.offsetX,
+                        offsetY: this._draggingCandidate.offsetY
+                    };
+                    this._draggingCandidate = null;
+                    // Prevent click handler from firing for this interaction
+                    this.pointerDownTime = 0;
+                    try { this.canvas.style.cursor = 'grabbing'; } catch (e) {}
+                }
+            }
+
+            // If we're currently dragging a custom marker with this pointer, move it
+            if (this._draggingMarker && e.pointerId === this._draggingMarker.pointerId) {
+                try {
+                    // Compute marker center in screen (local) coords using pointer offset
+                    const centerX = localX - (this._draggingMarker.offsetX || 0);
+                    const centerY = localY - (this._draggingMarker.offsetY || 0);
+                    // Convert to normalized world coords [0..1]
+                    const worldX = (centerX - this.panX) / this.zoom / MAP_SIZE;
+                    const worldY = (centerY - this.panY) / this.zoom / MAP_SIZE;
+                    // Clamp to bounds
+                    const nx = Math.max(0, Math.min(1, worldX));
+                    const ny = Math.max(0, Math.min(1, worldY));
+
+                    // Update the marker in LAYERS directly and persist
+                    if (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) {
+                        const idx = LAYERS.customMarkers.markers.findIndex(m => m.uid === this._draggingMarker.uid);
+                        if (idx >= 0) {
+                            LAYERS.customMarkers.markers[idx].x = nx;
+                            LAYERS.customMarkers.markers[idx].y = ny;
+                            try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
+                            try { this.customMarkers = LAYERS.customMarkers.markers; } catch (e) {}
+                            try { this.render(); } catch (e) {}
+                            try { this.canvas.style.cursor = 'grabbing'; } catch (e) {}
+                        }
+                    }
+                } catch (err) {
+                    // ignore drag errors
+                }
+                return;
             }
 
             if (this.pointers.size === 2 && this.pinch) {
@@ -590,6 +665,18 @@ class InteractiveMap {
             if (this.pointers.size === 0) {
                 // finalize drag
                 this.isDragging = false;
+                // If a dragging candidate exists but was never promoted, clear it and allow click
+                if (this._draggingCandidate && e.pointerId === this._draggingCandidate.pointerId) {
+                    this._draggingCandidate = null;
+                }
+                // If a custom marker drag was in progress, finalize it and clear state
+                if (this._draggingMarker && e.pointerId === this._draggingMarker.pointerId) {
+                    // Save persisted state (already saved during move, but ensure final save)
+                    try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
+                    this._draggingMarker = null;
+                    // Prevent the subsequent click handler from treating this as a tap
+                    this.pointerDownTime = 0;
+                }
                 // update cursor based on whether any marker is under the pointer
                 const under = this.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
@@ -605,6 +692,9 @@ class InteractiveMap {
                 this.isDragging = false;
                 this.pinch = null;
                 this.canvas.style.cursor = 'grab';
+                // clear any candidate/active drag
+                if (this._draggingCandidate && this._draggingCandidate.pointerId === e.pointerId) this._draggingCandidate = null;
+                if (this._draggingMarker && this._draggingMarker.pointerId === e.pointerId) this._draggingMarker = null;
             }
         });
 
@@ -1386,6 +1476,13 @@ class InteractiveMap {
     }
     
     checkMarkerHover(mouseX, mouseY) {
+        // If a drag candidate or active drag exists, keep the grabbing cursor
+        // to avoid flicker before a drag is promoted.
+        if (this._draggingCandidate || this._draggingMarker) {
+            try { this.canvas.style.cursor = 'grabbing'; } catch (e) {}
+            return;
+        }
+
         // Only determine whether the cursor is over any marker (for pointer cursor).
         // Selection and tooltip display are managed via click/tap toggles, not hover.
         const markerRadius = this.getHitRadius();
