@@ -259,23 +259,29 @@ body {
 
 /* Draw the checkmark with a pseudo-element to avoid native UA check flashes on mobile */
 .layer-toggle input[type="checkbox"]::after {
+    /* Use an inline SVG (data URI) for a non-emoji, crisp icon that matches the
+       project's cyan accent. The pseudo-element is scaled in/out for animation. */
     content: '';
     position: absolute;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%) scale(0);
-    width: 12px;
-    height: 12px;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><polyline points='3,9 6,12 13,4' stroke='%23e6fffb' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    width: 14px;
+    height: 14px;
+    background-image: url("graphics/eye.svg");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    transition: transform 120ms cubic-bezier(.2,.9,.3,1);
+    transition: transform 120ms cubic-bezier(.2,.9,.3,1), opacity 120ms ease;
+    opacity: 0;
     pointer-events: none;
 }
 
 .layer-toggle input[type="checkbox"]:checked::after {
-    transform: translate(-50%, -50%) scale(1);
+    /* Hide the icon entirely in the checked state for testing */
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    background-image: none;
 }
 
 .layer-icon {
