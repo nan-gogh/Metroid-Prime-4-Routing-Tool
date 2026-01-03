@@ -1215,7 +1215,7 @@ class InteractiveMap {
             const containerWidth = (container && container.clientWidth) ? container.clientWidth : (window.innerWidth || 1024);
             const refWidth = 1024; // reference width for scaling
             const viewportRatio = Math.min(1, containerWidth / refWidth);
-            const maxShrink = 0.8; // max 18% shrink on very small viewports
+            const maxShrink = 1; // max 18% shrink on very small viewports
             const viewportMultiplier = 1 - (1 - viewportRatio) * maxShrink;
             // Use a continuous (float) size so the pattern shrinks smoothly
             // with viewport width instead of stepping through integer sizes.
