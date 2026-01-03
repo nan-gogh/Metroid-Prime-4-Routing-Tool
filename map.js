@@ -1209,7 +1209,18 @@ class InteractiveMap {
         try {
             const dpr = window.devicePixelRatio || 1;
             const base = Number(size) || 28;
-            const r = this._lowSpec ? Math.round(base * 1.6) : base;
+            // Adapt hex size slightly based on viewport width so the pattern
+            // becomes a bit denser on wide viewports and shrinks on narrow ones.
+            const container = this.canvasTiles || this.canvas;
+            const containerWidth = (container && container.clientWidth) ? container.clientWidth : (window.innerWidth || 1024);
+            const refWidth = 1024; // reference width for scaling
+            const viewportRatio = Math.min(1, containerWidth / refWidth);
+            const maxShrink = 0.18; // max 18% shrink on very small viewports
+            const viewportMultiplier = 1 - (1 - viewportRatio) * maxShrink;
+            // Use a continuous (float) size so the pattern shrinks smoothly
+            // with viewport width instead of stepping through integer sizes.
+            const adaptiveBase = Math.max(10, base * viewportMultiplier);
+            const r = this._lowSpec ? (adaptiveBase * 1.6) : adaptiveBase;
             const hexH = Math.sqrt(3) * r;
             const hSpacing = 1.5 * r;
             const vSpacing = hexH;
