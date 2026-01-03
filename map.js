@@ -258,6 +258,8 @@ class InteractiveMap {
         // minZoom such that minRes >= MAP_SIZE * minZoom * dpr => minZoom = minRes / (MAP_SIZE * dpr)
         this.minZoom = Math.max(0.005, Math.min(DEFAULT_MIN_ZOOM, minRes / (MAP_SIZE * dpr)));
         this.updateResolution();
+        // Recreate honeycomb pattern when the canvas size or DPR changes
+        try { this._createHoneycombPattern && this._createHoneycombPattern(); } catch (e) {}
         this.render();
     }
     
@@ -1163,16 +1165,117 @@ class InteractiveMap {
         const cssWidth = (this.canvasTiles || this.canvas).clientWidth;
         const cssHeight = (this.canvasTiles || this.canvas).clientHeight;
 
-        // Clear background (use app theme dark-blue to match page background)
+        // Clear background (use app theme dark-blue) and draw subtle honeycomb pattern
         try {
+            // Base fill
             ctxT.fillStyle = '#041018';
             ctxT.fillRect(0, 0, cssWidth, cssHeight);
+
+            // Use a cached honeycomb pattern (offscreen canvas) for performance.
+            try {
+                // Create pattern canvas if missing (size tuned for low-spec devices)
+                if (!this._honeycombPatternCanvas) {
+                    // default base size; increase on low-spec to reduce density
+                    const baseSize = 28;
+                    const preferred = (this._lowSpec ? Math.round(baseSize * 1.6) : baseSize);
+                    this._createHoneycombPattern(preferred);
+                }
+
+                if (this._honeycombPatternCanvas) {
+                    if (!this._honeycombPattern) {
+                        try { this._honeycombPattern = ctxT.createPattern(this._honeycombPatternCanvas, 'repeat'); } catch (e) { this._honeycombPattern = null; }
+                    }
+                    if (this._honeycombPattern) {
+                        ctxT.save();
+                        ctxT.fillStyle = this._honeycombPattern;
+                        ctxT.fillRect(0, 0, cssWidth, cssHeight);
+                        ctxT.restore();
+                    }
+                }
+            } catch (e) {}
         } catch (e) {}
 
         if (this.currentImage) {
             const size = MAP_SIZE * this.zoom;
             try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) {}
             try { ctxT.drawImage(this.currentImage, this.panX, this.panY, size, size); } catch (e) {}
+        }
+    }
+
+    // Create a reusable honeycomb pattern on an offscreen canvas.
+    // `size` is the hex radius in CSS pixels. This function respects DPR
+    // and low-spec heuristics so the pattern density is reduced on weaker devices.
+    _createHoneycombPattern(size = 28) {
+        try {
+            const dpr = window.devicePixelRatio || 1;
+            const base = Number(size) || 28;
+            const r = this._lowSpec ? Math.round(base * 1.6) : base;
+            const hexH = Math.sqrt(3) * r;
+            const hSpacing = 1.5 * r;
+            const vSpacing = hexH;
+
+            // Pattern tile extents (use integer pixels to avoid blurry seams)
+            // Make the pattern tile cover two columns and two rows so repetition is seamless
+            const tileW = Math.max(2, Math.ceil(hSpacing * 2));
+            const tileH = Math.max(2, Math.ceil(vSpacing * 2));
+
+            const pc = document.createElement('canvas');
+            pc.width = Math.max(1, Math.floor(tileW * dpr));
+            pc.height = Math.max(1, Math.floor(tileH * dpr));
+            const pctx = pc.getContext('2d');
+            // Draw in CSS pixels by scaling for DPR
+            pctx.scale(dpr, dpr);
+
+            pctx.fillStyle = 'rgba(6,20,30,0.28)';
+            pctx.strokeStyle = 'rgba(34,211,238,0.06)';
+            pctx.lineWidth = 1;
+
+            // Start slightly negative so partial hexes at the edges are drawn
+            const xStart = -hSpacing;
+            const yStart = -vSpacing;
+            const cols = Math.ceil(tileW / hSpacing) + 3;
+            const rows = Math.ceil(tileH / vSpacing) + 3;
+
+            for (let col = 0; col < cols; col++) {
+                for (let row = 0; row < rows; row++) {
+                    const cx = xStart + col * hSpacing;
+                    const cy = yStart + row * vSpacing + (col % 2 ? vSpacing / 2 : 0);
+                    // Draw hexagon centered at (cx, cy)
+                    pctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (Math.PI / 180) * (60 * i);
+                        const x = cx + r * Math.cos(angle);
+                        const y = cy + r * Math.sin(angle);
+                        if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+                    }
+                    pctx.closePath();
+                    pctx.fill();
+                    pctx.stroke();
+                }
+            }
+
+            // Rotate the pattern tile by 90 degrees into a new canvas so the
+            // repeated pattern appears rotated without changing tiling behavior.
+            try {
+                const rc = document.createElement('canvas');
+                // For a 90deg rotation swap width/height to avoid clipping
+                rc.width = pc.height;
+                rc.height = pc.width;
+                const rctx = rc.getContext('2d');
+                // Translate to center, rotate 90deg, draw original
+                rctx.translate(rc.width / 2, rc.height / 2);
+                rctx.rotate(Math.PI / 2);
+                rctx.drawImage(pc, -pc.width / 2, -pc.height / 2);
+                this._honeycombPatternCanvas = rc;
+            } catch (e) {
+                // Fallback to the original pattern if rotation fails
+                this._honeycombPatternCanvas = pc;
+            }
+            this._honeycombPattern = null;
+        } catch (e) {
+            // ignore pattern creation failures
+            this._honeycombPatternCanvas = null;
+            this._honeycombPattern = null;
         }
     }
     
