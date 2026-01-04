@@ -268,7 +268,7 @@ body {
     transform: translate(-50%, -50%) scale(0);
     width: 14px;
     height: 14px;
-    background-image: url("graphics/eye.svg");
+    background-image: url("graphics/checkmark.svg");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -278,10 +278,8 @@ body {
 }
 
 .layer-toggle input[type="checkbox"]:checked::after {
-    /* Hide the icon entirely in the checked state for testing */
-    transform: translate(-50%, -50%) scale(0);
-    opacity: 0;
-    background-image: none;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
 }
 
 .layer-icon {
