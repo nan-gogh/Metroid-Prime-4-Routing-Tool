@@ -3,7 +3,7 @@
 LAYERS.mechPart = {
     name: "Mech Part",
     icon: "⚙️",
-    color: "#6b7280",
+    color: "#adadadff",
     prefix: "mp",
     markers: [
         {"uid": "mp_2d9a7912", "x": 0.1416219631, "y": 0.1813568717},

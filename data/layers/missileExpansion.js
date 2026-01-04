@@ -3,7 +3,8 @@
 LAYERS.missileExpansion = {
     name: "Missile Expansion",
     icon: "🔺",
-    color: "#ef4444",
+    //color: "#edaa00ff",
+    color: "#f97316",
     prefix: "me",
     markers: [
         {"uid": "me_fd44f17c", "x": 0.517322591, "y": 0.1794044836},

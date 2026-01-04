@@ -3,7 +3,7 @@
 LAYERS.gfDebris = {
     name: "GF Debris",
     icon: "🧱",
-    color: "#7c3aed",
+    color: "#4c4c4cff",
     prefix: "gfd",
     markers: [
         {"uid": "gfd_cab8678c", "x": 0.5256181484, "y": 0.1783615194},

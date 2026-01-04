@@ -3,7 +3,7 @@
 LAYERS.shrine = {
     name: "Shrine",
     icon: "⛩️",
-    color: "#0ea5e9",
+    color: "#d70ee9ff",
     prefix: "sh",
     markers: [
         {"uid": "sh_34c353bc", "x": 0.4128955257, "y": 0.2864526132},

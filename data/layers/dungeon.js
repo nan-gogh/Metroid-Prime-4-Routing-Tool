@@ -3,7 +3,7 @@
 LAYERS.dungeon = {
     name: "Dungeon",
     icon: "🏰",
-    color: "#b91c1c",
+    color: "#1c5bb9ff",
     prefix: "du",
     markers: [
         {"uid": "du_2835f9e2", "x": 0.1391926561, "y": 0.1586829367},

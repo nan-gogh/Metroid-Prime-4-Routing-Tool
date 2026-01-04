@@ -3,7 +3,8 @@
 LAYERS.armCannon = {
     name: "Arm Cannon",
     icon: "🔧",
-    color: "#06b6d4",
+    //color: "#f97316",
+    color: "#ef4444",
     prefix: "ac",
     markers: [
         {"uid": "se_0cfa5ca5", "x": 0.1977099605, "y": 0.3563154189},

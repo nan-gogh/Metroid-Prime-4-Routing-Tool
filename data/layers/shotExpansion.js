@@ -3,7 +3,7 @@
 LAYERS.shotExpansion = {
     name: "Shot Expansion",
     icon: "🔫",
-    color: "#f59e0b",
+    color: "#edaa00ff",
     prefix: "se",
     markers: [
         {"uid": "se_52d74a97", "x": 0.7625241861, "y": 0.2216633744},

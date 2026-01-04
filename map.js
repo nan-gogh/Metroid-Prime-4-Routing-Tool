@@ -2450,7 +2450,7 @@ async function init() {
     // Wire Show All / Hide All layer buttons to the existing checkbox handlers
     try {
         const showBtn = document.getElementById('showAllLayersBtn');
-        const hideBtn = document.getElementById('hideAllLayersBtn');
+        const hideBtn = doncument.getElementById('hideAllLayersBtn');
         const applyToggle = (checked) => {
             const inputs = document.querySelectorAll('#layerList input[type=checkbox]');
             inputs.forEach(cb => {
