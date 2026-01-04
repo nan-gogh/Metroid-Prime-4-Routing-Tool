@@ -2447,20 +2447,32 @@ async function init() {
     
     // Populate layer icons from LAYERS definitions
     initializeLayerIcons();
-    // Wire Show All / Hide All layer buttons to the existing checkbox handlers
+    // Wire Show All / Hide All layer buttons — batch updates to avoid N renders/storage writes
     try {
         const showBtn = document.getElementById('showAllLayersBtn');
-        const hideBtn = doncument.getElementById('hideAllLayersBtn');
-        const applyToggle = (checked) => {
-            const inputs = document.querySelectorAll('#layerList input[type=checkbox]');
-            inputs.forEach(cb => {
-                if (!!cb.checked !== !!checked) {
-                    cb.checked = !!checked;
-                    // trigger change so existing per-layer logic runs (toggleLayer + persist)
-                    cb.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            });
+        const hideBtn = document.getElementById('hideAllLayersBtn');
+        let _renderScheduled = false;
+        const scheduleRender = () => {
+            if (_renderScheduled) return;
+            _renderScheduled = true;
+            requestAnimationFrame(() => { _renderScheduled = false; try { if (map) map.render(); } catch (e) {} });
         };
+
+        const applyToggle = (checked) => {
+            const inputs = Array.from(document.querySelectorAll('#layerList input[type=checkbox]'));
+            const newVisibility = {};
+            inputs.forEach(cb => {
+                cb.checked = !!checked;
+                const key = cb.id.replace(/^toggle_/, '');
+                newVisibility[key] = !!checked;
+            });
+            try {
+                map.layerVisibility = Object.assign({}, map.layerVisibility || {}, newVisibility);
+            } catch (e) { map.layerVisibility = Object.assign({}, newVisibility); }
+            try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+            scheduleRender();
+        };
+
         if (showBtn) showBtn.addEventListener('click', () => applyToggle(true));
         if (hideBtn) hideBtn.addEventListener('click', () => applyToggle(false));
     } catch (e) {}
