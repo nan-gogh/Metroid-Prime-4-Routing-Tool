@@ -1471,8 +1471,9 @@ class InteractiveMap {
             this.hideTooltip();
         }
 
-        // Generic re-render
-        this.render();
+        // Only re-render the overlay (markers/route/tooltip). Tiles are expensive
+        // to redraw at high zoom and don't change when toggling layers.
+        try { this.renderOverlay(); } catch (e) { try { this.render(); } catch (e) {} }
     }
     
     checkMarkerHover(mouseX, mouseY) {
@@ -1892,9 +1893,24 @@ class InteractiveMap {
                 const rawSize = isSelected ? baseSize * 1.3 : baseSize;
                 const size = Math.max(1, rawSize * markerScale);
 
+                // Draw selection halo using the layer color (no lightening)
+                if (isSelected) {
+                    try {
+                        ctx.save();
+                        ctx.shadowBlur = Math.max(6, size * 1.5);
+                        ctx.shadowColor = color;
+                        ctx.beginPath();
+                        ctx.arc(screenX, screenY, size + 2, 0, Math.PI * 2);
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                        ctx.restore();
+                    } catch (e) {}
+                }
+
+                // Draw marker core
                 ctx.beginPath();
                 ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-                ctx.fillStyle = isSelected ? this.lightenColor(color, 30) : color;
+                ctx.fillStyle = color;
                 ctx.fill();
             }
         }
@@ -2270,9 +2286,14 @@ async function initializeLayerIcons() {
     // push route first if it exists
     const routeIdx = layerEntries.findIndex(e => e[0] === 'route');
     if (routeIdx >= 0) orderedEntries.push(layerEntries[routeIdx]);
-    // append all other entries in original order (no hardcoding needed)
+    // Place `customMarkers` immediately after `route` when present so it's below the route layer
+    const customIdx = layerEntries.findIndex(e => e[0] === 'customMarkers');
+    if (customIdx >= 0) orderedEntries.push(layerEntries[customIdx]);
+    // append all other entries in original order, excluding `route` and `customMarkers`
     for (let i = 0; i < layerEntries.length; i++) {
-        if (layerEntries[i][0] !== 'route') orderedEntries.push(layerEntries[i]);
+        const k = layerEntries[i][0];
+        if (k === 'route' || k === 'customMarkers') continue;
+        orderedEntries.push(layerEntries[i]);
     }
 
     // Insert a runtime-only `grid` layer so users can toggle grid visibility from the sidebar.
@@ -2455,7 +2476,7 @@ async function init() {
         const scheduleRender = () => {
             if (_renderScheduled) return;
             _renderScheduled = true;
-            requestAnimationFrame(() => { _renderScheduled = false; try { if (map) map.render(); } catch (e) {} });
+            requestAnimationFrame(() => { _renderScheduled = false; try { if (map) map.renderOverlay(); } catch (e) { try { if (map) map.render(); } catch (e) {} } });
         };
 
         const applyToggle = (checked) => {
@@ -2823,7 +2844,7 @@ async function init() {
 
             computeImprovedBtn.disabled = true;
             const oldText2 = computeImprovedBtn.textContent;
-            computeImprovedBtn.textContent = 'Computing (Improved)...';
+            computeImprovedBtn.textContent = 'Computing';
 
             // Find index of selected marker in sources array (if any selected)
             let selectedMarkerIndex = -1;
@@ -3229,6 +3250,13 @@ async function init() {
         } catch (e) {}
 
         // File migration tools removed — routes and markers now upgrade in place on import/load
+    } catch (e) {}
+
+    // Signal that the app finished initial synchronous startup work so the UI
+    // (loading fade) can be removed when the page is ready for interaction.
+    try {
+        try { window._mp4Ready = true; } catch (e) {}
+        document.dispatchEvent(new Event('mp4-ready'));
     } catch (e) {}
 }
 

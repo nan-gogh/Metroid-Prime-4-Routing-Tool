@@ -44,6 +44,15 @@
                     </div>
                     <div id="layerList"></div>
                 </div>
+
+                <div class="control-group">
+                    <h3>Mapping</h3>
+                    <div class="tileset-controls">
+                        <button id="tilesetSatBtn" class="control-btn" aria-pressed="false">Satellite</button>
+                        <button id="tilesetHoloBtn" class="control-btn" aria-pressed="false">Holographic</button>
+                        <button id="tilesetGrayscaleBtn" class="control-btn" aria-pressed="false">Grayscale</button>
+                    </div>
+                </div>
             
                 <div class="control-group">
                     <h3>Routing</h3>
@@ -61,15 +70,6 @@
                     <button id="clearCustom" class="control-btn danger">Clear Markers</button>
                     <input type="file" id="importFile" accept=".json" style="display:none;">
                     <input type="file" id="importRouteFile" accept=".json" style="display:none;">
-                </div>
-
-                <div class="control-group">
-                    <h3>Mapping</h3>
-                    <div class="tileset-controls">
-                        <button id="tilesetSatBtn" class="control-btn" aria-pressed="false">Satellite</button>
-                        <button id="tilesetHoloBtn" class="control-btn" aria-pressed="false">Holographic</button>
-                        <button id="tilesetGrayscaleBtn" class="control-btn" aria-pressed="false">Grayscale</button>
-                    </div>
                 </div>
 
                 <div class="control-group" id="linksSection">
@@ -148,18 +148,18 @@
     <script src="data/layers/geCrystallization1.js"></script>
     <script src="data/layers/geCrystallization2.js"></script>
     <script src="data/layers/geCrystallization3.js"></script>
-    <!--<script src="data/layers/armCannon.js"></script>-->
+    <script src="data/layers/boostTank.js"></script>
+    <script src="data/layers/energyTank.js"></script>
+    <script src="data/layers/shotUpgrade.js"></script>
     <script src="data/layers/missileExpansion.js"></script>
     <script src="data/layers/shotExpansion.js"></script>
     <script src="data/layers/bombExpansion.js"></script>
-    <script src="data/layers/boostTank.js"></script>
-    <script src="data/layers/dungeon.js"></script>
-    <script src="data/layers/energyTank.js"></script>
-    <script src="data/layers/gfDebris.js"></script>
     <script src="data/layers/mechPart.js"></script>
-    <script src="data/layers/scoutBot.js"></script>
+    <script src="data/layers/entrance.js"></script>
     <script src="data/layers/shrine.js"></script>
     <script src="data/layers/tokabisCamp.js"></script>
+    <script src="data/layers/scoutBot.js"></script>
+    <script src="data/layers/gfDebris.js"></script>
     <script src="data/layers/customMarkers.js"></script>
     <script src="data/layers/route.js"></script>
     <script src="data/storageHelper.js"></script>
@@ -189,7 +189,17 @@
             // Fallback: remove after 1s if transitionend doesn't fire
             setTimeout(done, 1200);
         }
-        if (document.readyState === 'complete') removeFade(); else window.addEventListener('load', removeFade);
+        // Wait for the app to signal readiness (startup work completed) before
+        // removing the loading fade. Use a timeout fallback to avoid hanging
+        // the UI forever if the event isn't fired for some reason.
+        try {
+            document.addEventListener('mp4-ready', removeFade, { once: true });
+            // Fallback: ensure fade removed after 7s even if event not fired
+            setTimeout(() => { try { removeFade(); } catch (e) {} }, 7000);
+        } catch (e) {
+            // As a final fallback, remove fade on window load
+            if (document.readyState === 'complete') removeFade(); else window.addEventListener('load', removeFade);
+        }
     })();
     </script>
 </body>
