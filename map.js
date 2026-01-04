@@ -2447,6 +2447,23 @@ async function init() {
     
     // Populate layer icons from LAYERS definitions
     initializeLayerIcons();
+    // Wire Show All / Hide All layer buttons to the existing checkbox handlers
+    try {
+        const showBtn = document.getElementById('showAllLayersBtn');
+        const hideBtn = document.getElementById('hideAllLayersBtn');
+        const applyToggle = (checked) => {
+            const inputs = document.querySelectorAll('#layerList input[type=checkbox]');
+            inputs.forEach(cb => {
+                if (!!cb.checked !== !!checked) {
+                    cb.checked = !!checked;
+                    // trigger change so existing per-layer logic runs (toggleLayer + persist)
+                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        };
+        if (showBtn) showBtn.addEventListener('click', () => applyToggle(true));
+        if (hideBtn) hideBtn.addEventListener('click', () => applyToggle(false));
+    } catch (e) {}
     // Attempt to restore a previously saved route (if any)
     try { map.loadRouteFromStorage(); } catch (e) {}
     // Attempt to restore saved map view (pan/zoom) when consent is present
