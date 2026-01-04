@@ -1,9 +1,9 @@
 // Dungeon layer
 // Requires data/init.js to be loaded first
-LAYERS.dungeon = {
-    name: "Dungeon",
+LAYERS.entrance = {
+    name: "Entrance",
     icon: "🏰",
-    color: "#1c5bb9ff",
+    color: "#1d61c6ff",
     prefix: "du",
     markers: [
         {"uid": "du_2835f9e2", "x": 0.1391926561, "y": 0.1586829367},
@@ -16,5 +16,5 @@ LAYERS.dungeon = {
 };
 
 // Convenience export for backward compatibility
-const DUNGEON = LAYERS.dungeon.markers;
+const ENTRANCE = LAYERS.entrance.markers;
 

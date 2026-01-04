@@ -3,7 +3,7 @@
 LAYERS.energyTank = {
     name: "Energy Tank",
     icon: "🔋",
-    color: "#10b981",
+    color: "#432fd7ff",
     prefix: "et",
     markers: [
         {"uid": "et_7f3b172d", "x": 0.1983682714, "y": 0.3624833894},

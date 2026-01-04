@@ -1,10 +1,10 @@
 // Arm Cannon layer
 // Generated from Sol Valley_all_markers_categorized.json
-LAYERS.armCannon = {
-    name: "Arm Cannon",
+LAYERS.shotUpgrade = {
+    name: "Shot Upgrade",
     icon: "🔧",
-    //color: "#f97316",
-    color: "#ef4444",
+    //color: "#ef4444",
+    color: "#db2a48ff",
     prefix: "ac",
     markers: [
         {"uid": "se_0cfa5ca5", "x": 0.1977099605, "y": 0.3563154189},
@@ -17,5 +17,5 @@ LAYERS.armCannon = {
 };
 
 // Convenience export for backward compatibility
-const ARM_CANNON = LAYERS.armCannon.markers;
+const SHOT_UPGRADE = LAYERS.shotUpgrade.markers;
 

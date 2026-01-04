@@ -3,7 +3,7 @@
 LAYERS.tokabisCamp = {
     name: "Tokabis Camp",
     icon: "🏕️",
-    color: "#f94316ff",
+    color: "#dbd22aff",
     prefix: "tc",
     markers: [
         {"uid": "tc_fef93a48", "x": 0.214938345, "y": 0.4229012946},

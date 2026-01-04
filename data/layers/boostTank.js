@@ -3,7 +3,7 @@
 LAYERS.boostTank = {
     name: "Boost Tank",
     icon: "⬆️",
-    color: "#06b6d4",
+    color: "#9b2ddbff",
     prefix: "bt",
     markers: [
         {"uid": "bt_89dd2c04", "x": 0.8492538992, "y": 0.3976579433},

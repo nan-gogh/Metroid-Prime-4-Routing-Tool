@@ -3,7 +3,7 @@
 LAYERS.scoutBot = {
     name: "Scout Bot",
     icon: "🤖",
-    color: "#16f997ff",
+    color: "#7dae2eff",
     prefix: "sb",
     markers: [
         {"uid": "sb_c1263445", "x": 0.0736120632, "y": 0.8511992358}

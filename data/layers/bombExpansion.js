@@ -3,8 +3,8 @@
 LAYERS.bombExpansion = {
     name: "Bomb Expansion",
     icon: "💣",
-    //color: "#ef4444",
-    color: "#f5f50bff",
+    //color: "#c3c325ff",
+    color: "#edaa00ff",
     prefix: "be",
     markers: [
         {"uid": "be_3748ff50", "x": 0.2137172009, "y": 0.4233460991},
