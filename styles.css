@@ -202,8 +202,8 @@ body {
 .layer-toggle {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: 12px; /* tighter spacing between icon/checkbox and text */
+    padding: 4px 9px; /* reduce vertical padding to shrink row height */
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     cursor: pointer;
