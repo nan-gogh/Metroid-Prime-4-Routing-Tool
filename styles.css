@@ -635,11 +635,11 @@ kbd {
 
 /* Small inline icon used inside hint-group (e.g. pin SVG) */
 .hint-icon {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     display: inline-block;
     vertical-align: middle;
-    margin: 0 4px;
+    margin: 0 -2px;
 }
 
 /* Hints toggle button (matches .control-btn exactly) */
