@@ -81,6 +81,9 @@ body {
     z-index: 200;
     transition: transform 280ms linear;
     will-change: transform;
+    /* manipulation: allows double-tap zoom and pinch (which we block globally), 
+       but tells browser not to delay interactions after nearby pan gestures */
+    touch-action: manipulation;
 }
 
 /* Collapsed sidebar */
@@ -184,6 +187,29 @@ body {
     margin: 0;
 }
 
+/* Ensure header title/subtitle are left-aligned and white, next to the icon */
+.title-block {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+}
+.title-block h1,
+.title-block h2 {
+    color: #ffffff;
+    text-align: left;
+}
+
+/* Ensure layer rows keep left-aligned text and don't inherit centered button styles */
+.layer-toggle {
+    justify-content: flex-start;
+    text-align: left;
+}
+.layer-info {
+    text-align: left;
+}
+
 .header h1 {
     font-size: 14px;
     font-weight: 500;
@@ -200,6 +226,8 @@ body {
     padding: 16px;
     flex: 1;
     overflow-y: auto;
+    /* manipulation tells browser not to delay scroll in gesture interpretation window */
+    touch-action: manipulation;
 }
 
 /* Hide scrollbar visually while keeping scroll behavior. Cross-browser rules. */
@@ -239,94 +267,32 @@ body {
     padding: 4px 9px; /* reduce vertical padding to shrink row height */
     min-height: 40px; /* ensure consistent row height for all layers (fixes grid row) */
     height: 40px; /* enforce uniform row height to avoid inconsistent rendering across rows */
+    width: 100%;
+    box-sizing: border-box;
     /* Darken default (disabled) state slightly so active rows stand out more */
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(34, 211, 238, 0.03);
     border-radius: 8px;
     cursor: pointer;
     transition: none; /* disable transitions for instant toggle changes */
+    box-shadow: none;
+    border: none;
     /* Prevent browser double-tap zoom on touch devices */
     touch-action: manipulation;
     position: relative; /* for absolutely-positioned checkbox inside */
 }
-
-.layer-toggle.pressed,
-.layer-toggle:active {
-    /* no press feedback; maintain current background */
-    background: rgba(255, 255, 255, 0.03);
-}
-
 /* Active state: brighter background when the layer is enabled */
 .layer-toggle.active {
-    background: rgba(255, 255, 255, 0.14);
+    /* Slight bluish active state */
+    background: rgba(34, 211, 238, 0.12);
 }
 
-.layer-toggle input[type="checkbox"] {
-    /* Visually hide native checkbox while keeping it accessible and keyboard-focusable. */
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    margin: 0;
-    padding: 0;
-    opacity: 0;
-    background: transparent;
-    border: none;
-    -webkit-appearance: none;
-    appearance: none;
-    cursor: pointer;
-    z-index: 2; /* keep focus events reachable */
-}
-
-.layer-toggle input[type="checkbox"]:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(34,211,238,0.08), inset 0 -1px 0 rgba(0,0,0,0.25);
-}
-
-.layer-toggle input[type="checkbox"]:checked {
-    background-color: #0891b2;
-    background-image: linear-gradient(180deg, #0891b2 0%, #065666 100%);
-    border-color: #22d3ee;
-    box-shadow: 0 2px 10px rgba(34,211,238,0.12);
-    background-repeat: no-repeat;
-    background-position: center;
-    /* SVG checkmark, white-ish to match theme */
-    background-image: linear-gradient(180deg, #0891b2 0%, #065666 100%);
-}
-
-.layer-toggle input[type="checkbox"]:active {
-    /* remove active transform for instant state */
-    transform: none;
-}
-
-/* Draw the checkmark with a pseudo-element to avoid native UA check flashes on mobile */
-.layer-toggle input[type="checkbox"]::after {
-    /* hide the visual checkmark since we use row highlighting instead */
-    display: none;
-}
-
-.layer-toggle input[type="checkbox"]:checked::after {
-    display: none;
-}
-
-/* Show a subtle focus ring on the entire row when the hidden checkbox is focused */
-.layer-toggle:focus-within {
-    /* Intentionally empty: no persistent outline on toggle rows */
-    box-shadow: none;
-}
-
-/* Ensure the invisible checkbox does not show a native focus ring */
-.layer-toggle input[type="checkbox"]:focus,
-.layer-toggle input[type="checkbox"]:focus-visible {
-    outline: none;
-    box-shadow: none;
-}
+/* Layer-toggle no-longer uses hidden native checkboxes; state is represented
+   by the `.layer-toggle.active` class and `aria-pressed` on the button rows. */
 
 .layer-icon {
     width: 28px;
     height: 28px;
-    background: #4ade80;
+    background: #22d3ee; /* cyan backdrop by default; can be overridden per-layer via data */
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -342,6 +308,10 @@ body {
 .layer-name {
     font-size: 14px;
     font-weight: 500;
+}
+
+.layer-name {
+    color: #ffffff;
 }
 
 .layer-count {
@@ -465,7 +435,9 @@ body {
 #mapCanvas {
     z-index: 1;
     cursor: grab;
-    touch-action: none;
+    /* Using 'auto' (default) removes gesture recognition delay entirely.
+       Sidebar scroll is handled by explicit wheel event listener in map.js. */
+    touch-action: auto;
 }
 
 #mapCanvas:active {

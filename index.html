@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Metroid Prime 4 Routing Tool Beta</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="graphics/mp4b_routing_favicon.ico">
@@ -29,18 +29,21 @@
             </div>
             
             <div class="controls">
-
-                <div class="control-group">
-                    <div style="margin-bottom:20px;">
-                        <label class="layer-toggle dev-toggle" id="saveDataToggle_label">
-                            <input type="checkbox" id="saveDataToggle">
+                
+                <div class="control-group" id="settingsSection">
+                    <h3>Settings</h3>
+                    <div style="margin-bottom:12px;">
+                        <button type="button" class="layer-toggle dev-toggle" id="saveDataToggle_label" aria-pressed="false">
                             <div class="layer-icon" style="background:#ffffff; font-size:14px;">💾</div>
                             <div class="layer-info">
                                 <div class="layer-name">Local Storage</div>
                                 <div class="layer-count">Consent for local saves</div>
                             </div>
-                        </label>
+                        </button>
                     </div>
+                </div>
+
+                <div class="control-group">
                     <h3>Layers</h3>
                     <div class="layer-controls-inline" style="margin-bottom:8px; display:flex; gap:8px;">
                         <button id="showAllLayersBtn" class="control-btn">Show All</button>
@@ -95,13 +98,6 @@
 
                 <div class="control-group" id="devTools">
                     <h3>Dev Tools</h3>
-                    <label class="layer-toggle dev-toggle" id="dev_lowSpec_label">
-                        <input type="checkbox" id="dev_lowSpec_toggle">
-                        <div class="layer-icon" style="background:#888">⚙</div>
-                        <div class="layer-info">
-                            <div class="layer-name">Low-spec mode</div>
-                        </div>
-                    </label>
                     <div id="devStatsPanel" class="dev-stats" aria-live="polite">
                         <div class="dev-row"><div class="dev-label">Decoders active</div><div class="dev-value" id="dev_bitmapActive">0</div></div>
                         <div class="dev-row"><div class="dev-label">Decode queue</div><div class="dev-value" id="dev_bitmapQueue">0</div></div>
@@ -183,6 +179,14 @@
                 e.preventDefault();
             }
         }, false);
+
+        // Block Ctrl+wheel browser zoom globally to prevent accidental page zoom
+        // This also catches trackpad pinch-to-zoom gestures that browsers map to ctrlKey+wheel
+        document.addEventListener('wheel', function(e) {
+            if (e.ctrlKey) {
+                e.preventDefault();
+            }
+        }, { passive: false });
         
         function removeFade(){
             var el = document.getElementById('loadFade');

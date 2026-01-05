@@ -276,14 +276,15 @@ class InteractiveMap {
     }
     
     bindEvents() {
-        // Mouse wheel zoom
+        // Mouse wheel zoom (passive: false required for preventDefault to work)
         this.canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = this.canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            // Use a larger zoom step for wheel to match programmatic zoomIn/zoomOut (1.3x)
+            const zoomFactor = e.deltaY > 0 ? (1 / 1.3) : 1.3;
             const newZoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * zoomFactor));
             
             // Zoom towards mouse position
@@ -306,10 +307,10 @@ class InteractiveMap {
                     try { this.saveViewToStorage(); } catch (e) {}
                 }, 150);
             } catch (e) {}
-        });
+        }, { passive: false });
         // Pointer events (unified for mouse + touch + pen)
         this.canvas.addEventListener('pointerdown', (e) => {
-            this.canvas.setPointerCapture(e.pointerId);
+            // Removed setPointerCapture to avoid blocking interactions on sidebar after panning
             const rect = this.canvas.getBoundingClientRect();
             const localX = e.clientX - rect.left;
             const localY = e.clientY - rect.top;
@@ -648,7 +649,7 @@ class InteractiveMap {
         }
 
         this.canvas.addEventListener('pointerup', (e) => {
-            this.canvas.releasePointerCapture && this.canvas.releasePointerCapture(e.pointerId);
+            // Pointer capture no longer used; removed releasePointerCapture call
             const rect = this.canvas.getBoundingClientRect();
             const localX = e.clientX - rect.left;
             const localY = e.clientY - rect.top;
@@ -680,6 +681,7 @@ class InteractiveMap {
                 // update cursor based on whether any marker is under the pointer
                 const under = this.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
+                // Save view state
                 try { this.saveViewToStorage(); } catch (err) {}
 
                 // short tap (no movement, short press) — let `click` handler manage selection/placement
@@ -791,12 +793,32 @@ class InteractiveMap {
         document.addEventListener('keydown', (e) => {
             if (e.key === '+' || e.key === '=') {
                 this.zoomIn();
+                try { e.preventDefault(); } catch (err) {}
             } else if (e.key === '-') {
                 this.zoomOut();
+                try { e.preventDefault(); } catch (err) {}
             } else if (e.key === '0') {
                 this.resetView();
+                try { e.preventDefault(); } catch (err) {}
             }
         });
+
+        // Ensure sidebar scroll is always responsive by adding explicit wheel handler
+        // This bypasses any gesture delays and makes scrolling work immediately
+        const controlsEl = document.querySelector('.controls');
+        if (controlsEl) {
+            controlsEl.addEventListener('wheel', (e) => {
+                // Allow wheel events to scroll the controls immediately without any delays
+                // Do not preventDefault—let the browser handle natural scrolling
+                controlsEl.scrollTop += e.deltaY > 0 ? 40 : -40;
+            }, { passive: true });
+
+            // Also handle pointer events on sidebar to enable touch scrolling
+            controlsEl.addEventListener('pointerdown', (e) => {
+                // Reset momentum by forcing the element to a neutral state
+                controlsEl.style.scrollBehavior = 'auto';
+            }, { passive: true });
+        }
     }
     
     zoomIn() {
@@ -2517,18 +2539,17 @@ async function init() {
     } catch (e) {}
     // Wire the compact Save-data toggle and Clear button (consent-aware)
     try {
-        const saveToggle = document.getElementById('saveDataToggle');
         const saveLabel = document.getElementById('saveDataToggle_label');
-        if (saveToggle) {
-            // Initialize toggle state from consent flag
+        if (saveLabel) {
+            // Initialize state from consent flag
             const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-            saveToggle.checked = !!consent;
-            // reflect active visual state on the label like other layer toggles
-            try { if (saveLabel) saveLabel.classList.toggle('active', !!consent); } catch (e) {}
-            saveToggle.addEventListener('change', async (ev) => {
-                const on = !!ev.target.checked;
+            try { saveLabel.classList.toggle('active', !!consent); } catch (e) {}
+            try { saveLabel.setAttribute('aria-pressed', !!consent ? 'true' : 'false'); } catch (e) {}
+
+            saveLabel.addEventListener('click', async (ev) => {
+                const current = saveLabel.getAttribute('aria-pressed') === 'true';
+                const on = !current;
                 if (on) {
-                    // Ask for concise confirmation before enabling consent (mobile-friendly)
                     const confirmMsg = 'Enable local storage? It stores the following on this device only:\n\n' +
                         '• Map view (position & zoom)\n' +
                         '• Layer visibility\n' +
@@ -2538,9 +2559,6 @@ async function init() {
                         '• Route looping\n\n' +
                         'Tap OK to enable or Cancel to keep storage off.';
                     if (!confirm(confirmMsg)) {
-                        // User cancelled; restore toggle to unchecked and update visual
-                        try { ev.target.checked = false; } catch (e) {}
-                        try { if (saveLabel) saveLabel.classList.toggle('active', false); } catch (e) {}
                         return;
                     }
                 }
@@ -2551,10 +2569,9 @@ async function init() {
                         if (on) localStorage.setItem('mp4_storage_consent', '1'); else localStorage.removeItem('mp4_storage_consent');
                     }
                 } catch (e) {}
+
                 if (on) {
-                    // When enabling consent, immediately persist current app state (preferences, markers, route)
                     try {
-                        // tileset preferences
                         try {
                             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                                 window._mp4Storage.saveSetting('mp4_tileset', (map && map.tileset) ? map.tileset : 'sat');
@@ -2564,20 +2581,10 @@ async function init() {
                                 try { localStorage.setItem('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0'); } catch (e) {}
                             }
                         } catch (e) {}
-
-                        // layer visibility
                         try { saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) {}
-
-                        // custom markers
                         try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
-
-                        // current route
                         try { if (map && typeof map.saveRouteToStorage === 'function') map.saveRouteToStorage(); } catch (e) {}
-
-                        // current map view (pan/zoom)
                         try { if (map && typeof map.saveViewToStorage === 'function') map.saveViewToStorage(); } catch (e) {}
-
-                        // route animation direction
                         try {
                             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                                 window._mp4Storage.saveSetting('routeDir', String(map && map._routeAnimationDirection ? map._routeAnimationDirection : 1));
@@ -2586,11 +2593,9 @@ async function init() {
                             }
                         } catch (e) {}
                     } catch (e) {}
-                    // Refresh UI counts to reflect that data has been saved
-                    try { if (saveLabel) saveLabel.classList.toggle('active', true); } catch (e) {}
+                    try { saveLabel.classList.toggle('active', true); } catch (e) {}
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
-                    // Ask for confirmation before permanently deleting saved local data
                     const confirmMsg = 'Disable local storage? This will permanently delete the following saved data from this device:\n\n' +
                         '• Map view (position & zoom)\n' +
                         '• Layer visibility\n' +
@@ -2600,12 +2605,10 @@ async function init() {
                         '• Route looping\n\n' +
                         'Tap OK to delete saved data and continue, or Cancel to keep it.';
                     if (!confirm(confirmMsg)) {
-                        // User cancelled; restore toggle and keep consent enabled
-                        try { ev.target.checked = true; } catch (e) {}
-                        try { if (saveLabel) saveLabel.classList.toggle('active', true); } catch (e) {}
+                        try { saveLabel.setAttribute('aria-pressed', 'true'); } catch (e) {}
+                        try { saveLabel.classList.toggle('active', true); } catch (e) {}
                         try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
                     } else {
-                        // User confirmed deletion: remove known keys then reload page
                         try {
                             if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
                                 window._mp4Storage.clearSavedData(true);
@@ -2614,12 +2617,13 @@ async function init() {
                                 for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
                             }
                         } catch (e) {}
-                        // Ensure toggle appears unchecked then reload so app starts fresh
-                        try { if (saveToggle) saveToggle.checked = false; } catch (e) {}
-                        try { if (saveLabel) saveLabel.classList.toggle('active', false); } catch (e) {}
+                        try { saveLabel.classList.toggle('active', false); } catch (e) {}
+                        try { saveLabel.setAttribute('aria-pressed', 'false'); } catch (e) {}
                         try { location.reload(); } catch (e) { /* fallback: continue without reload */ }
                     }
                 }
+                // reflect state attribute after all processing
+                try { saveLabel.setAttribute('aria-pressed', !!on ? 'true' : 'false'); } catch (e) {}
             });
         }
         // no separate Clear button — deletion handled via consent toggle
@@ -3135,65 +3139,36 @@ async function init() {
 
     // Bind dev sidebar controls (if present)
     try {
-            const devCb = document.getElementById('dev_lowSpec_toggle');
-            const devLabel = document.getElementById('dev_lowSpec_label');
-            const devStatsPanel = document.getElementById('devStatsPanel');
-            const dev_bitmapActive = document.getElementById('dev_bitmapActive');
-            const dev_bitmapQueue = document.getElementById('dev_bitmapQueue');
-            const dev_imageControllers = document.getElementById('dev_imageControllers');
-            const dev_imageBitmaps = document.getElementById('dev_imageBitmaps');
-            const devStats = document.getElementById('devStats');
-        if (devCb) {
-            // initialize state
-            devCb.checked = !!(map && map._lowSpec);
-            if (devLabel) devLabel.classList.toggle('pressed', !!devCb.checked);
+        const devStatsPanel = document.getElementById('devStatsPanel');
+        const dev_bitmapActive = document.getElementById('dev_bitmapActive');
+        const dev_bitmapQueue = document.getElementById('dev_bitmapQueue');
+        const dev_imageControllers = document.getElementById('dev_imageControllers');
+        const dev_imageBitmaps = document.getElementById('dev_imageBitmaps');
+        const devStats = document.getElementById('devStats');
 
-            const applyToggle = () => {
+        // live stats updater (populate panel rows if present)
+        if ((devStatsPanel || devStats) && map && typeof map.getTileLoadStats === 'function') {
+            const upd = () => {
                 try {
-                    if (!map) return;
-                    map._lowSpec = !!devCb.checked;
-                    map._bitmapLimit = devCb.checked ? 1 : 2;
-                    if (devLabel) devLabel.classList.toggle('pressed', !!devCb.checked);
-                    // Abort and cleanup in-flight loads
-                    try { map._abortAndCleanupTileLoads(); } catch (e) {}
-                    // Clear cached images and ensure a clean reload to avoid stale state
-                    try { map.images = {}; } catch (e) {}
-                    try { map.currentImage = null; } catch (e) {}
-                    try { map.currentResolution = 0; } catch (e) {}
-                    try { map.loadingResolution = null; } catch (e) {}
-                    // Restart preloads and load a fresh initial image, then render
-                    try { map.preloadAllMapImages(); } catch (e) {}
-                    try { map.loadInitialImage(); } catch (e) {}
-                    try { map.render(); } catch (e) {}
-                } catch (e) { console.warn('Dev low-spec toggle failed:', e); }
-            };
-
-            devCb.addEventListener('change', applyToggle);
-
-            // live stats updater (populate panel rows if present, otherwise keep compact label)
-            if ((devStatsPanel || devStats) && map && typeof map.getTileLoadStats === 'function') {
-                const upd = () => {
-                    try {
-                        const s = map.getTileLoadStats();
-                        if (dev_bitmapActive) dev_bitmapActive.textContent = s.bitmapActive;
-                        if (dev_bitmapQueue) dev_bitmapQueue.textContent = s.bitmapQueue;
-                        if (dev_imageControllers) dev_imageControllers.textContent = s.imageControllers;
-                        if (dev_imageBitmaps) dev_imageBitmaps.textContent = s.imageBitmaps;
-                        if (!devStatsPanel && devStats) devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
-                    } catch (e) {
-                        if (devStatsPanel) {
-                            try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) {}
-                            try { if (dev_bitmapQueue) dev_bitmapQueue.textContent = 'err'; } catch (e) {}
-                            try { if (dev_imageControllers) dev_imageControllers.textContent = 'err'; } catch (e) {}
-                            try { if (dev_imageBitmaps) dev_imageBitmaps.textContent = 'err'; } catch (e) {}
-                        } else if (devStats) {
-                            devStats.textContent = 'error';
-                        }
+                    const s = map.getTileLoadStats();
+                    if (dev_bitmapActive) dev_bitmapActive.textContent = s.bitmapActive;
+                    if (dev_bitmapQueue) dev_bitmapQueue.textContent = s.bitmapQueue;
+                    if (dev_imageControllers) dev_imageControllers.textContent = s.imageControllers;
+                    if (dev_imageBitmaps) dev_imageBitmaps.textContent = s.imageBitmaps;
+                    if (!devStatsPanel && devStats) devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
+                } catch (e) {
+                    if (devStatsPanel) {
+                        try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) {}
+                        try { if (dev_bitmapQueue) dev_bitmapQueue.textContent = 'err'; } catch (e) {}
+                        try { if (dev_imageControllers) dev_imageControllers.textContent = 'err'; } catch (e) {}
+                        try { if (dev_imageBitmaps) dev_imageBitmaps.textContent = 'err'; } catch (e) {}
+                    } else if (devStats) {
+                        devStats.textContent = 'error';
                     }
-                };
-                upd();
-                map._devStatsInterval = setInterval(upd, 600);
-            }
+                }
+            };
+            upd();
+            map._devStatsInterval = setInterval(upd, 600);
         }
 
         // GitHub button
