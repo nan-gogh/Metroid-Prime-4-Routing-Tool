@@ -435,9 +435,10 @@ body {
 #mapCanvas {
     z-index: 1;
     cursor: grab;
-    /* Using 'auto' (default) removes gesture recognition delay entirely.
-       Sidebar scroll is handled by explicit wheel event listener in map.js. */
-    touch-action: auto;
+    /* Disable browser pinch-to-zoom on the canvas so pointer events
+       (including multi-touch pinch) are delivered to the app's JS
+       which implements pinch-to-zoom handling. */
+    touch-action: none;
 }
 
 #mapCanvas:active {

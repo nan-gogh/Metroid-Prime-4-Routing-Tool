@@ -104,6 +104,8 @@ class InteractiveMap {
         };
         // Touch hit padding (CSS pixels) to make tapping easier on mobile
         this.touchPadding = 0;
+        // Edit mode for custom markers: when true, markers can be placed/dragged/deleted
+        this.editMarkersMode = false;
         // Wheel save timer used to delay saving until wheel stops
         this._wheelSaveTimer = null;
         // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
@@ -323,19 +325,28 @@ class InteractiveMap {
                     // quick-tap behavior (click to delete) when the user just taps.
                     const hit = this.findMarkerAt(localX, localY);
                     if (hit && hit.layerKey === 'customMarkers') {
-                        this._draggingCandidate = {
-                            uid: hit.marker.uid,
-                            layerKey: hit.layerKey,
-                            pointerId: e.pointerId,
-                            // pixel offset from marker center to pointer to avoid jump when drag starts
-                            offsetX: localX - (hit.marker.x * MAP_SIZE * this.zoom + this.panX),
-                            offsetY: localY - (hit.marker.y * MAP_SIZE * this.zoom + this.panY),
-                            startClientX: e.clientX,
-                            startClientY: e.clientY
-                        };
-                        this.isDragging = false;
-                        this.pointerDownTime = downTime;
-                        this.canvas.style.cursor = 'grabbing';
+                        if (this.editMarkersMode) {
+                            // Edit mode: prepare for potential drag of the custom marker
+                            this._draggingCandidate = {
+                                uid: hit.marker.uid,
+                                layerKey: hit.layerKey,
+                                pointerId: e.pointerId,
+                                // pixel offset from marker center to pointer to avoid jump when drag starts
+                                offsetX: localX - (hit.marker.x * MAP_SIZE * this.zoom + this.panX),
+                                offsetY: localY - (hit.marker.y * MAP_SIZE * this.zoom + this.panY),
+                                startClientX: e.clientX,
+                                startClientY: e.clientY
+                            };
+                            this.isDragging = false;
+                            this.pointerDownTime = downTime;
+                            this.canvas.style.cursor = 'grabbing';
+                        } else {
+                            // Normal mode: do not start pan when tapping a custom marker
+                            // but record time for click detection so tooltip/selection still works
+                            this.isDragging = false;
+                            this.pointerDownTime = downTime;
+                            try { this.canvas.style.cursor = 'pointer'; } catch (err) {}
+                        }
                     } else {
                         // start single-pointer pan
                         this.isDragging = true;
@@ -731,33 +742,37 @@ class InteractiveMap {
                 const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
                 const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
 
-                if (isDeletable) {
-                    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
-                        MarkerUtils.deleteCustomMarker(hit.marker.uid);
-                        // MarkerUtils will update LAYERS and map; ensure hover state updates
-                        this.checkMarkerHover(localX, localY);
+                if (this.editMarkersMode) {
+                    // In edit mode: allow deletion (custom markers are editable regardless of flags)
+                    const isCustom = (layerKey === 'customMarkers');
+                    if (isDeletable || isCustom) {
+                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
+                            MarkerUtils.deleteCustomMarker(hit.marker.uid);
+                            this.checkMarkerHover(localX, localY);
+                        }
                     }
-                } else if (isSelectable) {
-                    // Toggle selection for selectable layers
-                    const uid = hit.marker.uid;
-                    if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
-                        // deselect
-                        this.selectedMarker = null;
-                        this.selectedMarkerLayer = null;
-                        this.hideTooltip();
-                        this.render();
-                    } else {
-                        // select
-                        this.selectedMarker = hit.marker;
-                        this.selectedMarkerLayer = layerKey;
-                        // compute screen coords for tooltip placement
-                        const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
-                        const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
-                        this.showTooltip(hit.marker, screenX, screenY, layerKey);
-                        this.render();
+                } else {
+                    // Normal mode: selection and tooltip behavior
+                    if (isSelectable) {
+                        const uid = hit.marker.uid;
+                        if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
+                            // deselect
+                            this.selectedMarker = null;
+                            this.selectedMarkerLayer = null;
+                            this.hideTooltip();
+                            this.render();
+                        } else {
+                            // select
+                            this.selectedMarker = hit.marker;
+                            this.selectedMarkerLayer = layerKey;
+                            // compute screen coords for tooltip placement
+                            const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
+                            const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
+                            this.showTooltip(hit.marker, screenX, screenY, layerKey);
+                            this.render();
+                        }
                     }
                 }
-                // otherwise: no default action
             } else if (e.button === 0 && isQuickTap && !hit) {
                 // Quick tap on empty space - place custom marker
                 // Reuse previously computed localX/localY to avoid redundant layout read
@@ -774,10 +789,13 @@ class InteractiveMap {
                     if (!this.layerVisibility || !this.layerVisibility.customMarkers) {
                         return;
                     }
-                    if (typeof MarkerUtils !== 'undefined') {
-                        MarkerUtils.addCustomMarker(worldX, worldY);
-                        // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
-                        this.checkMarkerHover(localX, localY);
+                    // Only place markers when edit mode is active
+                    if (this.editMarkersMode) {
+                        if (typeof MarkerUtils !== 'undefined') {
+                            MarkerUtils.addCustomMarker(worldX, worldY);
+                            // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
+                            this.checkMarkerHover(localX, localY);
+                        }
                     }
                 }
             }
@@ -2466,7 +2484,7 @@ async function init() {
     try {
         if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
             LAYERS.customMarkers.deletable = true;
-            LAYERS.customMarkers.selectable = false;
+            LAYERS.customMarkers.selectable = true;
             if (typeof LAYERS.customMarkers.maxMarkers !== 'number') {
                 LAYERS.customMarkers.maxMarkers = (map && map.layerConfig && map.layerConfig.customMarkers && map.layerConfig.customMarkers.maxMarkers) || 50;
             }
@@ -2658,6 +2676,29 @@ async function init() {
             MarkerUtils.exportCustomMarkers();
         }
     });
+
+    // Edit markers toggle - enables placing, dragging and deleting custom markers
+    const editToggle = document.getElementById('editMarkersToggle');
+    if (editToggle && map) {
+        // Reflect initial state
+        try { editToggle.setAttribute('aria-pressed', map.editMarkersMode ? 'true' : 'false'); } catch (e) {}
+        try { editToggle.classList.toggle('pressed', !!map.editMarkersMode); } catch (e) {}
+        editToggle.addEventListener('click', () => {
+            const on = !(editToggle.getAttribute('aria-pressed') === 'true');
+            try { editToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
+            try { editToggle.classList.toggle('pressed', on); } catch (e) {}
+            try {
+                map.editMarkersMode = !!on;
+                if (!map.editMarkersMode) {
+                    // Clear any in-progress dragging state
+                    map._draggingCandidate = null;
+                    map._draggingMarker = null;
+                    try { map.canvas.style.cursor = 'grab'; } catch (e) {}
+                    try { map.render(); } catch (e) {}
+                }
+            } catch (e) {}
+        });
+    }
 
     // Tileset controls (Satellite / Holographic)
     const tilesetSatBtn = document.getElementById('tilesetSatBtn');
