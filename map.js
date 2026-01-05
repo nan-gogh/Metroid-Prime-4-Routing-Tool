@@ -106,6 +106,8 @@ class InteractiveMap {
         this.touchPadding = 0;
         // Edit mode for custom markers: when true, markers can be placed/dragged/deleted
         this.editMarkersMode = false;
+        // Edit mode for route editing: when true, route editing interactions are enabled
+        this.editRouteMode = false;
         // Wheel save timer used to delay saving until wheel stops
         this._wheelSaveTimer = null;
         // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
@@ -2801,6 +2803,27 @@ async function init() {
             try { editToggle.classList.toggle('pressed', on); } catch (e) {}
             try {
                 map.editMarkersMode = !!on;
+                    // If enabling custom marker edit mode, ensure route edit mode is disabled
+                    try {
+                        if (map.editMarkersMode && map.editRouteMode) {
+                            map.editRouteMode = false;
+                            // update sidebar toggle UI if present
+                            try {
+                                const routeToggle = document.getElementById('editRouteToggle');
+                                if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('pressed'); }
+                            } catch (e) {}
+                            // update mini on-screen route toggle if present
+                            try {
+                                const miniRoute = document.getElementById('editRouteToggleMini');
+                                if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                            } catch (e) {}
+                            // re-enable route sidebar row if it was disabled
+                            try {
+                                const row = document.querySelector('#layerList .layer-toggle[data-layer="route"]');
+                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); }
+                            } catch (e) {}
+                        }
+                    } catch (e) {}
                 if (map.editMarkersMode) {
                     // Ensure the customMarkers layer is visible when entering edit mode
                     try {
@@ -2859,6 +2882,97 @@ async function init() {
                 try { mini.setAttribute('aria-pressed', map.editMarkersMode ? 'true' : 'false'); } catch (e) {}
                 try { mini.classList.toggle('glow', !!map.editMarkersMode); } catch (e) {}
                 mini.addEventListener('click', () => { try { editToggle.click(); } catch (e) {} });
+            }
+        } catch (e) {}
+    }
+
+    // Edit route toggle - enables route editing interactions
+    const routeEditToggle = document.getElementById('editRouteToggle');
+    if (routeEditToggle && map) {
+        // Reflect initial state
+        try { routeEditToggle.setAttribute('aria-pressed', map.editRouteMode ? 'true' : 'false'); } catch (e) {}
+        try { routeEditToggle.classList.toggle('pressed', !!map.editRouteMode); } catch (e) {}
+        routeEditToggle.addEventListener('click', () => {
+            const on = !(routeEditToggle.getAttribute('aria-pressed') === 'true');
+            try { routeEditToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
+            try { routeEditToggle.classList.toggle('pressed', on); } catch (e) {}
+            try {
+                map.editRouteMode = !!on;
+                    // If enabling route edit mode, ensure custom-marker edit mode is disabled
+                    try {
+                        if (map.editRouteMode && map.editMarkersMode) {
+                            map.editMarkersMode = false;
+                            // update sidebar toggle UI if present
+                            try {
+                                const markersToggle = document.getElementById('editMarkersToggle');
+                                if (markersToggle) { markersToggle.setAttribute('aria-pressed', 'false'); markersToggle.classList.remove('pressed'); }
+                            } catch (e) {}
+                            // update mini on-screen markers toggle if present
+                            try {
+                                const miniMarkers = document.getElementById('editMarkersToggleMini');
+                                if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed', 'false'); }
+                            } catch (e) {}
+                            // re-enable customMarkers sidebar row if it was disabled
+                            try {
+                                const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]');
+                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); }
+                            } catch (e) {}
+                        }
+                    } catch (e) {}
+                if (map.editRouteMode) {
+                    // Ensure the route layer is visible when entering edit mode
+                    try {
+                        if (typeof map.toggleLayer === 'function') {
+                            map.toggleLayer('route', true);
+                        } else {
+                            if (!map.layerVisibility) map.layerVisibility = {};
+                            map.layerVisibility.route = true;
+                            try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                        }
+                        // Update the sidebar row visual if present and disable toggling while editing
+                        try {
+                            const row = document.querySelector('#layerList .layer-toggle[data-layer="route"]');
+                            if (row) {
+                                row.classList.add('active');
+                                row.setAttribute('aria-pressed', 'true');
+                                row.classList.add('disabled');
+                                row.setAttribute('aria-disabled', 'true');
+                            }
+                        } catch (e) {}
+                        try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+                    } catch (e) {}
+                    // Also update mini on-screen toggle if present
+                    try {
+                        const mini = document.getElementById('editRouteToggleMini');
+                        if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                    } catch (e) {}
+                }
+                if (!map.editRouteMode) {
+                    // Clear any in-progress route edit state
+                    try { map.render(); } catch (e) {}
+                    // Re-enable the route sidebar row if present
+                    try {
+                        const row = document.querySelector('#layerList .layer-toggle[data-layer="route"]');
+                        if (row) {
+                            row.classList.remove('disabled');
+                            row.removeAttribute('aria-disabled');
+                        }
+                    } catch (e) {}
+                    // Also update mini on-screen toggle if present
+                    try {
+                        const mini = document.getElementById('editRouteToggleMini');
+                        if (mini) { mini.classList.toggle('glow', false); mini.setAttribute('aria-pressed', 'false'); }
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        });
+        // Wire the on-screen mini toggle to proxy clicks to the sidebar toggle
+        try {
+            const mini = document.getElementById('editRouteToggleMini');
+            if (mini) {
+                try { mini.setAttribute('aria-pressed', map.editRouteMode ? 'true' : 'false'); } catch (e) {}
+                try { mini.classList.toggle('glow', !!map.editRouteMode); } catch (e) {}
+                mini.addEventListener('click', () => { try { routeEditToggle.click(); } catch (e) {} });
             }
         } catch (e) {}
     }
@@ -3230,7 +3344,8 @@ async function init() {
         // Swap the handle glyph instead of rotating it with CSS
         if (handle) {
             const icon = handle.querySelector('.handle-icon');
-            if (icon) icon.textContent = collapsed ? '▶' : '◀';
+            if (icon) icon.textContent = collapsed ? '◧' : '◼';
+            try { handle.classList.toggle('active', !collapsed); } catch (e) {}
         }
         // do not persist sidebar state to localStorage
         // Resize map after sidebar animation
@@ -3280,7 +3395,15 @@ async function init() {
             // Zoom shortcuts: 'q' -> Zoom In, 'e' -> Zoom Out (case-insensitive)
             try {
                 if (e.key === 'q' || e.key === 'Q') {
-                    try { map.zoomOut(); } catch (err) {}
+                    try {
+                        // Toggle Edit Route mode via the sidebar toggle if present
+                        const routeToggleEl = document.getElementById('editRouteToggle');
+                        if (routeToggleEl) {
+                            try { routeToggleEl.click(); } catch (err) { if (typeof map !== 'undefined' && map) map.editRouteMode = !map.editRouteMode; }
+                        } else if (typeof map !== 'undefined' && map) {
+                            map.editRouteMode = !map.editRouteMode;
+                        }
+                    } catch (err) {}
                     try { e.preventDefault(); } catch (err) {}
                     return;
                 } else if (e.key === 'e' || e.key === 'E') {
