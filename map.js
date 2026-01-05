@@ -2307,21 +2307,16 @@ async function initializeLayerIcons() {
     }
 
     orderedEntries.forEach(([layerKey, layer]) => {
-        // root label
-        const label = document.createElement('label');
+        // root row as a button (replaces hidden checkbox + label for reliable mobile toggles)
+        const label = document.createElement('button');
+        label.type = 'button';
         label.className = 'layer-toggle';
         label.dataset.layer = layerKey;
-
-        // checkbox
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `toggle_${layerKey}`;
         // Determine initial checked state: preference order -> saved storage -> runtime map state -> default false
         const initialChecked = (savedVisibility && Object.prototype.hasOwnProperty.call(savedVisibility, layerKey)) ? !!savedVisibility[layerKey] : !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
-        checkbox.checked = initialChecked;
         // reflect active visual state on the row
         if (initialChecked) label.classList.add('active');
-        label.appendChild(checkbox);
+        label.setAttribute('aria-pressed', initialChecked ? 'true' : 'false');
 
         // icon
         const iconDiv = document.createElement('div');
@@ -2376,6 +2371,26 @@ async function initializeLayerIcons() {
         // append to container
         container.appendChild(label);
 
+        // Click handler: toggle active state and perform the same actions as the checkbox change handler
+        label.addEventListener('click', (ev) => {
+            try {
+                const checked = !label.classList.contains('active');
+                // update visual and accessibility state
+                label.classList.toggle('active', checked);
+                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
+                // update runtime visibility and render
+                if (!map.layerVisibility) map.layerVisibility = {};
+                if (layerKey === 'route') {
+                    map.layerVisibility.route = checked;
+                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                } else {
+                    map.toggleLayer(layerKey, checked);
+                }
+                // persist updated map.layerVisibility
+                try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+            } catch (e) {}
+        });
+
         // Add pressed-state feedback for touch/pointer devices to avoid hover sticking
         label.addEventListener('pointerdown', (e) => {
             label.classList.add('pressed');
@@ -2387,21 +2402,7 @@ async function initializeLayerIcons() {
             label.classList.remove('pressed');
         });
 
-        // wire change handler per-layer (persist state)
-        checkbox.addEventListener('change', (e) => {
-            const checked = !!e.target.checked;
-            if (!map.layerVisibility) map.layerVisibility = {};
-            if (layerKey === 'route') {
-                map.layerVisibility.route = checked;
-                try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
-            } else {
-                map.toggleLayer(layerKey, checked);
-            }
-            // update active row visual to match checkbox
-            label.classList.toggle('active', checked);
-            // persist updated map.layerVisibility
-            try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
-        });
+        // No hidden checkbox: click handler above performs toggle and persistence.
 
         // Apply saved/initial state to runtime if it differs from current map state
         try {
@@ -2416,6 +2417,7 @@ async function initializeLayerIcons() {
                 }
                 // ensure the row visual matches the applied initial state
                 label.classList.toggle('active', initialChecked);
+                label.setAttribute('aria-pressed', initialChecked ? 'true' : 'false');
             }
         } catch (e) {}
     });
@@ -2486,17 +2488,13 @@ async function init() {
         };
 
         const applyToggle = (checked) => {
-            const inputs = Array.from(document.querySelectorAll('#layerList input[type=checkbox]'));
+            const rows = Array.from(document.querySelectorAll('#layerList .layer-toggle'));
             const newVisibility = {};
-            inputs.forEach(cb => {
-                cb.checked = !!checked;
-                const key = cb.id.replace(/^toggle_/, '');
+            rows.forEach(row => {
+                const key = row.dataset.layer;
                 newVisibility[key] = !!checked;
-                // reflect active visual state on the row label
-                try {
-                    const row = cb.closest && cb.closest('.layer-toggle');
-                    if (row) row.classList.toggle('active', !!checked);
-                } catch (e) {}
+                // reflect active visual state on the row
+                try { row.classList.toggle('active', !!checked); row.setAttribute('aria-pressed', !!checked ? 'true' : 'false'); } catch (e) {}
             });
             try {
                 map.layerVisibility = Object.assign({}, map.layerVisibility || {}, newVisibility);
