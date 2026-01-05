@@ -223,6 +223,14 @@ const MarkerUtils = {
                     map.customMarkers = LAYERS.customMarkers.markers;
                     if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
                     map.render();
+                    // If the deleted marker was selected, clear selection and hide tooltip
+                    try {
+                        if (map.selectedMarker && map.selectedMarker.uid === uid) {
+                            map.selectedMarker = null;
+                            map.selectedMarkerLayer = null;
+                            try { map.hideTooltip(); } catch (e) {}
+                        }
+                    } catch (e) {}
                 }
             } catch (e) {}
             return true;
@@ -255,6 +263,12 @@ const MarkerUtils = {
                 map.customMarkers = LAYERS.customMarkers.markers;
                 if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
                 map.render();
+                // Clear any selected marker and hide tooltip when all markers are removed
+                try {
+                    map.selectedMarker = null;
+                    map.selectedMarkerLayer = null;
+                    try { map.hideTooltip(); } catch (e) {}
+                } catch (e) {}
             }
         } catch (e) {}
     },

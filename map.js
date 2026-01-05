@@ -2415,6 +2415,13 @@ async function initializeLayerIcons() {
         label.addEventListener('click', (ev) => {
             try {
                 const checked = !label.classList.contains('active');
+                // Prevent turning off the customMarkers layer while in edit mode
+                if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
+                    // Keep visual state active and do nothing else
+                    try { label.classList.toggle('active', true); } catch (e) {}
+                    try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
+                    return;
+                }
                 // update visual and accessibility state
                 label.classList.toggle('active', checked);
                 label.setAttribute('aria-pressed', checked ? 'true' : 'false');
@@ -2682,12 +2689,44 @@ async function init() {
             try { editToggle.classList.toggle('pressed', on); } catch (e) {}
             try {
                 map.editMarkersMode = !!on;
+                if (map.editMarkersMode) {
+                    // Ensure the customMarkers layer is visible when entering edit mode
+                    try {
+                        // Prefer using the existing toggle API so UI and state stay in sync
+                        if (typeof map.toggleLayer === 'function') {
+                            map.toggleLayer('customMarkers', true);
+                        } else {
+                            if (!map.layerVisibility) map.layerVisibility = {};
+                            map.layerVisibility.customMarkers = true;
+                            try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                        }
+                        // Update the sidebar row visual if present and disable toggling while editing
+                        try {
+                            const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]');
+                            if (row) {
+                                row.classList.add('active');
+                                row.setAttribute('aria-pressed', 'true');
+                                row.classList.add('disabled');
+                                row.setAttribute('aria-disabled', 'true');
+                            }
+                        } catch (e) {}
+                        try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+                    } catch (e) {}
+                }
                 if (!map.editMarkersMode) {
                     // Clear any in-progress dragging state
                     map._draggingCandidate = null;
                     map._draggingMarker = null;
                     try { map.canvas.style.cursor = 'grab'; } catch (e) {}
                     try { map.render(); } catch (e) {}
+                    // Re-enable the customMarkers sidebar row if present
+                    try {
+                        const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]');
+                        if (row) {
+                            row.classList.remove('disabled');
+                            row.removeAttribute('aria-disabled');
+                        }
+                    } catch (e) {}
                 }
             } catch (e) {}
         });

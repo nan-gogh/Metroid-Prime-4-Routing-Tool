@@ -280,6 +280,12 @@ body {
     touch-action: manipulation;
     position: relative; /* for absolutely-positioned checkbox inside */
 }
+
+/* Disabled state for layer rows when editing custom markers - dim and block interaction */
+.layer-toggle.disabled {
+    opacity: 0.7;
+    pointer-events: none;
+}
 /* Active state: brighter background when the layer is enabled */
 .layer-toggle.active {
     /* Slight bluish active state */
