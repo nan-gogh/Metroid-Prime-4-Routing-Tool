@@ -2395,6 +2395,12 @@ async function initializeLayerIcons() {
         }, 300);
     };
 
+    // Gesture tracking for pointerdown-swipe toggles
+    let _gestureActive = false;
+    let _gesturePointerId = null;
+    let _gestureToggled = new Set();
+    const _controlsEl = document.querySelector('.controls');
+
     orderedEntries.forEach(([layerKey, layer]) => {
         // root row as a button (replaces hidden checkbox + label for reliable mobile toggles)
         const label = document.createElement('button');
@@ -2460,9 +2466,18 @@ async function initializeLayerIcons() {
         // append to container
         container.appendChild(label);
 
-        // Click handler: update UI immediately, then batch apply actual toggle/render and save
-        label.addEventListener('click', (ev) => {
+        // Pointer gesture: immediate toggle on pointerdown; swiping across rows toggles them
+        label.addEventListener('pointerdown', (ev) => {
             try {
+                // Only track primary pointers
+                if (ev.isPrimary === false) return;
+                try { ev.preventDefault(); } catch (e) {}
+                // Temporarily disable sidebar scrolling while interacting with layer rows
+                try { if (_controlsEl) _controlsEl.style.touchAction = 'none'; } catch (e) {}
+                _gestureActive = true;
+                _gesturePointerId = ev.pointerId;
+                _gestureToggled.add(label);
+
                 const checked = !label.classList.contains('active');
                 // Prevent turning off the customMarkers layer while in edit mode
                 if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
@@ -2470,6 +2485,7 @@ async function initializeLayerIcons() {
                     try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
                     return;
                 }
+
                 // Immediate visual feedback for responsiveness
                 try { label.classList.toggle('active', checked); } catch (e) {}
                 try { label.setAttribute('aria-pressed', checked ? 'true' : 'false'); } catch (e) {}
@@ -2508,6 +2524,48 @@ async function initializeLayerIcons() {
             }
         } catch (e) {}
     });
+
+    // Document-wide pointer handlers to support swipe-to-toggle across rows
+    document.addEventListener('pointermove', (ev) => {
+        try {
+            if (!_gestureActive || ev.pointerId !== _gesturePointerId) return;
+            const el = document.elementFromPoint(ev.clientX, ev.clientY);
+            if (!el) return;
+            const row = (typeof el.closest === 'function') ? el.closest('.layer-toggle') : null;
+            if (!row) return;
+            if (_gestureToggled.has(row)) return;
+            _gestureToggled.add(row);
+
+            const k = row.dataset && row.dataset.layer;
+            const willChecked = !row.classList.contains('active');
+            if (k === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !willChecked) {
+                try { row.classList.toggle('active', true); } catch (e) {}
+                try { row.setAttribute('aria-pressed', 'true'); } catch (e) {}
+                return;
+            }
+
+            try { row.classList.toggle('active', willChecked); } catch (e) {}
+            try { row.setAttribute('aria-pressed', willChecked ? 'true' : 'false'); } catch (e) {}
+            try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = !!willChecked; } catch (e) {}
+            try { _pendingLayerToggles[k] = !!willChecked; _scheduleApplyLayerToggles(); } catch (e) {}
+            try { _scheduleSaveLayerVisibility(); } catch (e) {}
+        } catch (e) {}
+    }, { passive: true });
+
+    const _endGesture = (ev) => {
+        try {
+            if (!_gestureActive) return;
+            if (ev && ev.pointerId && ev.pointerId !== _gesturePointerId) return;
+        } catch (e) {}
+        _gestureActive = false;
+        _gesturePointerId = null;
+        try { _gestureToggled.clear(); } catch (e) {}
+        try { if (_controlsEl) _controlsEl.style.touchAction = 'manipulation'; } catch (e) {}
+    };
+
+    document.addEventListener('pointerup', _endGesture, { passive: true });
+    document.addEventListener('pointercancel', _endGesture, { passive: true });
+
 }
 
 // Utility: attach pressed-state handlers to any element matching selector

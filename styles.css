@@ -267,7 +267,8 @@ body {
     padding: 10px 12px; /* match control buttons for consistent vertical sizing */
     min-height: 48px; /* ensure consistent row height for all layers */
     height: 48px; /* enforce uniform row height to match other sidebar controls */
-    width: 100%;
+    width: calc(100% - 48px);
+    margin-right: 48px; /* leave a vertical touch area on the right for scrolling */
     box-sizing: border-box;
     /* Darken default (disabled) state slightly so active rows stand out more */
     background: rgba(34, 211, 238, 0.03);
