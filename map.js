@@ -3294,6 +3294,12 @@ async function init() {
             });
             // await initial image (short timeout) but don't block startup forever
             await waitForInitialImage(4000);
+            // Do one overlay render now that the initial image is available
+            try {
+                if (map && typeof map.renderOverlay === 'function') map.renderOverlay();
+                // Give the browser a chance to paint and finish any decode work
+                await new Promise(res => requestAnimationFrame(() => setTimeout(res, 140)));
+            } catch (e) {}
         } catch (e) {}
         try { window._mp4Ready = true; } catch (e) {}
         document.dispatchEvent(new Event('mp4-ready'));
