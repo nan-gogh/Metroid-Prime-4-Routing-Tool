@@ -2,11 +2,11 @@
 // Requires data/init.js to be loaded first
 LAYERS.saveStation = {
     name: "Save Station",
-    icon: "💣",
-    color: "#7a37c7ff",
+    icon: "📥",
+    color: "#378bc7ff",
     prefix: "ss",
     markers: [
-        {"uid": "ss_43859e6e", "x": 0.40273678882914254, "y": 0.5024233070005625}
+        {"uid": "ss_43859e6e", "x": 0.4027367888291425, "y": 0.5024233070005625}
     ]
 };
 

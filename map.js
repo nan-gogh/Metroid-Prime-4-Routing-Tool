@@ -2319,6 +2319,8 @@ async function initializeLayerIcons() {
         // Determine initial checked state: preference order -> saved storage -> runtime map state -> default false
         const initialChecked = (savedVisibility && Object.prototype.hasOwnProperty.call(savedVisibility, layerKey)) ? !!savedVisibility[layerKey] : !!(map && map.layerVisibility && map.layerVisibility[layerKey]);
         checkbox.checked = initialChecked;
+        // reflect active visual state on the row
+        if (initialChecked) label.classList.add('active');
         label.appendChild(checkbox);
 
         // icon
@@ -2391,10 +2393,12 @@ async function initializeLayerIcons() {
             if (!map.layerVisibility) map.layerVisibility = {};
             if (layerKey === 'route') {
                 map.layerVisibility.route = checked;
-                map.render();
+                try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
             } else {
                 map.toggleLayer(layerKey, checked);
             }
+            // update active row visual to match checkbox
+            label.classList.toggle('active', checked);
             // persist updated map.layerVisibility
             try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
         });
@@ -2406,10 +2410,12 @@ async function initializeLayerIcons() {
                 if (!map.layerVisibility) map.layerVisibility = {};
                 if (layerKey === 'route') {
                     map.layerVisibility.route = initialChecked;
-                    map.render();
+                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
                 } else {
                     map.toggleLayer(layerKey, initialChecked);
                 }
+                // ensure the row visual matches the applied initial state
+                label.classList.toggle('active', initialChecked);
             }
         } catch (e) {}
     });
@@ -2486,6 +2492,11 @@ async function init() {
                 cb.checked = !!checked;
                 const key = cb.id.replace(/^toggle_/, '');
                 newVisibility[key] = !!checked;
+                // reflect active visual state on the row label
+                try {
+                    const row = cb.closest && cb.closest('.layer-toggle');
+                    if (row) row.classList.toggle('active', !!checked);
+                } catch (e) {}
             });
             try {
                 map.layerVisibility = Object.assign({}, map.layerVisibility || {}, newVisibility);
@@ -2509,10 +2520,13 @@ async function init() {
     // Wire the compact Save-data toggle and Clear button (consent-aware)
     try {
         const saveToggle = document.getElementById('saveDataToggle');
+        const saveLabel = document.getElementById('saveDataToggle_label');
         if (saveToggle) {
             // Initialize toggle state from consent flag
             const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
             saveToggle.checked = !!consent;
+            // reflect active visual state on the label like other layer toggles
+            try { if (saveLabel) saveLabel.classList.toggle('active', !!consent); } catch (e) {}
             saveToggle.addEventListener('change', async (ev) => {
                 const on = !!ev.target.checked;
                 if (on) {
@@ -2526,8 +2540,9 @@ async function init() {
                         '• Route looping\n\n' +
                         'Tap OK to enable or Cancel to keep storage off.';
                     if (!confirm(confirmMsg)) {
-                        // User cancelled; restore toggle to unchecked
+                        // User cancelled; restore toggle to unchecked and update visual
                         try { ev.target.checked = false; } catch (e) {}
+                        try { if (saveLabel) saveLabel.classList.toggle('active', false); } catch (e) {}
                         return;
                     }
                 }
@@ -2574,6 +2589,7 @@ async function init() {
                         } catch (e) {}
                     } catch (e) {}
                     // Refresh UI counts to reflect that data has been saved
+                    try { if (saveLabel) saveLabel.classList.toggle('active', true); } catch (e) {}
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
                     // Ask for confirmation before permanently deleting saved local data
@@ -2588,6 +2604,7 @@ async function init() {
                     if (!confirm(confirmMsg)) {
                         // User cancelled; restore toggle and keep consent enabled
                         try { ev.target.checked = true; } catch (e) {}
+                        try { if (saveLabel) saveLabel.classList.toggle('active', true); } catch (e) {}
                         try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
                     } else {
                         // User confirmed deletion: remove known keys then reload page
@@ -2601,6 +2618,7 @@ async function init() {
                         } catch (e) {}
                         // Ensure toggle appears unchecked then reload so app starts fresh
                         try { if (saveToggle) saveToggle.checked = false; } catch (e) {}
+                        try { if (saveLabel) saveLabel.classList.toggle('active', false); } catch (e) {}
                         try { location.reload(); } catch (e) { /* fallback: continue without reload */ }
                     }
                 }
@@ -3255,6 +3273,28 @@ async function init() {
     // Signal that the app finished initial synchronous startup work so the UI
     // (loading fade) can be removed when the page is ready for interaction.
     try {
+        // Wait briefly for the initial map image to arrive so the first
+        // visible render (especially at very large zooms) doesn't cause
+        // heavy decoding work while the page is already unfaded.
+        // This polls for either `map.images[needed]` or `map.currentImage`.
+        try {
+            const waitForInitialImage = (timeoutMs = 4000) => new Promise((resolve) => {
+                const start = Date.now();
+                (function check() {
+                    try {
+                        if (map) {
+                            const needed = (typeof map.getNeededResolution === 'function') ? map.getNeededResolution() : null;
+                            if (needed !== null && map.images && map.images[needed]) return resolve(true);
+                            if (map.currentImage) return resolve(true);
+                        }
+                    } catch (e) {}
+                    if (Date.now() - start >= timeoutMs) return resolve(false);
+                    setTimeout(check, 80);
+                })();
+            });
+            // await initial image (short timeout) but don't block startup forever
+            await waitForInitialImage(4000);
+        } catch (e) {}
         try { window._mp4Ready = true; } catch (e) {}
         document.dispatchEvent(new Event('mp4-ready'));
     } catch (e) {}

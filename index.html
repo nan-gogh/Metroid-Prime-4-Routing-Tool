@@ -10,7 +10,11 @@
     <link rel="apple-touch-icon" href="graphics/mp4b_routing_favicon.png">
 </head>
 <body>
-    <div id="loadFade" aria-hidden="true"></div>
+    <div id="loadFade" aria-hidden="true">
+        <div class="loader" role="img" aria-label="Loading">
+            <img src="graphics/mp4b_routing_logo_ball.svg" alt="Loading" class="loading-logo">
+        </div>
+    </div>
     <div class="app-container">
         <aside class="sidebar">
             <div class="header">
@@ -30,7 +34,7 @@
                     <div style="margin-bottom:8px;">
                         <label class="layer-toggle dev-toggle" id="saveDataToggle_label">
                             <input type="checkbox" id="saveDataToggle">
-                            <div class="layer-icon" style="background:#888; font-size:14px;">💾</div>
+                            <div class="layer-icon" style="background:#ffffff; font-size:14px;">💾</div>
                             <div class="layer-info">
                                 <div class="layer-name">Local Storage</div>
                                 <div class="layer-count">Consent for local saves</div>
@@ -84,6 +88,7 @@
                         <div class="dataminer-row"><div class="dataminer-label">Cryptic Jacknife</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Supreme Dirt</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Meta_X</div></div>
+                        <div class="dataminer-row"><div class="dataminer-label">rekameohs</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Tal</div></div>
                     </div>
                 </div>
@@ -156,6 +161,7 @@
     <script src="data/layers/bombExpansion.js"></script>
     <script src="data/layers/mechPart.js"></script>
     <script src="data/layers/entrance.js"></script>
+    <script src="data/layers/saveStation.js"></script>
     <script src="data/layers/shrine.js"></script>
     <script src="data/layers/tokabisCamp.js"></script>
     <script src="data/layers/scoutBot.js"></script>

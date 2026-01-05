@@ -37,6 +37,32 @@ body {
     height: 100vh;
 }
 
+/* Loader logo centered inside the load overlay */
+#loadFade .loader {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 128px;
+    height: 128px;
+    pointer-events: none;
+}
+
+.loading-logo {
+    width: 96px;
+    height: 96px;
+    display: block;
+    animation: logo-spin 1600ms linear infinite;
+    will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loading-logo { animation: none; transform: none !important; }
+}
+
 /* Sidebar */
 .sidebar {
 
@@ -199,42 +225,57 @@ body {
     margin-bottom: 12px;
 }
 
+/* Layer list container: vertical stack with 1px spacing between rows */
+#layerList {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
 .layer-toggle {
     display: flex;
     align-items: center;
     gap: 12px; /* tighter spacing between icon/checkbox and text */
     padding: 4px 9px; /* reduce vertical padding to shrink row height */
-    background: rgba(255, 255, 255, 0.05);
+    min-height: 40px; /* ensure consistent row height for all layers (fixes grid row) */
+    height: 40px; /* enforce uniform row height to avoid inconsistent rendering across rows */
+    /* Darken default (disabled) state slightly so active rows stand out more */
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.18s;
     /* Prevent browser double-tap zoom on touch devices */
     touch-action: manipulation;
+    position: relative; /* for absolutely-positioned checkbox inside */
 }
 
 .layer-toggle.pressed,
 .layer-toggle:active {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Active state: brighter background when the layer is enabled */
+.layer-toggle.active {
+    background: rgba(255, 255, 255, 0.14);
 }
 
 .layer-toggle input[type="checkbox"] {
+    /* Visually hide native checkbox while keeping it accessible and keyboard-focusable. */
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 20px;
     height: 20px;
-    /* Use custom appearance so browsers don't render a white box in unchecked state */
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    background: transparent;
+    border: none;
     -webkit-appearance: none;
     appearance: none;
-    border-radius: 6px;
-    border: 1px solid rgba(34,211,238,0.10);
-    background-color: rgba(6,20,30,0.45);
-    background-image: linear-gradient(180deg, rgba(6,20,30,0.6) 0%, rgba(4,16,24,0.45) 100%);
-    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.25);
-    display: inline-block;
-    vertical-align: middle;
     cursor: pointer;
-    transition: background 140ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
-    position: relative;
-    -webkit-tap-highlight-color: rgba(0,0,0,0);
-    user-select: none;
+    z-index: 2; /* keep focus events reachable */
 }
 
 .layer-toggle input[type="checkbox"]:focus-visible {
@@ -259,27 +300,25 @@ body {
 
 /* Draw the checkmark with a pseudo-element to avoid native UA check flashes on mobile */
 .layer-toggle input[type="checkbox"]::after {
-    /* Use an inline SVG (data URI) for a non-emoji, crisp icon that matches the
-       project's cyan accent. The pseudo-element is scaled in/out for animation. */
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%) scale(0);
-    width: 14px;
-    height: 14px;
-    background-image: url("graphics/checkmark.svg");
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    transition: transform 120ms cubic-bezier(.2,.9,.3,1), opacity 120ms ease;
-    opacity: 0;
-    pointer-events: none;
+    /* hide the visual checkmark since we use row highlighting instead */
+    display: none;
 }
 
 .layer-toggle input[type="checkbox"]:checked::after {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
+    display: none;
+}
+
+/* Show a subtle focus ring on the entire row when the hidden checkbox is focused */
+.layer-toggle:focus-within {
+    /* Intentionally empty: no persistent outline on toggle rows */
+    box-shadow: none;
+}
+
+/* Ensure the invisible checkbox does not show a native focus ring */
+.layer-toggle input[type="checkbox"]:focus,
+.layer-toggle input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 .layer-icon {
