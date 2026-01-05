@@ -727,37 +727,85 @@ class InteractiveMap {
         });
         
         // Click handler - place custom markers or delete them when tapped
-        // Immediate UI feedback on touch: update row visual on pointerdown so taps feel instant
-        label.addEventListener('pointerdown', (ev) => {
-            try {
-                const willBeChecked = !label.classList.contains('active');
-                label.classList.toggle('active', willBeChecked);
-                label.setAttribute('aria-pressed', willBeChecked ? 'true' : 'false');
-                label.dataset.pendingChecked = willBeChecked ? '1' : '0';
-            } catch (e) {}
-        });
+        this.canvas.addEventListener('click', (e) => {
+            // Check if this was a quick tap (not a held drag)
+            // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
+            const holdDuration = Date.now() - this.pointerDownTime;
+            
+            // Only interact on quick taps (less than threshold)
+            const isQuickTap = this.pointerDownTime > 0 && holdDuration < this.minClickDuration;
+            
+            // Clear timer after use (important for preventing double-placement)
+            this.pointerDownTime = 0;
+            
+            // Determine whether a marker exists at the click location (don't rely on hoveredMarker for custom markers)
+            const rect = this.canvas.getBoundingClientRect();
+            const localX = e.clientX - rect.left;
+            const localY = e.clientY - rect.top;
+            const hit = this.findMarkerAt(localX, localY);
 
-        // Click handler: use pendingChecked (set by pointerdown) when present to avoid double-flip
-        label.addEventListener('click', (ev) => {
-            try {
-                const pending = label.dataset.pendingChecked;
-                const checked = (typeof pending !== 'undefined') ? (pending === '1') : !label.classList.contains('active');
-                try { delete label.dataset.pendingChecked; } catch (e) {}
-                // update visual and accessibility state (idempotent)
-                label.classList.toggle('active', checked);
-                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
-                // update runtime visibility and render
-                if (!map.layerVisibility) map.layerVisibility = {};
-                if (layerKey === 'route') {
-                    map.layerVisibility.route = checked;
-                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+            if (isQuickTap && hit) {
+                const layerKey = hit.layerKey;
+                // Helper determination: deletable layers (custom markers) vs selectable layers
+                const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
+                const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
+
+                if (this.editMarkersMode) {
+                    // In edit mode: allow deletion (custom markers are editable regardless of flags)
+                    const isCustom = (layerKey === 'customMarkers');
+                    if (isDeletable || isCustom) {
+                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
+                            MarkerUtils.deleteCustomMarker(hit.marker.uid);
+                            this.checkMarkerHover(localX, localY);
+                        }
+                    }
                 } else {
-                    map.toggleLayer(layerKey, checked);
+                    // Normal mode: selection and tooltip behavior
+                    if (isSelectable) {
+                        const uid = hit.marker.uid;
+                        if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
+                            // deselect
+                            this.selectedMarker = null;
+                            this.selectedMarkerLayer = null;
+                            this.hideTooltip();
+                            this.render();
+                        } else {
+                            // select
+                            this.selectedMarker = hit.marker;
+                            this.selectedMarkerLayer = layerKey;
+                            // compute screen coords for tooltip placement
+                            const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
+                            const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
+                            this.showTooltip(hit.marker, screenX, screenY, layerKey);
+                            this.render();
+                        }
+                    }
                 }
-                // persist updated map.layerVisibility
-                try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
-            } catch (e) {}
-        });
+            } else if (e.button === 0 && isQuickTap && !hit) {
+                // Quick tap on empty space - place custom marker
+                // Reuse previously computed localX/localY to avoid redundant layout read
+                const clientX = localX;
+                const clientY = localY;
+                
+                // Convert to world coordinates (0-1 normalized)
+                const worldX = (clientX - this.panX) / this.zoom / MAP_SIZE;
+                const worldY = (clientY - this.panY) / this.zoom / MAP_SIZE;
+                
+                // Only place if within map bounds
+                if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
+                    // Do not allow placement when the custom markers layer is hidden
+                    if (!this.layerVisibility || !this.layerVisibility.customMarkers) {
+                        return;
+                    }
+                    // Only place markers when edit mode is active
+                    if (this.editMarkersMode) {
+                        if (typeof MarkerUtils !== 'undefined') {
+                            MarkerUtils.addCustomMarker(worldX, worldY);
+                            // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
+                            this.checkMarkerHover(localX, localY);
+                        }
+                    }
+                }
             }
         });
         
@@ -2306,6 +2354,47 @@ async function initializeLayerIcons() {
         orderedEntries.push(gridEntry);
     }
 
+    // Pending/batched layer toggle applier (RAF) and debounced storage saver
+    let _pendingLayerToggles = {};
+    let _layerToggleRaf = null;
+    let _layerToggleSaveTimeout = null;
+    const _scheduleApplyLayerToggles = () => {
+        if (_layerToggleRaf) return;
+        _layerToggleRaf = requestAnimationFrame(() => {
+            const toApply = _pendingLayerToggles;
+            _pendingLayerToggles = {};
+            _layerToggleRaf = null;
+            try {
+                if (map) {
+                    // Apply each pending toggle via the existing map API so side-effects run
+                    for (const [k, v] of Object.entries(toApply)) {
+                        try {
+                            if (k === 'route') {
+                                map.layerVisibility = Object.assign({}, map.layerVisibility || {}, { route: v });
+                                try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                            } else {
+                                if (typeof map.toggleLayer === 'function') {
+                                    map.toggleLayer(k, v);
+                                } else {
+                                    if (!map.layerVisibility) map.layerVisibility = {};
+                                    map.layerVisibility[k] = v;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    try { if (map) map.renderOverlay(); } catch (e) { try { if (map) map.render(); } catch (e) {} }
+                }
+            } catch (e) {}
+        });
+    };
+    const _scheduleSaveLayerVisibility = () => {
+        try { if (_layerToggleSaveTimeout) clearTimeout(_layerToggleSaveTimeout); } catch (e) {}
+        _layerToggleSaveTimeout = setTimeout(() => {
+            try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) {}
+            _layerToggleSaveTimeout = null;
+        }, 300);
+    };
+
     orderedEntries.forEach(([layerKey, layer]) => {
         // root row as a button (replaces hidden checkbox + label for reliable mobile toggles)
         const label = document.createElement('button');
@@ -2371,30 +2460,28 @@ async function initializeLayerIcons() {
         // append to container
         container.appendChild(label);
 
-        // Click handler: toggle active state and perform the same actions as the checkbox change handler
+        // Click handler: update UI immediately, then batch apply actual toggle/render and save
         label.addEventListener('click', (ev) => {
             try {
                 const checked = !label.classList.contains('active');
                 // Prevent turning off the customMarkers layer while in edit mode
                 if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
-                    // Keep visual state active and do nothing else
                     try { label.classList.toggle('active', true); } catch (e) {}
                     try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
                     return;
                 }
-                // update visual and accessibility state
-                label.classList.toggle('active', checked);
-                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
-                // update runtime visibility and render
-                if (!map.layerVisibility) map.layerVisibility = {};
-                if (layerKey === 'route') {
-                    map.layerVisibility.route = checked;
-                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
-                } else {
-                    map.toggleLayer(layerKey, checked);
-                }
-                // persist updated map.layerVisibility
-                try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+                // Immediate visual feedback for responsiveness
+                try { label.classList.toggle('active', checked); } catch (e) {}
+                try { label.setAttribute('aria-pressed', checked ? 'true' : 'false'); } catch (e) {}
+
+                // Update runtime visibility object so other code reads the new state
+                try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[layerKey] = !!checked; } catch (e) {}
+
+                // Queue the heavier work to RAF to batch rapid toggles
+                try { _pendingLayerToggles[layerKey] = !!checked; _scheduleApplyLayerToggles(); } catch (e) {}
+
+                // Debounced save to storage
+                try { _scheduleSaveLayerVisibility(); } catch (e) {}
             } catch (e) {}
         });
 
