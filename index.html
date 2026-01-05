@@ -23,28 +23,17 @@
                     <img src="graphics/mp4b_routing_logo_geotag.svg" alt="" class="logo-geotag">
                 </div>
                 <div class="title-block">
-                    <h1>Metroid Prime 4 Routing Tool</h1>
+                    <h1>Metroid Prime 4 Routing</h1>
                     <h2>Sol Valley</h2>
                 </div>
             </div>
             
             <div class="controls">
                 
-                <div class="control-group" id="settingsSection">
-                    <h3>Settings</h3>
-                    <div style="margin-bottom:12px;">
-                        <button type="button" class="layer-toggle dev-toggle" id="saveDataToggle_label" aria-pressed="false">
-                            <div class="layer-icon" style="background:#ffffff; font-size:14px;">💾</div>
-                            <div class="layer-info">
-                                <div class="layer-name">Local Storage</div>
-                                <div class="layer-count">Consent for local saves</div>
-                            </div>
-                        </button>
-                    </div>
-                </div>
+                
 
-                <div class="control-group">
-                    <h3>Layers</h3>
+                <div class="control-group section-glow">
+                    <h3>L a y e r s</h3>
                     <div class="layer-controls-inline" style="margin-bottom:8px; display:flex; gap:8px;">
                         <button id="showAllLayersBtn" class="control-btn">Show All</button>
                         <button id="hideAllLayersBtn" class="control-btn">Hide All</button>
@@ -52,8 +41,8 @@
                     <div id="layerList"></div>
                 </div>
 
-                <div class="control-group">
-                    <h3>Mapping</h3>
+                <div class="control-group section-glow">
+                    <h3>M a p p i n g</h3>
                     <div class="tileset-controls">
                         <button id="tilesetSatBtn" class="control-btn" aria-pressed="false">Satellite</button>
                         <button id="tilesetHoloBtn" class="control-btn" aria-pressed="false">Holographic</button>
@@ -61,17 +50,20 @@
                     </div>
                 </div>
             
-                <div class="control-group">
-                    <h3>Routing</h3>
+                <div class="control-group section-glow">
+                    <h3>R o u t i n g</h3>
+                    <button id="editRouteToggle" class="control-btn" aria-pressed="false">Edit Route</button>
                     <button id="computeRouteImprovedBtn" class="control-btn">Compute Route</button>
-                    <button id="toggleRouteDirBtn" class="control-btn" aria-pressed="false">Reverse Direction</button>
+                    <button id="computeRouteNearbyBtn" class="control-btn">Expand Route</button>
+                    <button id="loopRouteBtn" class="control-btn" aria-pressed="false">Loop Route</button>
+                    <button id="toggleRouteDirBtn" class="control-btn" aria-pressed="false">Reverse Route</button>
                     <button id="exportRoute" class="control-btn">Export Route</button>
                     <button id="importRoute" class="control-btn">Import Route</button>
                     <button id="clearRouteBtn" class="control-btn danger">Clear Route</button>
                 </div>
                 
-                <div class="control-group" id="customMarkerControls">
-                    <h3>Custom Markers</h3>
+                <div class="control-group section-glow" id="customMarkerControls">
+                    <h3>M a r k e r s</h3>
                     <button id="editMarkersToggle" class="control-btn" aria-pressed="false">Edit Markers</button>
                     <button id="exportCustom" class="control-btn">Export Markers</button>
                     <button id="importCustom" class="control-btn">Import Markers</button>
@@ -80,25 +72,25 @@
                     <input type="file" id="importRouteFile" accept=".json" style="display:none;">
                 </div>
 
-                <div class="control-group" id="linksSection">
-                    <h3>Links</h3>
+                <div class="control-group section-glow" id="linksSection">
+                    <h3>L i n k s</h3>
                     <button id="githubBtn" class="control-btn">GitHub Repository</button>
                     <button id="discordBtn" class="control-btn">Discord Community</button>
                 </div>
 
-                <div class="control-group" id="dataminersSection">
-                    <h3>Contributors</h3>
+                <div class="control-group section-glow" id="dataminersSection">
+                    <h3>C o n t r i b u t o r s</h3>
                     <div class="dataminers-list">
                         <div class="dataminer-row"><div class="dataminer-label">Cryptic Jacknife</div></div>
-                        <div class="dataminer-row"><div class="dataminer-label">Supreme Dirt</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Meta_X</div></div>
+                        <div class="dataminer-row"><div class="dataminer-label">Supreme Dirt</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">rekameohs</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Tal</div></div>
                     </div>
                 </div>
 
-                <div class="control-group" id="devTools">
-                    <h3>Dev Tools</h3>
+                <div class="control-group section-glow" id="devTools">
+                    <h3>D e v   T o o l s</h3>
                     <div id="devStatsPanel" class="dev-stats" aria-live="polite">
                         <div class="dev-row"><div class="dev-label">Decoders active</div><div class="dev-value" id="dev_bitmapActive">0</div></div>
                         <div class="dev-row"><div class="dev-label">Decode queue</div><div class="dev-value" id="dev_bitmapQueue">0</div></div>
@@ -113,15 +105,27 @@
             <!-- Hints button at bottom of controls -->
             <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList">Controls</button>
 
+            <!-- Local Storage (consent) toggle moved here per preference -->
+            <button type="button" class="control-btn" id="saveDataToggle_label" aria-pressed="false">
+                <div class="layer-info">
+                    <div class="layer-name">Local Storage Consent</div>
+                </div>
+            </button>
+
             <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level -->
             <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
                 <div class="hints-list" id="hintsList">
-                    <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
-                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4h_pin_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
-                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
                     <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                    <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
-                    <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
+                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+                    <span class="hint-group"><kbd>0</kbd>/<kbd>𖦏</kbd> <span class="hint-label">Reset</span></span>
+                    <span class="hint-group"><kbd>Space</kbd>/<kbd>◼</kbd>/<kbd>◧</kbd> <span class="hint-label">Toggle sidebar</span></span>
+                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_marker_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
+                    <span class="hint-group"><kbd>X</kbd> <span class="hint-label">Clear Custom Markers</span></span>
+                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_route_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Route</span></span>
+                    <span class="hint-group"><kbd>C</kbd> <span class="hint-label">Expand Route</span></span>
+                    <span class="hint-group"><kbd>&lt;</kbd> <span class="hint-label">Reverse Route</span></span>
+                    <span class="hint-group"><kbd>Y</kbd> <span class="hint-label">Clear Route</span></span>
+                    <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
                 </div>
             </div>
 
@@ -133,17 +137,21 @@
             <canvas id="mapTiles" aria-hidden="true"></canvas>
             <!-- Overlay canvas for routes & markers (keeps existing id for compatibility with map.js) -->
             <canvas id="mapCanvas"></canvas>
+            <div id="editOverlay" class="edit-overlay" aria-hidden="true"></div>
             
             <div class="zoom-controls">
                 <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true" title="Toggle sidebar">
-                    <span class="handle-icon">◀</span>
+                    <span class="handle-icon">◼</span>
+                </button>
+                <button id="editRouteToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Route">
+                    <img src="graphics/mp4b_route_icon.svg" alt="Edit Route" class="mini-icon">
                 </button>
                 <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers">
-                    <img src="graphics/mp4h_pin_icon.svg" alt="Edit Markers" class="mini-icon">
+                    <img src="graphics/mp4b_marker_icon.svg" alt="Edit Markers" class="mini-icon">
                 </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
-                <button class="zoom-btn" id="resetView" title="Reset View">⌂</button>
+                <button class="zoom-btn" id="resetView" title="Reset View">𖦏</button>
             </div>
         </main>
     </div>
@@ -154,6 +162,7 @@
     <script src="data/layers/geCrystallization1.js"></script>
     <script src="data/layers/geCrystallization2.js"></script>
     <script src="data/layers/geCrystallization3.js"></script>
+    <script src="data/layers/gibardaumRock.js"></script>
     <script src="data/layers/boostTank.js"></script>
     <script src="data/layers/energyTank.js"></script>
     <script src="data/layers/shotUpgrade.js"></script>
@@ -161,9 +170,9 @@
     <script src="data/layers/shotExpansion.js"></script>
     <script src="data/layers/bombExpansion.js"></script>
     <script src="data/layers/mechPart.js"></script>
-    <script src="data/layers/entrance.js"></script>
+    <script src="data/layers/areaEntrance.js"></script>
     <script src="data/layers/saveStation.js"></script>
-    <script src="data/layers/shrine.js"></script>
+    <script src="data/layers/shrineLift.js"></script>
     <script src="data/layers/tokabisCamp.js"></script>
     <script src="data/layers/scoutBot.js"></script>
     <script src="data/layers/gfDebris.js"></script>

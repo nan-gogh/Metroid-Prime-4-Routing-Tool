@@ -62,6 +62,30 @@ class InteractiveMap {
                 this._bitmapLimit = 1;
             }
         } catch (e) {}
+
+    // Loop Route toggle: explicit control for closing/opening computed/manual routes
+    try {
+        const loopBtn = document.getElementById('loopRouteBtn');
+        const updateLoopUI = () => {
+            if (!loopBtn) return;
+            try { loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false'); } catch (e) {}
+        };
+        if (loopBtn) {
+            loopBtn.addEventListener('click', () => {
+                map.routeLooping = !map.routeLooping;
+                try {
+                    if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                        window._mp4Storage.saveSetting('mp4_route_looping_flag', map.routeLooping ? '1' : '0');
+                    } else {
+                        try { localStorage.setItem('mp4_route_looping_flag', map.routeLooping ? '1' : '0'); } catch (e) {}
+                    }
+                } catch (e) {}
+                try { map.render(); } catch (e) {}
+                updateLoopUI();
+            });
+        }
+        updateLoopUI();
+    } catch (e) {}
         
         // Markers
         this.markers = [];
@@ -108,6 +132,9 @@ class InteractiveMap {
         this.editMarkersMode = false;
         // Edit mode for route editing: when true, route editing interactions are enabled
         this.editRouteMode = false;
+        // Whether the current route should be rendered as a closed loop.
+        // Default: do not loop routes unless user explicitly enables looping via the UI.
+        this.routeLooping = false;
         // Wheel save timer used to delay saving until wheel stops
         this._wheelSaveTimer = null;
         // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
@@ -320,12 +347,39 @@ class InteractiveMap {
             const localY = e.clientY - rect.top;
             const downTime = Date.now();
             this.pointers.set(e.pointerId, { x: localX, y: localY, clientX: e.clientX, clientY: e.clientY, downTime });
+            // Clear any transient preview when pointer goes down
+            this._routePreview = null;
+            try { this.checkMarkerHover(localX, localY); } catch (e) {}
 
                 if (this.pointers.size === 1) {
-                    // Determine whether pointerdown hit a custom marker — if so, mark candidate
-                    // but do not start the drag until movement exceeds threshold. This preserves
-                    // quick-tap behavior (click to delete) when the user just taps.
+                    // Determine whether pointerdown hit a marker — handle route-node-drag
+                    // when in route-edit mode, otherwise treat customMarkers specially.
                     const hit = this.findMarkerAt(localX, localY);
+                    // If in route-edit mode and user pressed on a marker that's part of the current route,
+                    // begin an edit-drag of that waypoint (replace with a temporary waypoint in route order).
+                    if (hit && this.editRouteMode && hit.marker && hit.marker.uid && Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
+                        let routePos = -1;
+                        for (let i = 0; i < this.currentRoute.length; i++) {
+                            const src = this._routeSources[this.currentRoute[i]];
+                            if (src && src.marker && src.marker.uid === hit.marker.uid) { routePos = i; break; }
+                        }
+                        if (routePos >= 0) {
+                            // Create a candidate for route-node-drag; promote on pointermove when movement exceeds threshold
+                            this._routeNodeCandidate = {
+                                uid: hit.marker.uid,
+                                layerKey: hit.layerKey,
+                                pointerId: e.pointerId,
+                                routePos: routePos,
+                                startClientX: e.clientX,
+                                startClientY: e.clientY
+                            };
+                            // Do not zero pointerDownTime yet so clicks still register if user doesn't move
+                            this.pointerDownTime = downTime;
+                            try { this.canvas.style.cursor = 'pointer'; } catch (e) {}
+                            // Prevent starting a pan immediately; wait for promotion on pointermove
+                            return;
+                        }
+                    }
                     if (hit && hit.layerKey === 'customMarkers') {
                         if (this.editMarkersMode) {
                             // Edit mode: prepare for potential drag of the custom marker
@@ -350,6 +404,52 @@ class InteractiveMap {
                             try { this.canvas.style.cursor = 'pointer'; } catch (err) {}
                         }
                     } else {
+                        // If in route-edit mode and user pressed near a route segment, begin an insert-drag
+                        if (this.editRouteMode) {
+                            const seg = this.findRouteSegmentAt(localX, localY, 10);
+                            if (seg && typeof seg.index === 'number') {
+                                try {
+                                    const worldX = (localX - this.panX) / this.zoom / MAP_SIZE;
+                                    const worldY = (localY - this.panY) / this.zoom / MAP_SIZE;
+                                    const prevSources = Array.isArray(this._routeSources) ? this._routeSources.slice() : [];
+                                    const prevIndices = Array.isArray(this.currentRoute) ? this.currentRoute.slice() : [];
+                                    // Build a route-ordered sources array (so segment indices map to positions)
+                                    const ordered = [];
+                                    for (let ri = 0; ri < prevIndices.length; ri++) {
+                                        const srcIdx = prevIndices[ri];
+                                        const src = prevSources[srcIdx];
+                                        if (!src) continue;
+                                        ordered.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: ordered.length });
+                                    }
+                                    // Create temporary marker/source and insert into the route-ordered array
+                                    const tempMarker = { uid: '', x: Number(worldX), y: Number(worldY) };
+                                    const tempSource = { marker: tempMarker, layerKey: 'temp', layerIndex: -1 };
+                                    const insertAt = seg.index + 1;
+                                    ordered.splice(insertAt, 0, tempSource);
+                                    const newSources = ordered;
+                                    const newIndices = newSources.map((_, i) => i);
+                                    // Apply as current route (temporary, ordered)
+                                    this.setRoute(newIndices, this.computeRouteLengthNormalized(newSources), newSources);
+                                    // While inserting, treat the temporary route as having an explicit start point
+                                    // Do not change looping preference while inserting; looping is explicit via UI
+                                    // Save insertion state for ongoing drag
+                                    this._routeInsert = {
+                                        pointerId: e.pointerId,
+                                        tempIndex: insertAt,
+                                        prevSources,
+                                        prevIndices,
+                                            prevRouteLooping: !!this.routeLooping,
+                                        hoverMarker: null,
+                                        hoverOccupied: false
+                                    };
+                                    // Prevent click handler from firing for this gesture
+                                    this.pointerDownTime = 0;
+                                    this.canvas.style.cursor = 'grabbing';
+                                    // Do not start pan
+                                    return;
+                                } catch (err) { /* fallthrough to pan */ }
+                            }
+                        }
                         // start single-pointer pan
                         this.isDragging = true;
                         this.lastMouseX = e.clientX;
@@ -412,6 +512,85 @@ class InteractiveMap {
                 }
             }
 
+            // Promote a route-node candidate to an active temporary route-insert when moved enough
+            if (this._routeNodeCandidate && e.pointerId === this._routeNodeCandidate.pointerId) {
+                const dxn = e.clientX - this._routeNodeCandidate.startClientX;
+                const dyn = e.clientY - this._routeNodeCandidate.startClientY;
+                if (Math.hypot(dxn, dyn) > MOVE_THRESHOLD) {
+                    try {
+                        const routePos = Number(this._routeNodeCandidate.routePos) || 0;
+                        const prevSources = Array.isArray(this._routeSources) ? this._routeSources.slice() : [];
+                        const prevIndices = Array.isArray(this.currentRoute) ? this.currentRoute.slice() : [];
+                        // Build route-ordered array
+                        const ordered = [];
+                        for (let ri = 0; ri < prevIndices.length; ri++) {
+                            const srcIdx = prevIndices[ri];
+                            const src = prevSources[srcIdx];
+                            if (!src) continue;
+                            ordered.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: ordered.length });
+                        }
+                        // Insert a temporary marker replacing the selected node
+                        const worldX = (localX - this.panX) / this.zoom / MAP_SIZE;
+                        const worldY = (localY - this.panY) / this.zoom / MAP_SIZE;
+                        const tempMarker = { uid: '', x: Number(worldX), y: Number(worldY) };
+                        const tempSource = { marker: tempMarker, layerKey: 'temp', layerIndex: -1 };
+                        ordered[routePos] = tempSource;
+                        const newSources = ordered;
+                        const newIndices = newSources.map((_, i) => i);
+                        this.setRoute(newIndices, this.computeRouteLengthNormalized(newSources), newSources);
+                        this._routeInsert = {
+                            pointerId: e.pointerId,
+                            tempIndex: routePos,
+                            prevSources,
+                            prevIndices,
+                            prevRouteLooping: !!this.routeLooping,
+                            hoverMarker: null,
+                            hoverOccupied: false
+                        };
+                        this._routeNodeCandidate = null;
+                        // Prevent click handler
+                        this.pointerDownTime = 0;
+                        try { this.canvas.style.cursor = 'grabbing'; } catch (e) {}
+                        // Let subsequent pointermove logic handle position updates via _routeInsert
+                        return;
+                    } catch (err) { this._routeNodeCandidate = null; }
+                }
+            }
+
+            // If we're dragging a temporary route-insert waypoint, update its position and hover state
+            if (this._routeInsert && e.pointerId === this._routeInsert.pointerId) {
+                try {
+                    const tempIdx = this._routeInsert.tempIndex;
+                    if (this._routeSources && this._routeSources[tempIdx]) {
+                        const worldX = (localX - this.panX) / this.zoom / MAP_SIZE;
+                        const worldY = (localY - this.panY) / this.zoom / MAP_SIZE;
+                        // Clamp to map bounds
+                        this._routeSources[tempIdx].marker.x = Math.max(0, Math.min(1, Number(worldX)));
+                        this._routeSources[tempIdx].marker.y = Math.max(0, Math.min(1, Number(worldY)));
+                    }
+                    // Check for marker under pointer to snap to
+                    const hitMarker = this.findMarkerAt(localX, localY);
+                    if (hitMarker && hitMarker.marker && hitMarker.marker.uid) {
+                        // Check if marker already part of route (exclude temp index)
+                        let exists = false;
+                        for (let i = 0; i < this._routeSources.length; i++) {
+                            if (i === this._routeInsert.tempIndex) continue;
+                            const s = this._routeSources[i];
+                            if (s && s.marker && s.marker.uid && s.marker.uid === hitMarker.marker.uid) { exists = true; break; }
+                        }
+                        this._routeInsert.hoverMarker = hitMarker.marker;
+                        this._routeInsert.hoverOccupied = !!exists;
+                    } else {
+                        this._routeInsert.hoverMarker = null;
+                        this._routeInsert.hoverOccupied = false;
+                    }
+                    // Update length and render
+                    try { this.currentRouteLengthNormalized = this.computeRouteLengthNormalized(this._routeSources); this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE; } catch (e) {}
+                    this.render();
+                } catch (err) {}
+                return;
+            }
+
             // If we're currently dragging a custom marker with this pointer, move it
             if (this._draggingMarker && e.pointerId === this._draggingMarker.pointerId) {
                 try {
@@ -442,6 +621,40 @@ class InteractiveMap {
                 }
                 return;
             }
+
+            // Show a lightweight preview when hovering near a route segment in edit mode
+            try {
+                const canPreview = !this.isDragging && !this._draggingMarker && !this._draggingCandidate && !this._routeInsert && !this._routeNodeCandidate && this.editRouteMode;
+                if (canPreview) {
+                    const seg = this.findRouteSegmentAt(localX, localY, 10);
+                    if (seg && typeof seg.index === 'number') {
+                        const len = Array.isArray(this.currentRoute) ? this.currentRoute.length : 0;
+                        if (len > 1) {
+                            const idxA = this.currentRoute[seg.index];
+                            const idxB = this.currentRoute[(seg.index + 1) % len];
+                            const srcA = this._routeSources && this._routeSources[idxA];
+                            const srcB = this._routeSources && this._routeSources[idxB];
+                            if (srcA && srcB && srcA.marker && srcB.marker) {
+                                const ax = srcA.marker.x * MAP_SIZE * this.zoom + this.panX;
+                                const ay = srcA.marker.y * MAP_SIZE * this.zoom + this.panY;
+                                const bx = srcB.marker.x * MAP_SIZE * this.zoom + this.panX;
+                                const by = srcB.marker.y * MAP_SIZE * this.zoom + this.panY;
+                                const t = (typeof seg.t === 'number') ? seg.t : 0;
+                                const px = ax + (bx - ax) * t;
+                                const py = ay + (by - ay) * t;
+                                const worldX = (px - this.panX) / this.zoom / MAP_SIZE;
+                                const worldY = (py - this.panY) / this.zoom / MAP_SIZE;
+                                this._routePreview = { index: seg.index, t, worldX, worldY, screenX: px, screenY: py };
+                                try { this.canvas.style.cursor = 'pointer'; } catch (e) {}
+                                try { this.render(); } catch (e) {}
+                                return;
+                            }
+                        }
+                    } else {
+                        if (this._routePreview) { this._routePreview = null; try { this.checkMarkerHover(localX, localY); } catch (e) {} }
+                    }
+                }
+            } catch (e) {}
 
             if (this.pointers.size === 2 && this.pinch) {
                 // handle pinch-to-zoom and pan
@@ -691,6 +904,10 @@ class InteractiveMap {
                 if (this._draggingCandidate && e.pointerId === this._draggingCandidate.pointerId) {
                     this._draggingCandidate = null;
                 }
+                // If a route-node candidate exists but was never promoted, clear it so clicks behave normally
+                if (this._routeNodeCandidate && e.pointerId === this._routeNodeCandidate.pointerId) {
+                    this._routeNodeCandidate = null;
+                }
                 // If a custom marker drag was in progress, finalize it and clear state
                 if (this._draggingMarker && e.pointerId === this._draggingMarker.pointerId) {
                     // Save persisted state (already saved during move, but ensure final save)
@@ -702,11 +919,44 @@ class InteractiveMap {
                 // update cursor based on whether any marker is under the pointer
                 const under = this.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
+                // clear any transient route preview
+                this._routePreview = null;
                 // Save view state
                 try { this.saveViewToStorage(); } catch (err) {}
 
                 // short tap (no movement, short press) — let `click` handler manage selection/placement
             }
+
+            // Finalize any in-progress route-insert drag for this pointer
+            try {
+                    if (this._routeInsert && e.pointerId === this._routeInsert.pointerId) {
+                    const tempIdx = this._routeInsert.tempIndex;
+                    // If hovered a free marker, snap and finalize; otherwise restore previous route
+                    if (this._routeInsert.hoverMarker && !this._routeInsert.hoverOccupied) {
+                        // Replace temp marker with actual marker reference
+                        if (this._routeSources && this._routeSources[tempIdx]) {
+                            this._routeSources[tempIdx].marker = this._routeInsert.hoverMarker;
+                        }
+                        // Recompute length and persist
+                        const len = this.computeRouteLengthNormalized(this._routeSources);
+                        const indices = this._routeSources.map((_, i) => i);
+                            this.setRoute(indices, len, this._routeSources);
+                    } else {
+                        // Restore previous route (remove temp)
+                        try {
+                            const prev = this._routeInsert.prevSources || [];
+                                const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                                const len = this.computeRouteLengthNormalized(prev);
+                                this.setRoute(prevIdx, len, prev);
+                                // Restore previous looping preference
+                                try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                        } catch (err) {}
+                    }
+                    // clear insertion state
+                    this._routeInsert = null;
+                    try { this.render(); } catch (e) {}
+                }
+            } catch (err) {}
         });
 
         this.canvas.addEventListener('pointercancel', (e) => {
@@ -715,9 +965,23 @@ class InteractiveMap {
                 this.isDragging = false;
                 this.pinch = null;
                 this.canvas.style.cursor = 'grab';
+                // clear transient preview
+                this._routePreview = null;
                 // clear any candidate/active drag
                 if (this._draggingCandidate && this._draggingCandidate.pointerId === e.pointerId) this._draggingCandidate = null;
                 if (this._draggingMarker && this._draggingMarker.pointerId === e.pointerId) this._draggingMarker = null;
+                if (this._routeNodeCandidate && this._routeNodeCandidate.pointerId === e.pointerId) this._routeNodeCandidate = null;
+                if (this._routeInsert && this._routeInsert.pointerId === e.pointerId) {
+                    // restore previous route and flag on cancel
+                    try {
+                        const prev = this._routeInsert.prevSources || [];
+                        const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                        const len = this.computeRouteLengthNormalized(prev);
+                        this.setRoute(prevIdx, len, prev);
+                        try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                    } catch (err) {}
+                    this._routeInsert = null;
+                }
             }
         });
 
@@ -726,6 +990,21 @@ class InteractiveMap {
             this.isDragging = false;
             this.canvas.style.cursor = 'grab';
             this.hideTooltip();
+            // clear hover preview
+            this._routePreview = null;
+            // If a route-insert was in progress, cancel and restore
+            try {
+                if (this._routeInsert) {
+                    const prev = this._routeInsert.prevSources || [];
+                    const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                    const len = this.computeRouteLengthNormalized(prev);
+                    this.setRoute(prevIdx, len, prev);
+                    try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                    this._routeInsert = null;
+                }
+                // Clear any unpromoted route-node candidate so clicks behave normally after leave
+                if (this._routeNodeCandidate) this._routeNodeCandidate = null;
+            } catch (e) {}
         });
         
         // Click handler - place custom markers or delete them when tapped
@@ -751,6 +1030,71 @@ class InteractiveMap {
                 // Helper determination: deletable layers (custom markers) vs selectable layers
                 const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
                 const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
+
+                // Route edit mode: tapping markers toggles their membership in the current route
+                if (this.editRouteMode) {
+                    try {
+                        const uid = hit.marker && hit.marker.uid;
+                        if (!uid) return;
+
+                        // Build ordered list of existing route marker UIDs
+                        const existing = [];
+                        if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
+                            for (let i = 0; i < this.currentRoute.length; i++) {
+                                const src = this._routeSources[this.currentRoute[i]];
+                                if (src && src.marker && src.marker.uid) existing.push(src.marker.uid);
+                            }
+                        }
+
+                        const inIdx = existing.indexOf(uid);
+                        const newSources = [];
+                        const newIndices = [];
+
+                        if (inIdx >= 0) {
+                            // Remove the tapped marker from the route
+                            for (let i = 0; i < this.currentRoute.length; i++) {
+                                const src = this._routeSources[this.currentRoute[i]];
+                                if (!src || !src.marker) continue;
+                                if (src.marker.uid === uid) continue;
+                                newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
+                                newIndices.push(newSources.length - 1);
+                            }
+                        } else {
+                            // Preserve existing route points (if any)
+                            if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
+                                for (let i = 0; i < this.currentRoute.length; i++) {
+                                    const src = this._routeSources[this.currentRoute[i]];
+                                    if (!src || !src.marker) continue;
+                                    newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
+                                    newIndices.push(newSources.length - 1);
+                                }
+                            }
+                            // Append the tapped marker as a new route point
+                            newSources.push({ marker: hit.marker, layerKey: layerKey, layerIndex: newSources.length });
+                            newIndices.push(newSources.length - 1);
+                        }
+
+                        // Compute simple path length (pixels) as sum of Euclidean segments
+                        let lengthPx = 0;
+                        for (let i = 1; i < newSources.length; i++) {
+                            const a = newSources[i - 1].marker;
+                            const b = newSources[i].marker;
+                            if (!a || !b) continue;
+                            const dx = (a.x - b.x) * MAP_SIZE;
+                            const dy = (a.y - b.y) * MAP_SIZE;
+                            lengthPx += Math.hypot(dx, dy);
+                        }
+                        const lengthNormalized = lengthPx / MAP_SIZE;
+
+                        // Apply the new route
+                        this.setRoute(newIndices, lengthNormalized, newSources);
+                        // Do not change looping preference on manual tap edits; looping is user-controlled
+                        this.render();
+                    } catch (err) {
+                        console.warn('Route edit tap failed:', err);
+                    }
+                    return;
+                }
 
                 if (this.editMarkersMode) {
                     // In edit mode: allow deletion (custom markers are editable regardless of flags)
@@ -819,6 +1163,24 @@ class InteractiveMap {
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            // debug logging removed
+            // Global Escape: exit any edit mode
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                try {
+                    // Prefer clicking the toggles so their handlers run UI sync
+                    const markersToggle = document.getElementById('editMarkersToggle');
+                    const routeToggle = document.getElementById('editRouteToggle');
+                    if (map && map.editMarkersMode) {
+                        if (markersToggle) markersToggle.click(); else map.editMarkersMode = false;
+                    }
+                    if (map && map.editRouteMode) {
+                        if (routeToggle) routeToggle.click(); else map.editRouteMode = false;
+                    }
+                    try { updateEditOverlay(); } catch (err) {}
+                } catch (err) {}
+                try { e.preventDefault(); } catch (err) {}
+                return;
+            }
             if (e.key === '+' || e.key === '=') {
                 this.zoomIn();
                 try { e.preventDefault(); } catch (err) {}
@@ -1579,12 +1941,76 @@ class InteractiveMap {
                 const mx = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const my = marker.y * MAP_SIZE * this.zoom + this.panY;
                 if (Math.hypot(screenX - mx, screenY - my) < markerRadius) {
-                    return { marker: { ...marker }, index: i, layerKey };
+                    return { marker: marker, index: i, layerKey };
                 }
             }
         }
 
         return null;
+    }
+
+    // Find a route segment near screen coordinates. Returns { index } where
+    // index is the index of the first node of the segment (i.e., segment between i and i+1).
+    findRouteSegmentAt(screenX, screenY, threshold = 10) {
+        try {
+            if (!this.currentRoute || !Array.isArray(this._routeSources) || this.currentRoute.length < 2) return null;
+            // If the pointer is within any route node's hit radius, treat as node interaction (do not select a segment)
+            try {
+                const nodeRadius = (typeof this.getRouteNodeSize === 'function') ? (this.getRouteNodeSize() + 4) : 8;
+                for (let i = 0; i < this.currentRoute.length; i++) {
+                    const idxN = this.currentRoute[i];
+                    const srcN = this._routeSources && this._routeSources[idxN];
+                    if (!srcN || !srcN.marker) continue;
+                    const nx = srcN.marker.x * MAP_SIZE * this.zoom + this.panX;
+                    const ny = srcN.marker.y * MAP_SIZE * this.zoom + this.panY;
+                    if (Math.hypot(screenX - nx, screenY - ny) <= nodeRadius) return null;
+                }
+            } catch (e) {}
+            let best = null;
+            const len = this.currentRoute.length;
+            const segCount = this.routeLooping ? len : (len - 1);
+            for (let i = 0; i < segCount; i++) {
+                const idxA = this.currentRoute[i];
+                const idxB = this.currentRoute[(i + 1) % len];
+                const srcA = this._routeSources && this._routeSources[idxA];
+                const srcB = this._routeSources && this._routeSources[idxB];
+                if (!srcA || !srcB || !srcA.marker || !srcB.marker) continue;
+                const ax = srcA.marker.x * MAP_SIZE * this.zoom + this.panX;
+                const ay = srcA.marker.y * MAP_SIZE * this.zoom + this.panY;
+                const bx = srcB.marker.x * MAP_SIZE * this.zoom + this.panX;
+                const by = srcB.marker.y * MAP_SIZE * this.zoom + this.panY;
+                // Project point P onto segment AB
+                const vx = bx - ax, vy = by - ay;
+                const wx = screenX - ax, wy = screenY - ay;
+                const vlen2 = vx * vx + vy * vy;
+                if (vlen2 <= 0) continue;
+                const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
+                const px = ax + vx * t;
+                const py = ay + vy * t;
+                const dist = Math.hypot(screenX - px, screenY - py);
+                if (dist <= threshold) {
+                    if (!best || dist < best.dist) best = { index: i, dist, t };
+                }
+            }
+            return best;
+        } catch (e) { return null; }
+    }
+
+    // Compute normalized (map width = 1) non-looping length for given sources array
+    computeRouteLengthNormalized(sources) {
+        try {
+            if (!Array.isArray(sources) || sources.length < 2) return 0;
+            let lengthPx = 0;
+            for (let i = 1; i < sources.length; i++) {
+                const a = sources[i - 1].marker;
+                const b = sources[i].marker;
+                if (!a || !b) continue;
+                const dx = (b.x - a.x) * MAP_SIZE;
+                const dy = (b.y - a.y) * MAP_SIZE;
+                lengthPx += Math.hypot(dx, dy);
+            }
+            return lengthPx / MAP_SIZE;
+        } catch (e) { return 0; }
     }
     
     showTooltip(marker, x, y, layerKey) {
@@ -1646,6 +2072,45 @@ class InteractiveMap {
 
         // Draw computed route on top of the map but beneath markers (so markers remain visible)
         this.renderRoute();
+
+        // Draw transient route-insert preview (when hovering near a segment in edit mode)
+        try {
+            if (this.editRouteMode && this._routePreview && this._routePreview.screenX && this._routePreview.screenY) {
+                const px = this._routePreview.screenX;
+                const py = this._routePreview.screenY;
+                // Derive route color like renderRoute() uses
+                const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
+                const hexToRgba = (h, a) => {
+                    if (!h || typeof h !== 'string') return null;
+                    let s = h.replace('#', '').trim();
+                    if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
+                    if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
+                    let r = 0, g = 0, b = 0, alphaFromHex = 1;
+                    if (s.length === 6) {
+                        r = parseInt(s.slice(0, 2), 16);
+                        g = parseInt(s.slice(2, 4), 16);
+                        b = parseInt(s.slice(4, 6), 16);
+                    } else if (s.length === 8) {
+                        r = parseInt(s.slice(0, 2), 16);
+                        g = parseInt(s.slice(2, 4), 16);
+                        b = parseInt(s.slice(4, 6), 16);
+                        alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
+                    } else {
+                        return null;
+                    }
+                    const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                };
+                const nodeFill = routeHex ? hexToRgba(routeHex, 0.95) : null;
+                const dotSize = (this.getRouteNodeSize && typeof this.getRouteNodeSize === 'function') ? this.getRouteNodeSize() : 6;
+                ctx.save();
+                ctx.beginPath();
+                ctx.fillStyle = nodeFill || 'rgba(34, 211, 238, 1)';
+                ctx.arc(px, py, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        } catch (e) {}
 
         // If a marker is selected, ensure tooltip is positioned at its current screen coords
         if (this.selectedMarker && this.selectedMarkerLayer) {
@@ -2033,7 +2498,7 @@ class InteractiveMap {
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         // Close the loop if no start point was provided (full loop); otherwise open polyline
-        if (!this._routeGeneratedWithStartPoint && n > 0) {
+        if (this.routeLooping && n > 0) {
             const firstIdx = this.currentRoute[0];
             const firstSrc = this._routeSources[firstIdx];
             const firstM = firstSrc && firstSrc.marker;
@@ -2076,7 +2541,7 @@ class InteractiveMap {
         this.currentRouteLengthNormalized = typeof lengthNormalized === 'number' ? lengthNormalized : 0;
         this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
         // Reset the start-point flag when a new route is set (will be overridden by generation if applicable)
-        this._routeGeneratedWithStartPoint = false;
+        // Do not change `routeLooping` here — looping is controlled explicitly by user preference.
         // Update route length display in sidebar
         try {
             const el = document.getElementById('routeLength');
@@ -2219,7 +2684,8 @@ class InteractiveMap {
                 } else {
                     try { loopFlag = localStorage.getItem('mp4_route_looping_flag'); } catch (e) { loopFlag = null; }
                 }
-                this._routeGeneratedWithStartPoint = (loopFlag === '1' || loopFlag === 1 || loopFlag === true);
+                // Stored flag `mp4_route_looping_flag` now represents explicit looping preference
+                this.routeLooping = (loopFlag === '1' || loopFlag === 1 || loopFlag === true);
             } catch (e) { /* default to false */ }
             console.log('Loaded saved route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
             return true;
@@ -2675,7 +3141,7 @@ async function init() {
         if (saveLabel) {
             // Initialize state from consent flag
             const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-            try { saveLabel.classList.toggle('active', !!consent); } catch (e) {}
+            try { saveLabel.classList.toggle('pressed', !!consent); } catch (e) {}
             try { saveLabel.setAttribute('aria-pressed', !!consent ? 'true' : 'false'); } catch (e) {}
 
             saveLabel.addEventListener('click', async (ev) => {
@@ -2717,15 +3183,9 @@ async function init() {
                         try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
                         try { if (map && typeof map.saveRouteToStorage === 'function') map.saveRouteToStorage(); } catch (e) {}
                         try { if (map && typeof map.saveViewToStorage === 'function') map.saveViewToStorage(); } catch (e) {}
-                        try {
-                            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                                window._mp4Storage.saveSetting('routeDir', String(map && map._routeAnimationDirection ? map._routeAnimationDirection : 1));
-                            } else {
-                                try { localStorage.setItem('routeDir', String(map && map._routeAnimationDirection ? map._routeAnimationDirection : 1)); } catch (e) {}
-                            }
-                        } catch (e) {}
+                        // Route direction persistence removed; do not save `routeDir`.
                     } catch (e) {}
-                    try { saveLabel.classList.toggle('active', true); } catch (e) {}
+                    try { saveLabel.classList.toggle('pressed', true); } catch (e) {}
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
                     const confirmMsg = 'Disable local storage? This will permanently delete the following saved data from this device:\n\n' +
@@ -2738,18 +3198,18 @@ async function init() {
                         'Tap OK to delete saved data and continue, or Cancel to keep it.';
                     if (!confirm(confirmMsg)) {
                         try { saveLabel.setAttribute('aria-pressed', 'true'); } catch (e) {}
-                        try { saveLabel.classList.toggle('active', true); } catch (e) {}
+                        try { saveLabel.classList.toggle('pressed', true); } catch (e) {}
                         try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
                     } else {
                         try {
                             if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
                                 window._mp4Storage.clearSavedData(true);
                             } else {
-                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','routeDir','mp4_storage_consent'];
+                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','mp4_storage_consent'];
                                 for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
                             }
                         } catch (e) {}
-                        try { saveLabel.classList.toggle('active', false); } catch (e) {}
+                        try { saveLabel.classList.toggle('pressed', false); } catch (e) {}
                         try { saveLabel.setAttribute('aria-pressed', 'false'); } catch (e) {}
                         try { location.reload(); } catch (e) { /* fallback: continue without reload */ }
                     }
@@ -2781,6 +3241,208 @@ async function init() {
 
     // Attach pressed handlers to all sidebar control buttons (Compute/Clear/Export/etc.)
     attachPressedHandlers('.control-btn');
+
+    // Prevent control buttons from retaining keyboard focus after click so
+    // shortcuts remain available and focus outline does not persist on the last button.
+    try {
+        const controls = document.querySelectorAll('.control-btn');
+        controls.forEach(btn => {
+            try {
+                btn.addEventListener('click', () => { try { btn.blur(); } catch (e) {} });
+            } catch (e) {}
+        });
+    } catch (e) {}
+
+    // Ensure on-screen toggles/buttons don't retain focus after interaction
+    try {
+        document.addEventListener('click', (ev) => {
+            try {
+                const sel = (ev && ev.target) ? ev.target.closest('button, .control-btn, .zoom-btn, .hints-toggle, .layer-toggle, [role="button"]') : null;
+                if (sel && typeof sel.blur === 'function') {
+                    // blur after current event loop so any click handlers still run
+                    setTimeout(() => { try { sel.blur(); } catch (e) {} }, 0);
+                }
+            } catch (e) {}
+        }, true);
+    } catch (e) {}
+
+    // Position the hints overlay exactly above the Hints toggle button
+    function positionHintsOverlay() {
+        try {
+            const sidebar = document.querySelector('.sidebar');
+            const hintsBtn = document.getElementById('hintsToggleBtn');
+            const hintsOverlay = document.getElementById('hintsOverlay');
+            const consentBtn = document.getElementById('saveDataToggle_label');
+            if (!sidebar || !hintsBtn || !hintsOverlay) return;
+            const sidebarRect = sidebar.getBoundingClientRect();
+            const hintRect = hintsBtn.getBoundingClientRect();
+            // Calculate extra offset from consent toggle's bottom margin if present
+            let consentMarginBottom = 0;
+            try {
+                if (consentBtn) {
+                    const cs = window.getComputedStyle(consentBtn);
+                    consentMarginBottom = parseFloat(cs.marginBottom) || 0;
+                }
+            } catch (e) { consentMarginBottom = 0; }
+
+            // Compute distance from bottom of sidebar to top of the hints button,
+            // then add consent toggle bottom margin so overlay clears that gap below.
+            const rawOffset = Math.round(sidebarRect.bottom - hintRect.top + consentMarginBottom);
+            const bottomOffset = Math.max(0, rawOffset);
+            hintsOverlay.style.bottom = bottomOffset + 'px';
+        } catch (e) {}
+    }
+    try { positionHintsOverlay(); } catch (e) {}
+    try { window.addEventListener('resize', positionHintsOverlay, { passive: true }); } catch (e) {}
+    // Helpers to lock UI while route computation runs
+    function beginRouteCompute() {
+        try {
+            if (typeof map !== 'undefined' && map) map._computingRoute = true;
+            let overlay = document.getElementById('computingOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'computingOverlay';
+                overlay.className = 'computing-overlay';
+                const inner = document.createElement('div');
+                inner.className = 'computing-inner';
+                inner.textContent = 'Computing route…';
+                overlay.appendChild(inner);
+                try { document.body.appendChild(overlay); } catch (e) {}
+            }
+            try { overlay.style.display = 'flex'; } catch (e) {}
+        } catch (e) {}
+    }
+
+    function endRouteCompute() {
+        try {
+            if (typeof map !== 'undefined' && map) map._computingRoute = false;
+            const overlay = document.getElementById('computingOverlay');
+            if (overlay) try { overlay.style.display = 'none'; } catch (e) {}
+        } catch (e) {}
+    }
+    
+    // Helper to show/hide and position the edit overlay when either edit mode is active
+    let _editOverlayRaf = null;
+    let _overlayHideTimer = null;
+    // Global edit-overlay alpha so both RAF-updates and on-show logic agree
+    const EDIT_OVERLAY_ALPHA = 0.35;
+    function _updateOverlayFrame() {
+        try {
+            const ov = document.getElementById('editOverlay');
+            if (!ov) return;
+            // Position overlay to match the map's rendered tile area (MAP_SIZE * zoom)
+            if (map && (map.editMarkersMode || map.editRouteMode)) {
+                const size = (MAP_SIZE * (map.zoom || 1));
+                const left = Number(map.panX || 0);
+                const top = Number(map.panY || 0);
+                ov.style.left = Math.round(left) + 'px';
+                ov.style.top = Math.round(top) + 'px';
+                ov.style.width = Math.round(size) + 'px';
+                ov.style.height = Math.round(size) + 'px';
+                // Ensure overlay color follows the currently active edit mode
+                try {
+                    const layerKey = (map.editMarkersMode ? 'customMarkers' : (map.editRouteMode ? 'route' : null));
+                    if (layerKey && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color) {
+                        const hex = String(LAYERS[layerKey].color || '').trim();
+                        const parseHex = (h) => {
+                            if (!h || h[0] !== '#') return null;
+                            const s = h.slice(1);
+                            if (s.length === 6) {
+                                const r = parseInt(s.slice(0,2),16);
+                                const g = parseInt(s.slice(2,4),16);
+                                const b = parseInt(s.slice(4,6),16);
+                                return { r,g,b, a: 1 };
+                            } else if (s.length === 8) {
+                                const r = parseInt(s.slice(0,2),16);
+                                const g = parseInt(s.slice(2,4),16);
+                                const b = parseInt(s.slice(4,6),16);
+                                const a = parseInt(s.slice(6,8),16) / 255;
+                                return { r,g,b, a };
+                            }
+                            return null;
+                        };
+                        const c = parseHex(hex);
+                        if (c) {
+                            ov.style.backgroundColor = `rgba(${c.r},${c.g},${c.b},${EDIT_OVERLAY_ALPHA})`;
+                        }
+                    }
+                } catch (e) {}
+                // Keep aria-hidden=false while visible (during fade in/out)
+                ov.classList.add('visible');
+                try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
+                // continue RAF while visible so overlay follows pan/zoom smoothly
+                _editOverlayRaf = requestAnimationFrame(_updateOverlayFrame);
+            } else {
+                // Should not usually reach here because updateEditOverlay controls RAF lifecycle,
+                // but defensively hide overlay and clear inline sizes.
+                ov.classList.remove('visible');
+                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
+                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; } catch (e) {}
+                _editOverlayRaf = null;
+            }
+        } catch (e) { _editOverlayRaf = null; }
+    }
+
+    function updateEditOverlay() {
+        try {
+            const ov = document.getElementById('editOverlay');
+            if (!ov) return;
+            const on = !!(map && (map.editMarkersMode || map.editRouteMode));
+            // If turning on, cancel any pending hide and start RAF-driven updates
+            if (on) {
+                // Determine overlay color based on active edit mode's layer color
+                try {
+                    const layerKey = (map.editMarkersMode ? 'customMarkers' : (map.editRouteMode ? 'route' : null));
+                    if (layerKey && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color) {
+                        const hex = String(LAYERS[layerKey].color || '').trim();
+                        // parse #RRGGBB or #RRGGBBAA
+                        const parseHex = (h) => {
+                            if (!h || h[0] !== '#') return null;
+                            const s = h.slice(1);
+                            if (s.length === 6) {
+                                const r = parseInt(s.slice(0,2),16);
+                                const g = parseInt(s.slice(2,4),16);
+                                const b = parseInt(s.slice(4,6),16);
+                                return { r,g,b, a: 1 };
+                            } else if (s.length === 8) {
+                                const r = parseInt(s.slice(0,2),16);
+                                const g = parseInt(s.slice(2,4),16);
+                                const b = parseInt(s.slice(4,6),16);
+                                const a = parseInt(s.slice(6,8),16) / 255;
+                                return { r,g,b, a };
+                            }
+                            return null;
+                        };
+                        const c = parseHex(hex);
+                        if (c) {
+                            ov.style.backgroundColor = `rgba(${c.r},${c.g},${c.b},${EDIT_OVERLAY_ALPHA})`;
+                        }
+                    }
+                } catch (e) {}
+                if (_overlayHideTimer) { try { clearTimeout(_overlayHideTimer); } catch (e) {} _overlayHideTimer = null; }
+                if (!_editOverlayRaf) _editOverlayRaf = requestAnimationFrame(_updateOverlayFrame);
+                return;
+            }
+
+            // Turning off: stop RAF, but keep inline sizing for the transition,
+            // then clear sizing after the CSS opacity transition to avoid snapping.
+            if (_editOverlayRaf) { try { cancelAnimationFrame(_editOverlayRaf); } catch (e) {} _editOverlayRaf = null; }
+            // Start fade-out by removing visible class
+            ov.classList.remove('visible');
+            // Keep aria-hidden=false during fade; only mark hidden after transition completes
+            try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
+            if (_overlayHideTimer) { try { clearTimeout(_overlayHideTimer); } catch (e) {} }
+            _overlayHideTimer = setTimeout(() => {
+                try {
+                    // If overlay was re-enabled in the meantime, don't clear
+                    if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer = null; return; }
+                    try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
+                    try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) {}
+                } catch (e) {}
+                _overlayHideTimer = null;
+            }, 220); // slightly longer than CSS transition (160ms) to ensure smooth fade
+        } catch (e) {}
+    }
     
     // Layer toggle handlers are created dynamically in `initializeLayerIcons()`
     
@@ -2803,6 +3465,18 @@ async function init() {
             try { editToggle.classList.toggle('pressed', on); } catch (e) {}
             try {
                 map.editMarkersMode = !!on;
+                // When entering marker-edit mode, clear any selected marker
+                try {
+                    if (map.editMarkersMode) {
+                        map.selectedMarker = null;
+                        map.selectedMarkerLayer = null;
+                        try { map.hideTooltip(); } catch (e) {}
+                        try { map.render(); } catch (e) {}
+                        try { updateEditOverlay(); } catch (e) {}
+                    } else {
+                        try { updateEditOverlay(); } catch (e) {}
+                    }
+                } catch (e) {}
                     // If enabling custom marker edit mode, ensure route edit mode is disabled
                     try {
                         if (map.editMarkersMode && map.editRouteMode) {
@@ -2898,6 +3572,18 @@ async function init() {
             try { routeEditToggle.classList.toggle('pressed', on); } catch (e) {}
             try {
                 map.editRouteMode = !!on;
+                    // When entering route-edit mode, clear any selected marker
+                    try {
+                        if (map.editRouteMode) {
+                            map.selectedMarker = null;
+                            map.selectedMarkerLayer = null;
+                            try { map.hideTooltip(); } catch (e) {}
+                            try { map.render(); } catch (e) {}
+                            try { updateEditOverlay(); } catch (e) {}
+                        } else {
+                            try { updateEditOverlay(); } catch (e) {}
+                        }
+                    } catch (e) {}
                     // If enabling route edit mode, ensure custom-marker edit mode is disabled
                     try {
                         if (map.editRouteMode && map.editMarkersMode) {
@@ -3147,7 +3833,21 @@ async function init() {
                 MarkerUtils.clearCustomMarkers();
                 map.customMarkers = LAYERS.customMarkers.markers;
                 map.updateLayerCounts();
-                map.render();
+                // Exit marker edit mode when markers are cleared
+                try { map.editMarkersMode = false; } catch (e) {}
+                try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) {}
+                try { map.canvas.style.cursor = 'grab'; } catch (e) {}
+                // Update sidebar & mini toggles if present
+                try {
+                    const markersToggle = document.getElementById('editMarkersToggle');
+                    if (markersToggle) { markersToggle.setAttribute('aria-pressed', 'false'); markersToggle.classList.remove('pressed'); }
+                } catch (e) {}
+                try {
+                    const miniMarkers = document.getElementById('editMarkersToggleMini');
+                    if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed', 'false'); }
+                } catch (e) {}
+                try { updateEditOverlay(); } catch (e) {}
+                try { map.render(); } catch (e) {}
             }
         }
     });
@@ -3157,6 +3857,7 @@ async function init() {
     const clearRouteBtn = document.getElementById('clearRouteBtn');
     if (computeImprovedBtn) {
         computeImprovedBtn.addEventListener('click', () => {
+            beginRouteCompute();
             // Build combined visible marker sources from LAYERS (skip virtual 'route')
             const sources = [];
             const layerEntries2 = Object.entries(LAYERS || {});
@@ -3237,22 +3938,28 @@ async function init() {
                             length = (typeof result.length === 'number') ? result.length : 0;
                         }
                         map.setRoute(finalTour, length, sources);
-                        // Track whether this route was generated with a start point
-                        map._routeGeneratedWithStartPoint = (selectedMarkerIndex >= 0);
-                        // Persist the loop flag to localStorage (separate from route data, not exported)
-                        try {
-                            const flagValue = map._routeGeneratedWithStartPoint ? '1' : '0';
-                            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                                window._mp4Storage.saveSetting('mp4_route_looping_flag', flagValue);
-                            } else {
-                                try { localStorage.setItem('mp4_route_looping_flag', flagValue); } catch (e) {}
-                            }
-                        } catch (e) {}
+                        // Do not change looping preference when computing a route; looping is explicit via UI.
                         // Deselect the marker after route is computed
                         try {
                             map.selectedMarker = null;
                             map.selectedMarkerLayer = null;
                             map.hideTooltip();
+                        } catch (e) {}
+                        // Enter route edit mode automatically so user can refine the computed route
+                        try {
+                            const routeToggle = document.getElementById('editRouteToggle');
+                            if (routeToggle) {
+                                // Click the sidebar toggle so its handler performs all UI sync work
+                                if (routeToggle.getAttribute('aria-pressed') !== 'true') routeToggle.click();
+                            } else {
+                                // Fallback: set mode and update overlay/mini toggle directly
+                                map.editRouteMode = true;
+                                try { updateEditOverlay(); } catch (e) {}
+                                try {
+                                    const mini = document.getElementById('editRouteToggleMini');
+                                    if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                                } catch (e) {}
+                            }
                         } catch (e) {}
                         console.log('Improved route length (non-looping normalized):', length, 'tour size:', finalTour.length, 'start point:', (selectedMarkerIndex >= 0));
                     } else {
@@ -3264,43 +3971,322 @@ async function init() {
                 } finally {
                     computeImprovedBtn.disabled = false;
                     computeImprovedBtn.textContent = oldText2;
+                    endRouteCompute();
                 }
             }, 50);
         });
     }
 
+    // Compute route using current route waypoints plus nearby visible markers
+    function expandRouteNearby() {
+        beginRouteCompute();
+        try {
+                // debug logging removed
+            if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length < 2) {
+                alert('Need an existing route with at least 2 waypoints to compute nearby pool.');
+                return;
+            }
+
+            // Build route waypoints in normalized coordinates
+            const routePts = [];
+            const routeUIDs = new Set();
+            for (let i = 0; i < map.currentRoute.length; i++) {
+                const idx = map.currentRoute[i];
+                const src = map._routeSources && map._routeSources[idx];
+                if (!src || !src.marker) continue;
+                routePts.push({ x: src.marker.x, y: src.marker.y });
+                if (src.marker.uid) routeUIDs.add(src.marker.uid);
+            }
+            if (routePts.length < 2) { alert('Route must contain at least 2 valid waypoints.'); return; }
+
+            // Threshold in pixels for proximity; tuneable
+            const THRESHOLD_PX = 160;
+            const thresholdNorm = THRESHOLD_PX / MAP_SIZE;
+
+            // Collect candidate markers from visible layers (exclude virtual 'route')
+            const poolSources = [];
+            const layerEntries = Object.entries(LAYERS || {});
+            for (let li = 0; li < layerEntries.length; li++) {
+                const layerKey = layerEntries[li][0];
+                const layer = layerEntries[li][1];
+                if (layerKey === 'route') continue;
+                if (!map.layerVisibility[layerKey]) continue;
+                if (!Array.isArray(layer.markers)) continue;
+                for (let mi = 0; mi < layer.markers.length; mi++) {
+                    const m = layer.markers[mi];
+                    if (!m) continue;
+                    // Always include route markers (they may be in other layers)
+                    if (m.uid && routeUIDs.has(m.uid)) continue; // will add route points separately
+                    // Compute minimal distance from m to route polyline (normalized units)
+                    let minDist = Infinity;
+                    const len = routePts.length;
+                    const segCount = map.routeLooping ? len : (len - 1);
+                    for (let si = 0; si < segCount; si++) {
+                        const a = routePts[si];
+                        const b = routePts[(si + 1) % len];
+                        if (!a || !b) continue;
+                        const vx = b.x - a.x, vy = b.y - a.y;
+                        const wx = m.x - a.x, wy = m.y - a.y;
+                        const vlen2 = vx * vx + vy * vy;
+                        if (vlen2 <= 0) continue;
+                        const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
+                        const px = a.x + vx * t;
+                        const py = a.y + vy * t;
+                        const dist = Math.hypot(m.x - px, m.y - py);
+                        if (dist < minDist) minDist = dist;
+                    }
+                    if (minDist <= thresholdNorm) {
+                        poolSources.push({ marker: m, layerKey: layerKey, layerIndex: mi });
+                    }
+                }
+            }
+
+            // Assign nearby markers to the nearest route segment (by projection)
+            const routeLen = routePts.length;
+            const segCount = map.routeLooping ? routeLen : (routeLen - 1);
+            const segments = new Array(segCount);
+            for (let si = 0; si < segCount; si++) segments[si] = [];
+            for (let i = 0; i < poolSources.length; i++) {
+                const s = poolSources[i];
+                if (!s || !s.marker) continue;
+                // find closest segment and its t
+                let bestSeg = -1; let bestDist = Infinity; let bestT = 0;
+                for (let si = 0; si < segCount; si++) {
+                    const a = routePts[si];
+                    const b = routePts[(si + 1) % routeLen];
+                    if (!a || !b) continue;
+                    const vx = b.x - a.x, vy = b.y - a.y;
+                    const wx = s.marker.x - a.x, wy = s.marker.y - a.y;
+                    const vlen2 = vx * vx + vy * vy;
+                    if (vlen2 <= 0) continue;
+                    const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
+                    const px = a.x + vx * t, py = a.y + vy * t;
+                    const dist = Math.hypot(s.marker.x - px, s.marker.y - py);
+                    if (dist < bestDist) { bestDist = dist; bestSeg = si; bestT = t; }
+                }
+                if (bestSeg >= 0) segments[bestSeg].push({ src: s, t: bestT, dist: bestDist });
+            }
+
+            // Helper: solve fixed-endpoint shortest Hamiltonian path for small N using DP
+            function solveFixedPathForSegment(pointsArr) {
+                // pointsArr: array of {x,y} with first=start and last=end
+                const n = pointsArr.length;
+                if (n <= 2) return [0, 1];
+                const k = n - 2; // intermediates count
+
+                // Safety: if too many intermediates, fall back to a cheap greedy solver
+                const DP_MAX_K = 14; // 2^14 ~= 16k states
+                // distance matrix
+                const d = Array.from({ length: n }, () => new Array(n).fill(0));
+                for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+                    const dx = pointsArr[i].x - pointsArr[j].x; const dy = pointsArr[i].y - pointsArr[j].y;
+                    d[i][j] = Math.hypot(dx, dy);
+                }
+
+                if (k > DP_MAX_K) {
+                    // Greedy nearest-neighbor between fixed endpoints: start at 0, pick nearest unvisited intermediate, finish at n-1
+                    try {
+                        const visited = new Array(n).fill(false);
+                        visited[0] = true; visited[n - 1] = true;
+                        const order = [0];
+                        let cur = 0;
+                        let remaining = k;
+                        while (remaining > 0) {
+                            let bestIdx = -1; let bestDist = Infinity;
+                            for (let j = 1; j < n - 1; j++) {
+                                if (visited[j]) continue;
+                                if (d[cur][j] < bestDist) { bestDist = d[cur][j]; bestIdx = j; }
+                            }
+                            if (bestIdx < 0) break;
+                            visited[bestIdx] = true;
+                            order.push(bestIdx);
+                            cur = bestIdx;
+                            remaining--;
+                        }
+                        order.push(n - 1);
+                        return order;
+                    } catch (err) {
+                        // Fallback to trivial ordering on error
+                        const seq = [];
+                        for (let i = 0; i < n; i++) seq.push(i);
+                        return seq;
+                    }
+                }
+
+                // DP exact solver for small k
+                try {
+                    const FULL = 1 << k;
+                    const dp = new Array(FULL).fill(null).map(() => new Array(k).fill(Infinity));
+                    const parent = new Array(FULL).fill(null).map(() => new Array(k).fill(-1));
+                    // init
+                    for (let j = 0; j < k; j++) {
+                        const mask = 1 << j;
+                        dp[mask][j] = d[0][j + 1];
+                    }
+                    for (let mask = 1; mask < FULL; mask++) {
+                        for (let last = 0; last < k; last++) {
+                            if (!(mask & (1 << last))) continue;
+                            const prevMask = mask ^ (1 << last);
+                            if (prevMask === 0) continue;
+                            for (let prev = 0; prev < k; prev++) {
+                                if (!(prevMask & (1 << prev))) continue;
+                                const val = dp[prevMask][prev] + d[prev + 1][last + 1];
+                                if (val < dp[mask][last]) { dp[mask][last] = val; parent[mask][last] = prev; }
+                            }
+                        }
+                    }
+                    // close to end
+                    let best = Infinity; let bestLast = -1; const ALL = FULL - 1;
+                    if (k === 0) {
+                        return [0, n - 1];
+                    }
+                    for (let last = 0; last < k; last++) {
+                        const cost = dp[ALL][last] + d[last + 1][n - 1];
+                        if (cost < best) { best = cost; bestLast = last; }
+                    }
+                    // reconstruct
+                    const order = [];
+                    let mask = ALL; let cur = bestLast;
+                    while (cur >= 0) {
+                        order.push(cur + 1);
+                        const p = parent[mask][cur];
+                        mask = mask ^ (1 << cur);
+                        cur = p;
+                    }
+                    order.reverse();
+                    // full path indices
+                    const path = [0].concat(order).concat([n - 1]);
+                    return path;
+                } catch (err) {
+                    // On any unexpected failure, fallback to simple ordering
+                    const seq = [];
+                    for (let i = 0; i < n; i++) seq.push(i);
+                    return seq;
+                }
+            }
+
+            // Build final ordered sources by solving per-segment fixed path
+            const finalSources = [];
+            for (let si = 0; si < segCount; si++) {
+                const aIdx = map.currentRoute[si];
+                const bIdx = map.currentRoute[(si + 1) % map.currentRoute.length];
+                const srcA = map._routeSources && map._routeSources[aIdx];
+                const srcB = map._routeSources && map._routeSources[bIdx];
+                if (!srcA || !srcA.marker || !srcB || !srcB.marker) continue;
+                // gather segment points: start, intermediates, end
+                const pts = [ { x: srcA.marker.x, y: srcA.marker.y, srcObj: { marker: srcA.marker, layerKey: srcA.layerKey } } ];
+                // sort markers along segment by t for deterministic ordering before solving
+                const bucket = segments[si] || [];
+                bucket.sort((p,q) => p.t - q.t);
+                // Limit intermediates per-segment to avoid exponential DP blowup and OOM
+                const MAX_INTERMEDIATES = 14;
+                const limited = (bucket.length > MAX_INTERMEDIATES) ? bucket.slice(0, MAX_INTERMEDIATES) : bucket;
+                for (let bi = 0; bi < limited.length; bi++) {
+                    pts.push({ x: limited[bi].src.marker.x, y: limited[bi].src.marker.y, srcObj: limited[bi].src });
+                }
+                pts.push({ x: srcB.marker.x, y: srcB.marker.y, srcObj: { marker: srcB.marker, layerKey: srcB.layerKey } });
+                if (pts.length <= 2) {
+                    // just append start (except when already added) and let loop continue; avoid duplicating
+                    if (finalSources.length === 0) finalSources.push({ marker: srcA.marker, layerKey: srcA.layerKey, layerIndex: finalSources.length });
+                    finalSources.push({ marker: srcB.marker, layerKey: srcB.layerKey, layerIndex: finalSources.length });
+                    continue;
+                }
+                // prepare points array for DP (x,y only)
+                const pointsArr = pts.map(p => ({ x: p.x, y: p.y }));
+                const order = solveFixedPathForSegment(pointsArr);
+                // append according to order, but avoid duplicating the shared points between segments
+                for (let oi = 0; oi < order.length; oi++) {
+                    const pi = order[oi];
+                    const srcEntry = pts[pi].srcObj;
+                    // skip adding the start if it's already the last appended
+                    if (finalSources.length > 0) {
+                        const last = finalSources[finalSources.length - 1];
+                        if (last && last.marker && srcEntry && srcEntry.marker && last.marker.uid === srcEntry.marker.uid) continue;
+                    }
+                    finalSources.push({ marker: srcEntry.marker, layerKey: srcEntry.layerKey || 'route', layerIndex: finalSources.length });
+                }
+            }
+
+            if (finalSources.length < 2) { alert('Not enough markers in the pool to compute a route.'); return; }
+
+            // compute overall length
+            let totalLen = 0;
+            for (let i = 1; i < finalSources.length; i++) {
+                const a = finalSources[i - 1].marker; const b = finalSources[i].marker;
+                if (!a || !b) continue;
+                const dx = b.x - a.x, dy = b.y - a.y;
+                totalLen += Math.hypot(dx, dy);
+            }
+            const indices = finalSources.map((_, i) => i);
+            map.setRoute(indices, totalLen, finalSources);
+            try { map.selectedMarker = null; map.selectedMarkerLayer = null; map.hideTooltip(); } catch (e) {}
+            try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle && routeToggle.getAttribute('aria-pressed') !== 'true') routeToggle.click(); } catch (e) {}
+        } catch (e) { console.error('Nearby compute failed:', e); alert('Failed to compute nearby route.'); } finally { try { endRouteCompute(); } catch (err) {} }
+    }
+
+    const computeNearbyBtn = document.getElementById('computeRouteNearbyBtn');
+    if (computeNearbyBtn) {
+        // Require the click to originate from a pointerdown on the button to avoid
+        // accidental clicks caused by ending drags over controls. Keep the flag
+        // set on pointerdown and only clear it when click is handled or on cancel.
+        let _computeNearbyBtnPressed = false;
+        try {
+            computeNearbyBtn.addEventListener('pointerdown', () => { _computeNearbyBtnPressed = true; });
+            // Do not clear on pointerup because the click event fires after pointerup;
+            // clearing here would make the click always see false. Clear on pointercancel instead.
+            computeNearbyBtn.addEventListener('pointerup', () => { /* noop - preserve flag until click handler */ });
+            computeNearbyBtn.addEventListener('pointercancel', () => { _computeNearbyBtnPressed = false; });
+        } catch (err) {}
+
+        computeNearbyBtn.addEventListener('click', (e) => {
+            try {
+                if (!_computeNearbyBtnPressed) {
+                    // Click did not start on this button (likely came from a drag-end or synthetic); ignore.
+                    return;
+                }
+            } catch (err) {}
+            try {
+                expandRouteNearby();
+            } finally {
+                _computeNearbyBtnPressed = false;
+            }
+        });
+    }
+
+    // Expose expandRouteNearby for programmatic use
+    try { if (typeof map !== 'undefined' && map) map.expandRouteNearby = expandRouteNearby; } catch (e) {}
+
     // Route direction toggle: single button that flips animation direction
         try {
             const toggleDirBtn = document.getElementById('toggleRouteDirBtn');
-            // load persisted direction (1 forward, -1 reverse)
-            let stored = 1;
-            try {
-                const raw = localStorage.getItem('routeDir');
-                // If key is missing `raw` will be null; avoid Number(null) === 0
-                const parsed = (raw !== null) ? Number(raw) : NaN;
-                stored = Number.isFinite(parsed) ? parsed : 1;
-            } catch (e) { stored = 1; }
-            map._routeAnimationDirection = stored;
-            const updateRouteDirUI = () => {
-                if (toggleDirBtn) toggleDirBtn.setAttribute('aria-pressed', Number(map._routeAnimationDirection) === -1 ? 'true' : 'false');
+            // Animation direction flag is no longer persisted or flipped; keep forward by default
+            try { map._routeAnimationDirection = 1; } catch (e) {}
+
+            // Centralized toggler: reverse waypoint order only (do not change animation direction)
+            const toggleRouteDirection = () => {
+                try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
+                try {
+                    if (Array.isArray(map.currentRoute) && map.currentRoute.length > 1 && Array.isArray(map._routeSources)) {
+                        const ordered = [];
+                        for (let i = 0; i < map.currentRoute.length; i++) {
+                            const idx = map.currentRoute[i];
+                            const src = map._routeSources && map._routeSources[idx];
+                            if (src && src.marker) ordered.push({ marker: src.marker, layerKey: src.layerKey });
+                        }
+                        if (ordered.length > 1) {
+                            ordered.reverse();
+                            const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
+                            const newIndices = newSources.map((_, i) => i);
+                            try { map.setRoute(newIndices, map.computeRouteLengthNormalized(newSources), newSources); } catch (e) {}
+                        }
+                    }
+                } catch (e) {}
+                try { map.render(); } catch (e) {}
             };
+
             if (toggleDirBtn) {
-                toggleDirBtn.addEventListener('click', () => {
-                    // Coerce current value to number then flip between 1 and -1
-                    map._routeAnimationDirection = (Number(map._routeAnimationDirection) === 1) ? -1 : 1;
-                    try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('routeDir', String(map._routeAnimationDirection)); /* do not write without consent/helper */ } catch (e) {}
-                    // Flip internal dash offset so the dash pattern continues smoothly
-                    try {
-                        map._routeDashOffset = (1000000 - (Number(map._routeDashOffset) || 0)) % 1000000;
-                    } catch (e) {}
-                    // Reset the last animation timestamp so the next RAF frame doesn't use a large dt
-                    try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
-                    // Render immediately to show updated direction without waiting a frame
-                    try { map.render(); } catch (e) {}
-                    updateRouteDirUI();
-                });
+                toggleDirBtn.addEventListener('click', toggleRouteDirection);
             }
-            updateRouteDirUI();
         } catch (e) {}
 
     if (clearRouteBtn) {
@@ -3311,6 +4297,20 @@ async function init() {
             }
             if (confirm('Clear computed route? This cannot be undone.')) {
                 map.clearRoute();
+                // Exit route edit mode when route is cleared
+                try { map.editRouteMode = false; } catch (e) {}
+                try { map._routeNodeCandidate = null; map._routeInsert = null; } catch (e) {}
+                // Update sidebar & mini toggles if present
+                try {
+                    const routeToggle = document.getElementById('editRouteToggle');
+                    if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('pressed'); }
+                } catch (e) {}
+                try {
+                    const miniRoute = document.getElementById('editRouteToggleMini');
+                    if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                } catch (e) {}
+                try { updateEditOverlay(); } catch (e) {}
+                try { map.render(); } catch (e) {}
             }
         });
     }
@@ -3377,6 +4377,22 @@ async function init() {
     // Keyboard shortcuts for UI: toggle sidebar and arrow-key panning
     try {
         document.addEventListener('keydown', (e) => {
+                // Global Escape: exit any edit mode
+                if (e.key === 'Escape' || e.key === 'Esc') {
+                    try {
+                        const markersToggle = document.getElementById('editMarkersToggle');
+                        const routeToggle = document.getElementById('editRouteToggle');
+                        if (map && map.editMarkersMode) {
+                            if (markersToggle) markersToggle.click(); else map.editMarkersMode = false;
+                        }
+                        if (map && map.editRouteMode) {
+                            if (routeToggle) routeToggle.click(); else map.editRouteMode = false;
+                        }
+                        try { updateEditOverlay(); } catch (err) {}
+                    } catch (err) {}
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                }
             // Ignore when typing in form controls, buttons, links or contenteditable elements
             const active = document.activeElement;
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.tagName === 'BUTTON' || active.tagName === 'A' || active.isContentEditable)) return;
@@ -3391,7 +4407,7 @@ async function init() {
                 return;
             }
 
-            // Tileset shortcuts: '1' -> Satellite, '2' -> Holographic, 'g' -> toggle grayscale
+            // Tileset shortcuts: '1' -> Satellite, '2' -> Holographic, '3' -> toggle grayscale
             // Zoom shortcuts: 'q' -> Zoom In, 'e' -> Zoom Out (case-insensitive)
             try {
                 if (e.key === 'q' || e.key === 'Q') {
@@ -3445,14 +4461,70 @@ async function init() {
                     } catch (err) {}
                     e.preventDefault();
                     return;
-                } else if (e.key === 'g' || e.key === 'G') {
+                } else if (e.key === '3') {
                     try { map.setTilesetGrayscale(!map.tilesetGrayscale); } catch (err) {}
                     try {
                         const gbtn = document.getElementById('tilesetGrayscaleBtn');
                         if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
                     } catch (err) {}
-                    e.preventDefault();
+                    try { e.preventDefault(); } catch (err) {}
                     return;
+                }
+                // Quick clears: Y = clear route, X = clear custom markers
+                if (e.key === 'y' || e.key === 'Y') {
+                    try {
+                        const btn = document.getElementById('clearRouteBtn');
+                        if (btn) btn.click(); else if (typeof map !== 'undefined' && map) map.clearRoute();
+                    } catch (err) {}
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                } else if (e.key === 'x' || e.key === 'X') {
+                    try {
+                        const btn = document.getElementById('clearCustom');
+                        if (btn) btn.click(); else if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.clearCustomMarkers === 'function') MarkerUtils.clearCustomMarkers();
+                    } catch (err) {}
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                } else if (e.key === 'c' || e.key === 'C') {
+                    // Ignore if any modifier key is down (pen buttons or OS gestures may emit modifiers)
+                    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+                        try { expandRouteNearby(); } catch (err) {}
+                    }
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                } else if (e.key === '<') {
+                    // Map '<' to Reverse Route (same as toggleRouteDirBtn)
+                    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+                        try {
+                            const dirBtn = document.getElementById('toggleRouteDirBtn');
+                            if (dirBtn) {
+                                dirBtn.click();
+                            } else {
+                                // Mirror toggleRouteDirection behavior when button not present: reverse waypoints only
+                                try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
+                                try {
+                                    if (Array.isArray(map.currentRoute) && map.currentRoute.length > 1 && Array.isArray(map._routeSources)) {
+                                        const ordered = [];
+                                        for (let i = 0; i < map.currentRoute.length; i++) {
+                                            const idx = map.currentRoute[i];
+                                            const src = map._routeSources && map._routeSources[idx];
+                                            if (src && src.marker) ordered.push({ marker: src.marker, layerKey: src.layerKey });
+                                        }
+                                        if (ordered.length > 1) {
+                                            ordered.reverse();
+                                            const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
+                                            const newIndices = newSources.map((_, i) => i);
+                                            try { map.setRoute(newIndices, map.computeRouteLengthNormalized(newSources), newSources); } catch (e) {}
+                                        }
+                                    }
+                                } catch (e) {}
+                                try { map.render(); } catch (e) {}
+                            }
+                        } catch (err) {}
+                    }
+                    try { e.preventDefault(); } catch (err) {}
+                    return;
+                // 'R' mapping removed to avoid accidental activation
                 }
             } catch (err) {}
 

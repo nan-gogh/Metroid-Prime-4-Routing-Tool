@@ -9,34 +9,57 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🔍 **Adaptive resolution system**: 6 tile resolutions (256px → 8192px) auto-load based on zoom level
 - ⌨️ **Keyboard shortcuts**: 
   - `W`/`A`/`S`/`D` or Arrow Keys: Pan (hold Shift for larger steps)
-  - `+`/`-`/`E`/`Q` or Scroll: Zoom in/out
+  - `+`/`-` or Scroll: Zoom in/out
   - `0` or `⌂`: Reset view to center
   - `Space`: Toggle sidebar
   - `1`: Switch to Satellite tileset
   - `2`: Switch to Holographic tileset
-  - `G`: Toggle Grayscale mode
+  - `3`: Toggle Grayscale mode
+  - `Q`: Toggle Edit Route mode
+  - `E`: Toggle Edit Markers mode
+  - `C`: Expand Route (add nearby markers to existing route)
+  - `Y`: Clear Route
+  - `X`: Clear Custom Markers
+  - `<`: Reverse Route direction
 - 🎯 **Responsive zoom controls**: On-screen buttons for zoom in/out/reset
 - 🔄 **Sidebar toggle**: Collapsible sidebar with animated handle (sidebar state not persisted)
 
 ### Tileset System
 - 🎨 **Dual tilesets**: Satellite (`sat`) and Holographic (`holo`) map variants
 - 🌑 **Grayscale mode**: Server-side grayscale tiles (`sat_bw` / `holo_bw`) preserve colored markers/routes
-- 💾 **Persistence**: Tileset and grayscale preferences saved to `localStorage`
+- 💾 **Persistence**: Tileset and grayscale preferences saved to `localStorage` (when consent enabled)
 - ⚡ **Smart preloading**: Generation-tagged tile loading prevents stale tiles during tileset switches
 - 🚫 **Abort controllers**: In-flight tile fetches are cancelled when switching tilesets
 
 ### Grid Overlay
-- ▫ **Toggleable grid overlay**: An 8x8 grid can be toggled from the sidebar to help plan routes and reference areas. Grid lines are drawn in cyan for high contrast on both tilesets, and the sidebar includes a Grid toggle with a distinct backdrop for quick access.
+- ▫ **Toggleable grid overlay**: An 8x8 grid can be toggled from the sidebar to help plan routes and reference areas. Grid lines are drawn in cyan for high contrast on both tilesets.
 
 ### Marker System
-- 💎 **GE Crystallization Layers**: Multi-layer GE Crystallization markers, representing the three phases in which GE Crystals spawn (392 total unique markers)
+- 💎 **20 Collectible Layers**: Comprehensive marker coverage for all Sol Valley collectibles
+  - **GE Crystallization** (3 phases): 394 total markers across spawning phases
+  - **Gibardaum Rock**: 16 markers
+  - **Kyuveria Plant**: Plant collectibles
+  - **Energy Tank**: 3 markers
+  - **Boost Tank**: 3 markers
+  - **Shot Upgrade**: Weapon upgrades
+  - **Missile Expansion**: Missile capacity upgrades
+  - **Shot Expansion**: Shot capacity upgrades
+  - **Bomb Expansion**: Bomb capacity upgrades
+  - **Mech Part**: Mechanical components
+  - **Area Entrance**: 6 entrance locations
+  - **Save Station**: Save point locations
+  - **Shrine Lift**: Shrine access points
+  - **Tokabi's Camp**: Story locations
+  - **Scout Bot**: Scout bot encounters
+  - **GF Debris**: Galactic Federation debris
+  - **Custom Markers**: User-placed markers (max 50)
 - 📍 **Custom Markers**: User-placed markers with tap/click placement
-  - Quick tap on empty map space places a marker (when Custom Markers layer is visible)
+  - Quick tap on empty map space places a marker (when Custom Markers layer is visible and Edit Markers mode active)
   - Max limit: 50 custom markers (configurable)
   - Position-based UID generation: deterministic hash from coordinates (`cm_xxxxxxxx` format)
-  - Layer-defined prefixes: Each layer specifies its own UID prefix (`cm` for custom, `gc1`/`gc2`/`gc3` for crystallization layers)
+  - Layer-defined prefixes: Each layer specifies its own UID prefix
   - UIDs regenerated on import for backward compatibility with legacy files
-- 🎛️ **Layer visibility toggles**: Show/hide individual marker layers independently
+- 🎛️ **Layer visibility toggles**: Show/hide individual marker layers independently with Show All/Hide All buttons
 - 🎨 **Data-driven architecture**: All layers defined in global `LAYERS` object with `name`, `icon`, `color`, `prefix`, and `markers`
 - 📊 **Live marker counts**: Sidebar displays count for each layer dynamically
 
@@ -44,8 +67,11 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🖱️ **Hover tooltips**: Display marker info on mouse hover
 - 👆 **Touch-friendly hit detection**: Larger hit padding for mobile taps
 - 🔘 **Selected marker state**: Click/tap to pin a persistent tooltip
-- 🗑️ **Delete custom markers**: Click selected custom marker to remove it
-- 📍 **Marker rendering**: Adaptive sizing based on zoom level with icon support
+- 🗑️ **Delete custom markers**: Click selected custom marker to remove it (in Edit Markers mode)
+- 📍 **Marker rendering**: Adaptive sizing based on zoom level with emoji icon support
+- 🎯 **Route waypoint editing**: In Edit Route mode, click route waypoints to toggle their inclusion in the route
+- ✨ **Segment insertion preview**: Hover near route segments to see preview of where a new waypoint would be inserted
+- 🖱️ **Smart cursor**: Pointer cursor appears when hovering markers or route segments in edit modes
 
 ### Custom Marker Persistence
 - 💾 **LocalStorage auto-save**: Custom markers persist across sessions (`mp4_customMarkers` key)
@@ -59,33 +85,48 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🧹 **Clear All**: Remove all custom markers with confirmation prompt
 
 ### Privacy & Local Storage Consent
-- 🔒 **Local Storage Consent**: Non-essential persistence (map view, routes, custom markers, and UI preferences) is gated behind a user-controlled consent toggle in the sidebar. Enabling the toggle shows a short confirmation explaining what is stored locally (device-only) and allows cancelling if you prefer no on-device storage.
-- 💾 **Map view persistence**: When consent is enabled the current map pan and zoom are saved and restored on reload so you return to the same view.
-- 🧾 **Route loop preference**: The route generation records whether a start point was used and preserves the looping behavior across sessions so routes generated with a chosen start stay consistent after reload.
-
-- 🗂️ **Layer visibility**: When consent is enabled the sidebar's layer visibility state is saved so which marker layers you had shown/hidden will be restored on reload.
+- 🔒 **Local Storage Consent**: Non-essential persistence (map view, tileset preferences, custom markers, and route data) is gated behind a user-controlled consent toggle in the sidebar. A cyan-colored toggle button is located at the bottom of the sidebar above the Controls hint button. Enabling the toggle allows the app to save data locally (device-only).
+- 💾 **Map view persistence**: When consent is enabled, the current map pan and zoom are saved and restored on reload so you return to the same view.
+- 🧾 **Route loop preference**: The route looping behavior is controlled by the Loop Route button and persisted across sessions when consent is enabled.
+- 🗂️ **Layer visibility**: When consent is enabled, the sidebar's layer visibility state is saved so which marker layers you had shown/hidden will be restored on reload.
 - 🗺️ **Tileset & Grayscale preferences**: Tileset choice and the grayscale toggle are persisted when consent is enabled, returning you to the same map style on subsequent visits.
+- 🎨 **No tracking**: All data stays on your device; no analytics or external tracking.
 
 ### Routing System
-- 🧭 **Euclidean TSP Solver** (`tools/tsp_euclid.js`):
-  - Nearest-neighbor seeding for initial tour
-  - Multi-restart 2-opt local search
-  - Optional 3-opt polishing for larger marker sets
-  - Closed tour visiting all visible markers (all Crystallization layers + Custom Markers)
+- 🧭 **Dual Routing Algorithms**:
+  - **Compute Route**: Full TSP solver using visible markers (`tools/tsp_euclid.js`)
+    - Nearest-neighbor seeding for initial tour
+    - Multi-restart 2-opt local search
+    - Optional 3-opt polishing for larger marker sets
+    - Closed tour visiting all visible markers (all enabled layers)
+  - **Expand Route**: Intelligent route expansion adding nearby markers
+    - Per-segment candidate selection within fixed distance
+    - Fixed-endpoint TSP solving for each segment
+    - Dynamic programming for small segments (≤14 intermediates)
+    - Greedy fallback for large segments to prevent OOM
+    - Preserves route waypoint order
+- 🎨 **Edit Route Mode**: Interactive route editing with visual feedback
+  - Click existing markers to toggle route membership
+  - Drag route waypoints to reposition or snap to nearby markers
+  - Click and drag route segments to insert new waypoints
+  - Transient preview dot follows cursor when hovering near segments
+  - Full undo via pointercancel or releasing outside valid snap targets
 - 📏 **Normalized route length**: Distance displayed with map width = 1 for coordinate-system independence
 - ▶️ **Animated route rendering**: 
   - Dashed stroke with RAF-driven animation
   - Configurable animation speed (100 pixels/second default)
-  - Direction persists across sessions
-- 🔄 **Reverse Direction**: Toggle route animation direction (forward/backward)
+  - Cyan color matching UI theme
+- 🔄 **Route controls**:
+  - **Loop Route**: Toggle to close the route into a loop
+  - **Reverse Route**: Reverse waypoint order and animation direction
+  - **Expand Route**: Add nearby markers using intelligent segment insertion
+  - **Clear Route**: Remove route with confirmation
+- 🔒 **Computing lock**: UI interactions blocked during route computation to prevent race conditions
 - 🎨 **Visual styling**: Adaptive stroke width scales with zoom level
-- 💾 **Route persistence**: Saved to `localStorage` (`mp4_saved_route` key)
+- 💾 **Route persistence**: Saved to `localStorage` when consent enabled
 - 📤 **Export route**: JSON format with `{ exported, count, points: [{x,y}], length }`
 - 📥 **Import route**: Load previously exported routes
-- 🗑️ **Clear route**: Remove route visualization with confirmation
-- 🔄 **Auto-enable route layer**: Route layer automatically enabled when computing/importing
-
-- 🔁 **Looping behavior**: If you selected a marker as the start point the route will preserve that start and will not automatically close into a loop; if no start point was selected the algorithm produces a closed (looping) tour. The generation-time choice is preserved across sessions.
+- 🎯 **Auto-enable route layer**: Route layer automatically enabled when computing/importing
 
 ### Performance Optimization
 - 🧩 **Dual canvas architecture**: Separate canvases for tiles (background) and overlays (routes/markers)
@@ -106,11 +147,11 @@ A lightweight, mobile-first interactive map for tracking collectibles in Metroid
 - 🚫 **Double-tap zoom prevention**: Disabled on UI elements, works only on map canvas
 - ✨ **Loading fade overlay**: Smooth fade-out on page load
 - 🎨 **Responsive layout**: Sidebar adapts to screen size
-- 🔔 **Status bar**: Real-time display of current zoom level and active tile resolution
-- ℹ️ **Keyboard hints**: On-screen reference for all shortcuts
- - ♟️ **Grid coordinates**: The map displays chessboard-style coordinates (X: A–H, Y: 1–8) for easy reference when using the grid overlay.
- - 🧭 **Tooltip stacking**: Tooltips' z-index is tuned so they sit below the sidebar to avoid overlap with UI panels.
+- 🔔 **Dev Tools panel**: Real-time display of current zoom level, active tile resolution, decoder stats
+- ℹ️ **Keyboard hints overlay**: Collapsible on-screen reference for all shortcuts with cyan-styled keys
+- 🎨 **Cyan UI theme**: Section titles with glow effect, consistent color scheme throughout
 - 🎯 **Accessibility**: ARIA labels, semantic HTML, keyboard navigation support
+- 🖱️ **Smart cursor feedback**: Pointer cursor for interactive elements, grab/grabbing for pan
 
 ### Technical Architecture
 - 🏗️ **Modular structure**: Separated concerns (map engine, data, utilities, solver)
@@ -154,22 +195,30 @@ The sidebar includes a **Links** section with quick access to the project's GitH
 - `W`/`A`/`S`/`D` or Arrow Keys: Pan map
 - `Shift` + Arrow/WASD: Pan faster
 - `+` / `-`: Zoom in/out
- - `E` / `Q`: Zoom in/out (E = zoom in, Q = zoom out)
 - `0` or `⌂`: Reset view
 - `Space`: Toggle sidebar
 - `1`: Switch to Satellite tileset
 - `2`: Switch to Holographic tileset  
-- `G`: Toggle Grayscale mode
+- `3`: Toggle Grayscale mode
+- `Q`: Toggle Edit Route mode
+- `E`: Toggle Edit Markers mode
+- `C`: Expand Route (add nearby markers)
+- `Y`: Clear Route
+- `X`: Clear Custom Markers
+- `<`: Reverse Route direction
+- `Escape`: Exit any edit mode
 
 ### Place Markers
 
-- **Quick placement**: Tap/click empty map space (only when `Custom Markers` layer is visible)
+- **Edit mode**: Enable "Edit Markers" mode via sidebar button or `E` key
+- **Quick placement**: Tap/click empty map space (only when Edit Markers mode is active)
 - **UID system**: Each marker gets a deterministic position-based UID (e.g., `cm_a3f7b2c9`)
   - Same coordinates always generate the same UID
-  - Format: `{prefix}_{8-char-hex-hash}` where prefix is layer-defined (`cm` for custom, `gc` for green crystals)
+  - Format: `{prefix}_{8-char-hex-hash}` where prefix is layer-defined
 - **Max limit**: 50 custom markers (configurable in `map.layerConfig.customMarkers.maxMarkers`)
-- **Persistence**: Auto-saved to `localStorage` under key `mp4_customMarkers`
-- **Delete**: Click/tap a selected custom marker to remove it
+- **Persistence**: Auto-saved to `localStorage` when consent enabled
+- **Delete**: In Edit Markers mode, click/tap a selected custom marker to remove it
+- **Drag**: In Edit Markers mode, drag custom markers to reposition them
 - **Export Markers**: Downloads JSON file with timestamp + data hash filename
   - Format: `{ exported, count, markers: [{ uid, x, y }] }`
   - Filename: `markers-{timestamp}-{hash}.json`
@@ -180,39 +229,40 @@ The sidebar includes a **Links** section with quick access to the project's GitH
   - Handles hash collisions with counter suffix
   - Stops at max limit
 - **Clear Markers**: Removes all custom markers after confirmation
-  - Updates localStorage and re-renders map
 
-### Compute a Route
+### Compute & Edit Routes
 
-Use the sidebar `Compute Route` button to solve a Traveling Salesman Problem tour visiting all visible markers.
+**Compute Route** solves a Traveling Salesman Problem tour visiting all visible markers:
+- Uses multi-restart 2-opt with optional 3-opt polishing
+- Visits all markers from enabled layers
+- Automatically enables the route layer
+- Locks UI during computation to prevent race conditions
 
-**Solver Algorithm:**
-- Nearest-neighbor heuristic for initial tour seeding
-- Multi-restart 2-opt local search (default: 5 restarts)
-- Optional 3-opt polishing for larger marker sets (improves solution quality)
-- Implementation: `tools/tsp_euclid.js`
+**Expand Route** adds nearby markers to an existing route:
+- Intelligently inserts markers into route segments
+- Uses per-segment TSP solving with fixed endpoints
+- Configurable distance threshold
+- Preserves existing waypoint order
 
-**Route Start Point:**
-- Select a marker on the map to use it as the starting point for route computation
-- The route will begin from the selected marker and visit all other visible markers
-- If no marker is selected, the algorithm will automatically choose an optimal starting point
+**Edit Route Mode** (toggle with `Q` key or sidebar button):
+- **Visual feedback**: Semi-transparent cyan overlay appears when active
+- **Toggle waypoints**: Click markers to add/remove them from the route
+- **Drag waypoints**: Click and drag existing route waypoints
+  - Drag to reposition as free-floating waypoint
+  - Snap to nearby markers to replace with that marker
+  - Release outside snap range to cancel (route restored)
+- **Insert waypoints**: Click and drag route segments
+  - Preview dot shows insertion point as you hover
+  - Drag to place new waypoint at any position
+  - Snap to nearby markers or place at arbitrary coordinates
+- **Pointer cursor**: Automatically appears when hovering waypoints or segments
 
-**Route Features:**
-- **Normalized length**: Distance displayed with map width = 1 (coordinate-system independent)
-- **Animated visualization**: Dashed stroke with requestAnimationFrame-driven offset animation
-- **Direction control**: `Reverse Direction` button toggles forward/backward animation
-  - Direction persists to localStorage (`routeDir` key)
-- **Auto-enable layer**: Route layer automatically becomes visible when computed/imported
-- **Persistence**: Route saved to `localStorage` (`mp4_saved_route` key)
-  - Stored as: `{ points: [{x,y}], length }`
-- **Export Route**: Downloads JSON with metadata
-  - Format: `{ exported, count, points, length }`
-  - Filename: `route-{timestamp}[-{hash}].json`
-- **Import Route**: Load previously exported route JSON
-  - Requires `points` array with `{x,y}` entries
-  - Automatically persists imported route
-- **Clear Route**: Removes route visualization after confirmation
-  - Clears localStorage entry
+**Route Controls:**
+- **Loop Route**: Toggle to close the route into a continuous loop
+- **Reverse Route** (`<` key): Reverse waypoint order and animation direction  
+- **Export Route**: Save as JSON with metadata
+- **Import Route**: Load previously exported route
+- **Clear Route** (`Y` key): Remove route after confirmation
 
 ### Tileset & Grayscale
 
@@ -242,18 +292,34 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 
 ```
 ├── index.html              # Main HTML document (sidebar + controls)
-├── styles.css              # Styling (pressed states for touch, responsive layout)
-├── map.js                  # Interactive map engine (rendering, interaction, route UI)
+├── styles.css              # Styling (cyan theme, pressed states, responsive layout)
+├── map.js                  # Interactive map engine (rendering, interaction, route UI, edit modes)
 ├── tools/
 │   └── tsp_euclid.js       # Euclidean TSP solver (NN + 2-opt, 3-opt option)
 ├── data/
 │   ├── init.js             # LAYERS bootstrap
 │   ├── markerUtils.js      # Marker persistence, import/export, UID generation
 │   ├── routeUtils.js       # Route utilities (export, import, clearing)
+│   ├── storageHelper.js    # LocalStorage consent gating
 │   └── layers/
-│       ├── geCrystallization1.js   # Layer 1 crystals (84 markers with gc1_ UIDs)
-│       ├── geCrystallization2.js   # Layer 2 crystals (135 markers with gc2_ UIDs)
-│       ├── geCrystallization3.js   # Layer 3 crystals (175 markers with gc3_ UIDs)
+│       ├── geCrystallization1.js   # GE Crystal Phase 1 (84 markers, gc1_ UIDs)
+│       ├── geCrystallization2.js   # GE Crystal Phase 2 (135 markers, gc2_ UIDs)
+│       ├── geCrystallization3.js   # GE Crystal Phase 3 (175 markers, gc3_ UIDs)
+│       ├── gibardaumRock.js        # Gibardaum Rock (16 markers, gr_ UIDs)
+│       ├── kyuveriaPlant.js        # Kyuveria Plant collectibles
+│       ├── energyTank.js           # Energy Tanks (3 markers, et_ UIDs)
+│       ├── boostTank.js            # Boost Tanks (3 markers, bt_ UIDs)
+│       ├── shotUpgrade.js          # Shot Upgrades
+│       ├── missileExpansion.js     # Missile Expansions
+│       ├── shotExpansion.js        # Shot Expansions
+│       ├── bombExpansion.js        # Bomb Expansions
+│       ├── mechPart.js             # Mech Parts
+│       ├── areaEntrance.js         # Area Entrances (6 markers, ae_ UIDs)
+│       ├── saveStation.js          # Save Stations
+│       ├── shrineLift.js           # Shrine Lifts
+│       ├── tokabisCamp.js          # Tokabi's Camp locations
+│       ├── scoutBot.js             # Scout Bot encounters
+│       ├── gfDebris.js             # GF Debris
 │       ├── customMarkers.js        # Custom markers layer definition
 │       └── route.js                # Route layer metadata (color, name, icon)
 └── tiles/                  # Map tiles (256-8192px AVIF format)
@@ -276,18 +342,21 @@ All point layers are defined in the global `LAYERS` object. Each layer provides:
 
 The app renders layers, builds the sidebar, and performs hit-testing dynamically from `LAYERS`, so adding new POI layers requires no changes to `map.js`.
 
-**Crystallization layers** (`data/geCrystallization1.js`, `geCrystallization2.js`, `geCrystallization3.js`):
+**Crystallization layers** (`data/layers/geCrystallization*.js`):
 - Extracted from PNG images using connected components analysis with color-based filtering
 - Tolerance: ±12 RGB deviation from target green (#6ac77e)
 - Clustering: 15px distance threshold for marker aggregation
 - Each layer maintains unique prefix (`gc1_`, `gc2_`, `gc3_`) for distinction
 - Position-based UID generation from coordinates ensures deterministic identification
 
+**All collectible layers** follow the same structure with unique prefixes and markers extracted from game data.
+
 **Custom markers** are pure data in `data/customMarkers.js`; `data/markerUtils.js` centralizes:
-- localStorage load/save (`mp4_customMarkers` key)
+- localStorage load/save with consent gating
 - Import/export with JSON format validation
 - Position-based UID generation with DJB2-like hash algorithm
 - Collision handling with counter suffix (`{uid}_1`, `{uid}_2`, etc.)
+- Drag-and-drop repositioning in Edit Markers mode
 
 **UID Generation**: `MarkerUtils.generateUID(x, y, prefix)`
 - Hashes coordinates to 8-character hex string: `{prefix}_{hash}`
@@ -338,19 +407,29 @@ The app renders layers, builds the sidebar, and performs hit-testing dynamically
 ## Contributors
 
 This tool was developed with contributions from:
-- **NaN Gogh** - Original concept and routing tool development
-- **CrypticJacknife** - Crystal data extraction GOAT
-- **Supreme Dirt** - Crystal data extraction expert
+- **Cryptic Jacknife** - Crystal data extraction GOAT
+- **Supreme Dirt** - Crystal data extraction
 - **Meta_X** - Crystal data extraction
+- **rekameohs** - Image data contribution
 - **Tal** - Spark ignition
 
 ## Changelog
 
+### v0.6.0 - Enhanced Routing & Edit Modes
+- **Edit Route Mode**: Interactive waypoint editing with drag-and-drop, segment insertion, and snap-to-marker functionality
+- **Edit Markers Mode**: Drag custom markers to reposition them with visual feedback
+- **Expand Route**: Intelligent route expansion algorithm adds nearby markers using per-segment TSP
+- **Route preview**: Transient preview dot follows cursor when hovering near route segments
+- **Keyboard shortcuts expanded**: Q/E for edit modes, C for Expand Route, Y for Clear Route, X for Clear Markers, < for Reverse Route
+- **Computing overlay**: Full-screen lock during route computation prevents race conditions
+- **Loop Route control**: Explicit UI toggle for route looping behavior
+- **17 collectible layers**: Added comprehensive marker coverage beyond GE Crystallization
+- **Cyan UI theme**: Section title glows, consistent color scheme, enhanced visual hierarchy
+- **Storage consent UI**: Relocated to sidebar bottom with matching control styling
+
 ### v0.5.0 - Infrastructure & Routing Enhancements
-- **Three new GE Crystallization Layers**: Added Layer 1 (84 markers), Layer 2 (135 markers), and Layer 3 (175 markers) for a total of 394 unique collectible markers across all crystallization phases
-- **Route start point selection**: Select a marker on the map to define the starting point for route computation, enabling more flexible pathfinding
+- **Three GE Crystallization Layers**: Added Layer 1 (84 markers), Layer 2 (135 markers), and Layer 3 (175 markers) for a total of 394 unique collectible markers across all crystallization phases
 - **Project structure refactor**: Reorganized layer definition files into dedicated `data/layers/` subfolder for improved code organization and maintainability
-- **Contributor leaderboard**: Dynamic shimmer effect for Contributors section, with top contributor highlighted in bright cyan
 
 ## License
 

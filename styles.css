@@ -256,8 +256,13 @@ body {
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: #888;
+    color: #22d3ee;
     margin-bottom: 12px;
+}
+
+/* Glow effect for specific section titles (cyan) */
+.control-group.section-glow > h3 {
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.55), 0 0 22px rgba(34, 211, 238, 0.18);
 }
 
 /* Layer list container: vertical stack with 1px spacing between rows */
@@ -325,12 +330,38 @@ body {
 }
 
 .layer-name {
-    color: #ffffff;
+    color: #22d3ee;
+}
+
+/* Make the Local Storage (consent) toggle title cyan to match dev stats */
+#saveDataToggle_label .layer-name {
+    color: #22d3ee;
+}
+
+/* Center the title text inside the consent toggle */
+#saveDataToggle_label .layer-info {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#saveDataToggle_label .layer-name {
+    text-align: center;
+}
+
+/* Ensure the consent toggle button matches the Hints toggle width/spacing */
+#saveDataToggle_label {
+    width: calc(100% - 32px); /* same as .hints-toggle */
+    padding: 10px 12px;
+    margin: 0px 16px 12px 16px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .layer-count {
     font-size: 12px;
-    color: #888;
+    color: #9fb9c9;
 }
 
 /* Data Miners section */
@@ -459,6 +490,23 @@ body {
     cursor: grabbing;
 }
 
+/* Semi-transparent overlay shown during edit modes (markers/route) */
+.edit-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20; /* above canvas (1) and below zoom controls (50) */
+    background: rgba(34, 238, 228, 0.347);
+    pointer-events: none; /* allow map interactions through overlay */
+    opacity: 0;
+    transition: opacity 160ms ease;
+}
+.edit-overlay.visible {
+    opacity: 1;
+}
+
 /* Zoom controls */
 .zoom-controls {
     position: absolute;
@@ -534,7 +582,9 @@ body {
 
 .hints-overlay {
     position: absolute; /* positioned relative to the sidebar now */
-    bottom: 60px; /* positioned flush above hints button (accounts for button height + margins) */
+     /* positioned flush above hints button (accounts for button height + margins)
+         Increased to account for the consent toggle placed below the hints button. */
+     bottom: calc(60px + 57px);
     left: 0px; /* nudge left 1px to align with sidebar border */
     width: calc(100% + 1px);
     background: linear-gradient(180deg, #0a1929 0%, #041018 100%);
@@ -596,7 +646,7 @@ body {
 .hints-list {
     padding: 16px;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
     font-size: 11px;
     color: #a0c4d8;
@@ -630,10 +680,11 @@ kbd {
 
 /* Group related hints so their label doesn't break across lines */
 .hint-group {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 4px;
-    white-space: nowrap;
+    gap: 8px;
+    width: 100%;
+    white-space: normal;
 }
 
 .hint-label {
@@ -675,6 +726,29 @@ kbd {
 
 .hints-toggle:active {
     transform: scale(0.98);
+}
+
+/* Full-screen computing overlay to lock interactions during route computation */
+.computing-overlay {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.35);
+    z-index: 3000;
+    pointer-events: auto;
+}
+.computing-overlay .computing-inner {
+    background: rgba(6,12,20,0.9);
+    padding: 14px 18px;
+    border-radius: 8px;
+    color: #22d3ee;
+    font-weight: 600;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.6);
 }
 
 /* Collapsible hints list (fully hidden by default, expands when visible) */
