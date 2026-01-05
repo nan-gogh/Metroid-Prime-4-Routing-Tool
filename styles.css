@@ -243,7 +243,7 @@ body {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
     cursor: pointer;
-    transition: background 0.18s;
+    transition: none; /* disable transitions for instant toggle changes */
     /* Prevent browser double-tap zoom on touch devices */
     touch-action: manipulation;
     position: relative; /* for absolutely-positioned checkbox inside */
@@ -251,7 +251,8 @@ body {
 
 .layer-toggle.pressed,
 .layer-toggle:active {
-    background: rgba(255, 255, 255, 0.12);
+    /* no press feedback; maintain current background */
+    background: rgba(255, 255, 255, 0.03);
 }
 
 /* Active state: brighter background when the layer is enabled */
@@ -295,7 +296,8 @@ body {
 }
 
 .layer-toggle input[type="checkbox"]:active {
-    transform: scale(0.96);
+    /* remove active transform for instant state */
+    transform: none;
 }
 
 /* Draw the checkmark with a pseudo-element to avoid native UA check flashes on mobile */
