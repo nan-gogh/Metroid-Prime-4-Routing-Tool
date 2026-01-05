@@ -2431,16 +2431,9 @@ async function initializeLayerIcons() {
             } catch (e) {}
         });
 
-        // Add pressed-state feedback for touch/pointer devices to avoid hover sticking
-        label.addEventListener('pointerdown', (e) => {
-            label.classList.add('pressed');
-        });
-        label.addEventListener('pointerup', (e) => {
-            label.classList.remove('pressed');
-        });
-        label.addEventListener('pointercancel', (e) => {
-            label.classList.remove('pressed');
-        });
+        // No pressed-state handlers for layer toggles: remove animations/press
+        // feedback to avoid delayed or sticky toggles on mobile when tapping
+        // multiple rows rapidly.
 
         // No hidden checkbox: click handler above performs toggle and persistence.
 
