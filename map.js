@@ -727,85 +727,37 @@ class InteractiveMap {
         });
         
         // Click handler - place custom markers or delete them when tapped
-        this.canvas.addEventListener('click', (e) => {
-            // Check if this was a quick tap (not a held drag)
-            // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
-            const holdDuration = Date.now() - this.pointerDownTime;
-            
-            // Only interact on quick taps (less than threshold)
-            const isQuickTap = this.pointerDownTime > 0 && holdDuration < this.minClickDuration;
-            
-            // Clear timer after use (important for preventing double-placement)
-            this.pointerDownTime = 0;
-            
-            // Determine whether a marker exists at the click location (don't rely on hoveredMarker for custom markers)
-            const rect = this.canvas.getBoundingClientRect();
-            const localX = e.clientX - rect.left;
-            const localY = e.clientY - rect.top;
-            const hit = this.findMarkerAt(localX, localY);
+        // Immediate UI feedback on touch: update row visual on pointerdown so taps feel instant
+        label.addEventListener('pointerdown', (ev) => {
+            try {
+                const willBeChecked = !label.classList.contains('active');
+                label.classList.toggle('active', willBeChecked);
+                label.setAttribute('aria-pressed', willBeChecked ? 'true' : 'false');
+                label.dataset.pendingChecked = willBeChecked ? '1' : '0';
+            } catch (e) {}
+        });
 
-            if (isQuickTap && hit) {
-                const layerKey = hit.layerKey;
-                // Helper determination: deletable layers (custom markers) vs selectable layers
-                const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
-                const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
-
-                if (this.editMarkersMode) {
-                    // In edit mode: allow deletion (custom markers are editable regardless of flags)
-                    const isCustom = (layerKey === 'customMarkers');
-                    if (isDeletable || isCustom) {
-                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
-                            MarkerUtils.deleteCustomMarker(hit.marker.uid);
-                            this.checkMarkerHover(localX, localY);
-                        }
-                    }
+        // Click handler: use pendingChecked (set by pointerdown) when present to avoid double-flip
+        label.addEventListener('click', (ev) => {
+            try {
+                const pending = label.dataset.pendingChecked;
+                const checked = (typeof pending !== 'undefined') ? (pending === '1') : !label.classList.contains('active');
+                try { delete label.dataset.pendingChecked; } catch (e) {}
+                // update visual and accessibility state (idempotent)
+                label.classList.toggle('active', checked);
+                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
+                // update runtime visibility and render
+                if (!map.layerVisibility) map.layerVisibility = {};
+                if (layerKey === 'route') {
+                    map.layerVisibility.route = checked;
+                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
                 } else {
-                    // Normal mode: selection and tooltip behavior
-                    if (isSelectable) {
-                        const uid = hit.marker.uid;
-                        if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
-                            // deselect
-                            this.selectedMarker = null;
-                            this.selectedMarkerLayer = null;
-                            this.hideTooltip();
-                            this.render();
-                        } else {
-                            // select
-                            this.selectedMarker = hit.marker;
-                            this.selectedMarkerLayer = layerKey;
-                            // compute screen coords for tooltip placement
-                            const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
-                            const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
-                            this.showTooltip(hit.marker, screenX, screenY, layerKey);
-                            this.render();
-                        }
-                    }
+                    map.toggleLayer(layerKey, checked);
                 }
-            } else if (e.button === 0 && isQuickTap && !hit) {
-                // Quick tap on empty space - place custom marker
-                // Reuse previously computed localX/localY to avoid redundant layout read
-                const clientX = localX;
-                const clientY = localY;
-                
-                // Convert to world coordinates (0-1 normalized)
-                const worldX = (clientX - this.panX) / this.zoom / MAP_SIZE;
-                const worldY = (clientY - this.panY) / this.zoom / MAP_SIZE;
-                
-                // Only place if within map bounds
-                if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
-                    // Do not allow placement when the custom markers layer is hidden
-                    if (!this.layerVisibility || !this.layerVisibility.customMarkers) {
-                        return;
-                    }
-                    // Only place markers when edit mode is active
-                    if (this.editMarkersMode) {
-                        if (typeof MarkerUtils !== 'undefined') {
-                            MarkerUtils.addCustomMarker(worldX, worldY);
-                            // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
-                            this.checkMarkerHover(localX, localY);
-                        }
-                    }
-                }
+                // persist updated map.layerVisibility
+                try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+            } catch (e) {}
+        });
             }
         });
         
@@ -2419,19 +2371,10 @@ async function initializeLayerIcons() {
         // append to container
         container.appendChild(label);
 
-        // Immediate visual feedback on pointerdown so the UI feels responsive
-        label.addEventListener('pointerdown', (ev) => {
-            try {
-                const willBeChecked = !label.classList.contains('active');
-                label.classList.toggle('active', willBeChecked);
-                label.setAttribute('aria-pressed', willBeChecked ? 'true' : 'false');
-            } catch (e) {}
-        });
-
-        // Click handler: perform runtime toggle based on the visual state (which was updated on pointerdown)
+        // Click handler: toggle active state and perform the same actions as the checkbox change handler
         label.addEventListener('click', (ev) => {
             try {
-                const checked = !!label.classList.contains('active');
+                const checked = !label.classList.contains('active');
                 // Prevent turning off the customMarkers layer while in edit mode
                 if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
                     // Keep visual state active and do nothing else
@@ -2439,6 +2382,9 @@ async function initializeLayerIcons() {
                     try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
                     return;
                 }
+                // update visual and accessibility state
+                label.classList.toggle('active', checked);
+                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
                 // update runtime visibility and render
                 if (!map.layerVisibility) map.layerVisibility = {};
                 if (layerKey === 'route') {
