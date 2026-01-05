@@ -395,6 +395,14 @@ class InteractiveMap {
                         offsetX: this._draggingCandidate.offsetX,
                         offsetY: this._draggingCandidate.offsetY
                     };
+                    // If the marker being dragged is currently selected, clear selection and hide tooltip
+                    try {
+                        if (this.selectedMarker && this.selectedMarker.uid === this._draggingMarker.uid && this.selectedMarkerLayer === this._draggingMarker.layerKey) {
+                            this.selectedMarker = null;
+                            this.selectedMarkerLayer = null;
+                            try { this.hideTooltip(); } catch (e) {}
+                        }
+                    } catch (e) {}
                     this._draggingCandidate = null;
                     // Prevent click handler from firing for this interaction
                     this.pointerDownTime = 0;
