@@ -3,7 +3,7 @@
 LAYERS.geCrystallization2 = {
     name: "GE Crystallization 2",
     icon: "💎",
-    color: "#299c33ff",
+    color: "#2aa234ff",
     prefix: "gc2",
     markers: [
         {"uid": "gc2_4ac3d4ee", "x": 0.7320788015727124, "y": 0.1364634395424837},

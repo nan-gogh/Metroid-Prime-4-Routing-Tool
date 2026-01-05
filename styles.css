@@ -257,7 +257,7 @@ body {
 #layerList {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
 }
 
 .layer-toggle {
@@ -482,11 +482,25 @@ body {
     touch-action: manipulation;
 }
 
+/* Size and align inline SVG icons inside zoom buttons */
+.zoom-btn .mini-icon {
+    width: 18px;
+    height: 18px;
+    display: block;
+    margin: 0;
+}
+
 .zoom-btn:active,
 .zoom-btn.pressed {
     background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
     border-color: #0891b2;
     transform: scale(0.95);
+}
+
+/* Glow state for the mini edit-markers toggle in the zoom controls */
+.zoom-btn.glow {
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.45), 0 0 28px rgba(34, 211, 238, 0.12);
+    border-color: #22d3ee;
 }
 
 /* Tooltip */
@@ -598,6 +612,12 @@ body {
     padding: 2px 6px;
     border-radius: 3px;
     font-family: monospace;
+    color: #22d3ee; /* match pin/icon cyan */
+}
+
+/* Global keyboard key color to match UI cyan */
+kbd {
+    color: #22d3ee;
 }
 
 /* Group related hints so their label doesn't break across lines */
@@ -611,6 +631,15 @@ body {
 .hint-label {
     color: #a0c4d8;
     font-size: 11px;
+}
+
+/* Small inline icon used inside hint-group (e.g. pin SVG) */
+.hint-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 4px;
 }
 
 /* Hints toggle button (matches .control-btn exactly) */

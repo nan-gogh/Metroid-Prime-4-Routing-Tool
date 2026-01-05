@@ -116,9 +116,10 @@
             <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level -->
             <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
                 <div class="hints-list" id="hintsList">
-                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>E</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
-                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
                     <span class="hint-group"><kbd>Space</kbd>/<kbd>◀</kbd>/<kbd>▶</kbd> <span class="hint-label">Toggle sidebar</span></span>
+                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4h_pin_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
+                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
                     <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>G</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
                     <span class="hint-group"><kbd>0</kbd>/<kbd>⌂</kbd> <span class="hint-label">Reset</span></span>
                 </div>
@@ -134,8 +135,11 @@
             <canvas id="mapCanvas"></canvas>
             
             <div class="zoom-controls">
-                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true">
+                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true" title="Toggle sidebar">
                     <span class="handle-icon">◀</span>
+                </button>
+                <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers">
+                    <img src="graphics/mp4h_pin_icon.svg" alt="Edit Markers" class="mini-icon">
                 </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>

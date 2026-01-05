@@ -2712,6 +2712,11 @@ async function init() {
                         } catch (e) {}
                         try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
                     } catch (e) {}
+                    // Also update mini on-screen toggle if present
+                    try {
+                        const mini = document.getElementById('editMarkersToggleMini');
+                        if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                    } catch (e) {}
                 }
                 if (!map.editMarkersMode) {
                     // Clear any in-progress dragging state
@@ -2727,9 +2732,23 @@ async function init() {
                             row.removeAttribute('aria-disabled');
                         }
                     } catch (e) {}
+                    // Also update mini on-screen toggle if present
+                    try {
+                        const mini = document.getElementById('editMarkersToggleMini');
+                        if (mini) { mini.classList.toggle('glow', false); mini.setAttribute('aria-pressed', 'false'); }
+                    } catch (e) {}
                 }
             } catch (e) {}
         });
+        // Wire the on-screen mini toggle to proxy clicks to the sidebar toggle
+        try {
+            const mini = document.getElementById('editMarkersToggleMini');
+            if (mini) {
+                try { mini.setAttribute('aria-pressed', map.editMarkersMode ? 'true' : 'false'); } catch (e) {}
+                try { mini.classList.toggle('glow', !!map.editMarkersMode); } catch (e) {}
+                mini.addEventListener('click', () => { try { editToggle.click(); } catch (e) {} });
+            }
+        } catch (e) {}
     }
 
     // Tileset controls (Satellite / Holographic)
@@ -3153,7 +3172,16 @@ async function init() {
                     try { e.preventDefault(); } catch (err) {}
                     return;
                 } else if (e.key === 'e' || e.key === 'E') {
-                    try { map.zoomIn(); } catch (err) {}
+                    try {
+                        // Toggle Edit Markers mode via the sidebar toggle if present
+                        const editToggleEl = document.getElementById('editMarkersToggle');
+                        if (editToggleEl) {
+                            // Avoid toggling when focus is in a form control (checked earlier)
+                            try { editToggleEl.click(); } catch (err) { /* fallback below */ }
+                        } else if (typeof map !== 'undefined' && map) {
+                            map.editMarkersMode = !map.editMarkersMode;
+                        }
+                    } catch (err) {}
                     try { e.preventDefault(); } catch (err) {}
                     return;
                 }

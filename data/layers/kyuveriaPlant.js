@@ -1,9 +1,9 @@
-// Bomb Expansion layer
+// Kyuveria Plant layer
 // Requires data/init.js to be loaded first
-LAYERS.bombExpansion = {
-    name: "Bomb Expansion",
-    icon: "💣",
-    color: "#edaa00ff",
+LAYERS.kyuveriaPlant = {
+    name: "Kyuveria Plant",
+    icon: "🌵",
+    color: "#34b095ff",
     prefix: "be",
     markers: [
         {"uid": "be_3748ff50", "x": 0.2137172009954225, "y": 0.4233460991445133},
@@ -12,5 +12,5 @@ LAYERS.bombExpansion = {
 };
 
 // Convenience export for backward compatibility
-const BOMB_EXPANSION = LAYERS.bombExpansion.markers;
+const KYUVERIA_PLANT = LAYERS.kyuveriaPlant.markers;
 
