@@ -257,7 +257,7 @@ body {
 #layerList {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 1px;
 }
 
 .layer-toggle {
