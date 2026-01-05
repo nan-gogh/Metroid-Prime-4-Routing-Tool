@@ -2501,6 +2501,13 @@ async function initializeLayerIcons() {
             } catch (e) {}
         });
 
+        // On touch devices, prevent native touch scrolling while interacting with
+        // the layer row so swipes toggle rows instead of scrolling the sidebar.
+        try {
+            label.addEventListener('touchstart', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
+            label.addEventListener('touchmove', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
+        } catch (e) {}
+
         // No pressed-state handlers for layer toggles: remove animations/press
         // feedback to avoid delayed or sticky toggles on mobile when tapping
         // multiple rows rapidly.
