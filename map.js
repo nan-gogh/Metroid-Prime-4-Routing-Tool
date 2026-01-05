@@ -2419,10 +2419,19 @@ async function initializeLayerIcons() {
         // append to container
         container.appendChild(label);
 
-        // Click handler: toggle active state and perform the same actions as the checkbox change handler
+        // Immediate visual feedback on pointerdown so the UI feels responsive
+        label.addEventListener('pointerdown', (ev) => {
+            try {
+                const willBeChecked = !label.classList.contains('active');
+                label.classList.toggle('active', willBeChecked);
+                label.setAttribute('aria-pressed', willBeChecked ? 'true' : 'false');
+            } catch (e) {}
+        });
+
+        // Click handler: perform runtime toggle based on the visual state (which was updated on pointerdown)
         label.addEventListener('click', (ev) => {
             try {
-                const checked = !label.classList.contains('active');
+                const checked = !!label.classList.contains('active');
                 // Prevent turning off the customMarkers layer while in edit mode
                 if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
                     // Keep visual state active and do nothing else
@@ -2430,9 +2439,6 @@ async function initializeLayerIcons() {
                     try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
                     return;
                 }
-                // update visual and accessibility state
-                label.classList.toggle('active', checked);
-                label.setAttribute('aria-pressed', checked ? 'true' : 'false');
                 // update runtime visibility and render
                 if (!map.layerVisibility) map.layerVisibility = {};
                 if (layerKey === 'route') {
