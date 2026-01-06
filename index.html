@@ -12,7 +12,10 @@
 <body>
     <div id="loadFade" aria-hidden="true">
         <div class="loader" role="img" aria-label="Loading">
-            <img src="graphics/mp4b_routing_logo_ball.svg" alt="Loading" class="loading-logo">
+            <div class="logo-stack" aria-hidden="true">
+                <img src="graphics/mp4b_routing_logo_ball.svg" alt="" class="loading-logo logo-ball">
+                <img src="graphics/mp4b_routing_logo_geotag.svg" alt="" class="logo-geotag">
+            </div>
         </div>
     </div>
     <div class="app-container">
@@ -102,8 +105,8 @@
                 </div>
             </div>
             
-            <!-- Hints button at bottom of controls -->
-            <button id="hintsToggleBtn" class="hints-toggle control-btn pressed" aria-expanded="true" aria-controls="hintsList">Controls</button>
+            <!-- Hints button at bottom of controls (closed by default) -->
+            <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList" aria-pressed="false">Controls</button>
 
             <!-- Local Storage (consent) toggle moved here per preference -->
             <button type="button" class="control-btn" id="saveDataToggle_label" aria-pressed="false">
@@ -112,8 +115,8 @@
                 </div>
             </button>
 
-            <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level -->
-            <div class="hints-overlay visible" id="hintsOverlay" aria-hidden="false">
+            <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level (hidden by default) -->
+            <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
                 <div class="hints-list" id="hintsList">
                     <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
                     <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
@@ -183,6 +186,7 @@
     <script src="data/routeUtils.js"></script>
     <script src="tools/tsp_euclid.js"></script>
     <script src="map.js"></script>
+    <script src="data/ripple.js"></script>
     <script>
     // Prevent double-click zoom on the entire page
     (function(){

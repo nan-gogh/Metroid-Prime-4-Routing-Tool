@@ -12,6 +12,13 @@ body {
     overflow: hidden;
     height: 100vh;
 }
+.root-vars {
+    /* Ripple configuration: maximum ripple diameter. Use CSS custom property so JS can read it. */
+}
+
+:root {
+    --ripple-max-size: 150px; /* maximum diameter for ripple rings (reduced slightly) */
+}
 .load-fade-keeper {}
 
 /* Full-screen load fade overlay (fades from black to transparent) */
@@ -19,8 +26,8 @@ body {
     position: fixed;
     inset: 0;
     z-index: 100000;
-    /* Use black for the load overlay so the site fades in from black on load */
-    background: #000;
+    /* Use the app's dark background color (matches the screenshot) so the site fades from that color */
+    background: #041018;
     opacity: 1;
     transition: opacity 600ms ease;
     pointer-events: none;
@@ -46,17 +53,35 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 128px;
-    height: 128px;
+    width: 220px;
+    height: 220px;
     pointer-events: none;
 }
 
 .loading-logo {
-    width: 96px;
-    height: 96px;
+    width: 160px;
+    height: 160px;
     display: block;
     animation: logo-spin 1600ms linear infinite;
     will-change: transform;
+}
+
+/* Larger stacked logo sizing specifically for the load overlay */
+#loadFade .logo-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+#loadFade .logo-stack .logo-ball {
+    width: 160px;
+}
+
+#loadFade .logo-stack .logo-geotag {
+    width: 112px;
+    transform: translateY(-8px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -84,6 +109,37 @@ body {
     /* manipulation: allows double-tap zoom and pinch (which we block globally), 
        but tells browser not to delay interactions after nearby pan gestures */
     touch-action: manipulation;
+}
+
+/* Subtle cyan gradient box at the bottom of the sidebar
+   — cyan from below, fading to transparent above. Non-interactive. */
+.sidebar::after {
+    /* Gradient overlay anchored to the top edge of the sidebar and ending
+       at the same vertical position as the hints overlay bottom.
+       Non-interactive and visually above sidebar content. */
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0; /* align upper edge with sidebar upper edge */
+    bottom: calc(56px + 56px); /* align lower edge with hints overlay bottom */
+    pointer-events: none;
+    z-index: 2; /* keep overlay above backgrounds but below interactive controls */
+    background: linear-gradient(to top, rgba(34,211,238,0.32) 0%, rgba(34,211,238,0.08) 30%, rgba(34,211,238,0) 100%);
+    animation: sidebarGradientPulse 6s ease-in-out infinite;
+}
+
+/* Subtle pulsating animation for the sidebar gradient overlay. */
+@keyframes sidebarGradientPulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.25; }
+    100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar::after {
+        animation: none !important;
+    }
 }
 
 /* Collapsed sidebar */
@@ -256,6 +312,27 @@ body {
 /* Glow effect for specific section titles (cyan) */
 .control-group.section-glow > h3 {
     text-shadow: 0 0 10px rgba(34, 211, 238, 0.55), 0 0 22px rgba(34, 211, 238, 0.18);
+}
+
+/* Separator line under each section title to match the cyan glow */
+.control-group > h3 {
+    position: relative;
+}
+.control-group > h3::after {
+    content: "";
+    display: block;
+    height: 2px;
+    width: 100%;
+    margin-top: 8px;
+    border-radius: 2px;
+    background: rgba(34, 211, 238, 0.12);
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.25), 0 0 18px rgba(34, 211, 238, 0.08);
+}
+
+/* Stronger, colored separator for section-glow titles */
+.control-group.section-glow > h3::after {
+    background: linear-gradient(90deg, rgba(34,211,238,0.95), rgba(34,211,238,0.6));
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.45), 0 0 28px rgba(34, 211, 238, 0.18);
 }
 
 /* Layer list container: vertical stack with 1px spacing between rows */
@@ -710,6 +787,12 @@ kbd {
     touch-action: manipulation;
 }
 
+/* Ensure the hints toggle sits above the sidebar gradient overlay */
+.hints-toggle {
+    position: relative;
+    z-index: 1005;
+}
+
 .hints-toggle.pressed,
 .hints-toggle:active {
     background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
@@ -819,6 +902,31 @@ kbd {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Ripple ring pulse effect */
+.ripple-ring {
+    position: absolute;
+    transform: translate(-50%, -50%) scale(0.0);
+    border-radius: 50%;
+    pointer-events: none;
+    border: 2px solid rgba(34,211,238,0.9);
+    box-shadow: 0 0 14px rgba(34,211,238,0.35), inset 0 0 8px rgba(34,211,238,0.06);
+    opacity: 1;
+    will-change: transform, opacity;
+    animation: rippleRing 600ms cubic-bezier(.2,.9,.18,1) forwards;
+    max-width: var(--ripple-max-size);
+    max-height: var(--ripple-max-size);
+}
+
+@keyframes rippleRing {
+    0% { transform: translate(-50%, -50%) scale(0.0); opacity: 1; }
+    70% { transform: translate(-50%, -50%) scale(1.0); opacity: 0.6; }
+    100% { transform: translate(-50%, -50%) scale(1.12); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ripple-ring { animation: none; opacity: 0; }
 }
 
 .zoom-controls .sidebar-handle .handle-icon {
