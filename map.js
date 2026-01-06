@@ -868,6 +868,29 @@ class InteractiveMap {
                         const routeIndices = sources.map((_, i) => i);
                         const length = typeof obj.length === 'number' ? obj.length : 0;
 
+                        // Replace any cloned marker objects in `sources` with canonical
+                        // marker objects from `LAYERS` (if available) so route waypoints
+                        // stay coupled to their source markers after reload/import.
+                        try {
+                            for (let si = 0; si < sources.length; si++) {
+                                const s = sources[si];
+                                try {
+                                    const uid = s && s.marker && s.marker.uid;
+                                    const layer = s && s.layerKey;
+                                    if (!uid) continue;
+                                    if (layer && LAYERS && LAYERS[layer] && Array.isArray(LAYERS[layer].markers)) {
+                                        const found = LAYERS[layer].markers.find(m => m.uid === uid);
+                                        if (found) { s.marker = found; continue; }
+                                    }
+                                    // fallback: search across customMarkers specifically
+                                    if (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) {
+                                        const found2 = LAYERS.customMarkers.markers.find(m => m.uid === uid);
+                                        if (found2) s.marker = found2;
+                                    }
+                                } catch (e) {}
+                            }
+                        } catch (e) {}
+
                         // Set the route with all points
                         map.setRoute(routeIndices, length, sources);
                         console.log('✓ Imported route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
@@ -2675,6 +2698,29 @@ class InteractiveMap {
 
             const routeIndices = sources.map((_, i) => i);
             const length = typeof obj.length === 'number' ? obj.length : 0;
+
+            // Canonicalize source marker objects to reference the markers stored
+            // in `LAYERS` (especially `customMarkers`) so moving markers after
+            // reload keeps associated waypoints in sync.
+            try {
+                for (let si = 0; si < sources.length; si++) {
+                    const s = sources[si];
+                    try {
+                        const uid = s && s.marker && s.marker.uid;
+                        const layer = s && s.layerKey;
+                        if (!uid) continue;
+                        if (layer && LAYERS && LAYERS[layer] && Array.isArray(LAYERS[layer].markers)) {
+                            const found = LAYERS[layer].markers.find(m => m.uid === uid);
+                            if (found) { s.marker = found; continue; }
+                        }
+                        if (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) {
+                            const found2 = LAYERS.customMarkers.markers.find(m => m.uid === uid);
+                            if (found2) s.marker = found2;
+                        }
+                    } catch (e) {}
+                }
+            } catch (e) {}
+
             this.setRoute(routeIndices, length, sources);
             // Load the loop flag from localStorage (persisted separately from route data)
             try {
@@ -3112,6 +3158,12 @@ async function init() {
             const newVisibility = {};
             rows.forEach(row => {
                 const key = row.dataset.layer;
+                // Preserve any rows that are disabled (edit-locked) when clearing visibility.
+                // "Hide All" should not turn off layers currently locked by edit modes.
+                if (!checked && row.classList && row.classList.contains('disabled')) {
+                    try { newVisibility[key] = !!(map && map.layerVisibility && map.layerVisibility[key]); } catch (e) { newVisibility[key] = false; }
+                    return;
+                }
                 newVisibility[key] = !!checked;
                 // reflect active visual state on the row
                 try { row.classList.toggle('active', !!checked); row.setAttribute('aria-pressed', !!checked ? 'true' : 'false'); } catch (e) {}
@@ -3120,6 +3172,18 @@ async function init() {
                 map.layerVisibility = Object.assign({}, map.layerVisibility || {}, newVisibility);
             } catch (e) { map.layerVisibility = Object.assign({}, newVisibility); }
             try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
+            // When hiding all layers, deselect any selected marker so the UI
+            // doesn't retain a selection pointing to now-hidden content.
+            if (!checked) {
+                try {
+                    if (map) {
+                        map.selectedMarker = null;
+                        map.selectedMarkerLayer = null;
+                        try { if (typeof map.hideTooltip === 'function') map.hideTooltip(); } catch (e) {}
+                        try { if (typeof map.render === 'function') map.render(); } catch (e) {}
+                    }
+                } catch (e) {}
+            }
             scheduleRender();
         };
 

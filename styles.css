@@ -17,7 +17,7 @@ body {
 }
 
 :root {
-    --ripple-max-size: 100px; /* maximum diameter for ripple rings (slightly smaller) */
+    --ripple-max-size: 140px; /* maximum diameter for ripple rings (slightly smaller) */
 }
 .load-fade-keeper {}
 
