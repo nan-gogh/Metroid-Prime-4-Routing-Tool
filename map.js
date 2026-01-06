@@ -4341,12 +4341,6 @@ async function init() {
             app.classList.remove('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'true');
         }
-        // Swap the handle glyph instead of rotating it with CSS
-        if (handle) {
-            const icon = handle.querySelector('.handle-icon');
-            if (icon) icon.textContent = collapsed ? '◧' : '◼';
-            try { handle.classList.toggle('active', !collapsed); } catch (e) {}
-        }
         // do not persist sidebar state to localStorage
         // Resize map after sidebar animation
         setTimeout(() => map.resize(), 300);

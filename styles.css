@@ -118,13 +118,6 @@ body {
     border-color: #0891b2;
 }
 
-/* Active state for the sidebar handle (matches control button active/pressed look) */
-.sidebar-handle.active {
-    background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
-    border-color: #22d3ee;
-    box-shadow: 0 0 8px rgba(34, 211, 238, 0.18);
-}
-
 .sidebar-handle .handle-icon {
     color: #22d3ee;
     font-size: 12px;
