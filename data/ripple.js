@@ -3,10 +3,12 @@
     // Targets: sidebar, map-container, zoom-controls, buttons and toggle rows.
 
     const CONTAINER_SELECTOR = '.sidebar, .map-container, .zoom-controls, .control-btn, .zoom-btn, .hints-toggle, .layer-toggle';
+    // Track pointer start positions to avoid showing ripples for drag gestures
+    const _pointerState = new Map(); // pointerId -> {x,y,moved}
+    const MOVE_THRESHOLD = 8; // pixels
 
     function createRippleAt(container, x, y) {
         if (!container) return;
-
         // If the target is a small control (button/toggle), prefer appending
         // the ripple to a larger parent container so the effect isn't clipped
         // and appears consistent with the map/sidebar ripples.
@@ -58,16 +60,50 @@
         setTimeout(() => { if (ripple && ripple.parentNode) ripple.parentNode.removeChild(ripple); }, 1500);
     }
 
+    function onPointerDown(ev) {
+        try {
+            _pointerState.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moved: false });
+        } catch (e) {}
+    }
+
+    function onPointerMove(ev) {
+        try {
+            const s = _pointerState.get(ev.pointerId);
+            if (!s) return;
+            const dx = ev.clientX - s.x;
+            const dy = ev.clientY - s.y;
+            if ((dx*dx + dy*dy) > (MOVE_THRESHOLD * MOVE_THRESHOLD)) {
+                s.moved = true;
+            }
+        } catch (e) {}
+    }
+
     function onPointerUp(ev) {
         try {
+            const s = _pointerState.get(ev.pointerId);
+            // If we have a pointer start and the pointer moved beyond threshold, don't ripple
+            if (s && s.moved) {
+                _pointerState.delete(ev.pointerId);
+                return;
+            }
+
             const target = ev.target;
             const container = target.closest(CONTAINER_SELECTOR) || document.body;
             createRippleAt(container, ev.clientX, ev.clientY);
+            if (s) _pointerState.delete(ev.pointerId);
         } catch (e) {
             // swallow
         }
     }
 
-    // Attach the listener to the document so it fires for all pointerups
+    // Clean up state on cancel
+    function onPointerCancel(ev) {
+        try { _pointerState.delete(ev.pointerId); } catch (e) {}
+    }
+
+    // Attach pointer listeners to track drags and avoid ripples for drag gestures
+    document.addEventListener('pointerdown', onPointerDown, { passive: true });
+    document.addEventListener('pointermove', onPointerMove, { passive: true });
     document.addEventListener('pointerup', onPointerUp, { passive: true });
+    document.addEventListener('pointercancel', onPointerCancel, { passive: true });
 })();
