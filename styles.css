@@ -17,7 +17,7 @@ body {
 }
 
 :root {
-    --ripple-max-size: 150px; /* maximum diameter for ripple rings (reduced slightly) */
+    --ripple-max-size: 100px; /* maximum diameter for ripple rings (slightly smaller) */
 }
 .load-fade-keeper {}
 
@@ -906,7 +906,8 @@ kbd {
 
 /* Ripple ring pulse effect */
 .ripple-ring {
-    position: absolute;
+    position: fixed; /* fixed so it can sit above all stacking contexts */
+    z-index: 200001; /* sit above everything (including loading fade) */
     transform: translate(-50%, -50%) scale(0.0);
     border-radius: 50%;
     pointer-events: none;

@@ -23,13 +23,12 @@
         }
 
         const rect = appendContainer.getBoundingClientRect();
-        const rx = x - rect.left;
-        const ry = y - rect.top;
 
+        // Position using viewport coordinates so the ripple sits above all UI.
         const ripple = document.createElement('span');
         ripple.className = 'ripple-ring';
-        ripple.style.left = rx + 'px';
-        ripple.style.top = ry + 'px';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
 
         // size relative to container diagonal, but capped by CSS variable `--ripple-max-size`
         const maxDim = Math.max(rect.width, rect.height);
@@ -49,7 +48,8 @@
         ripple.style.width = size + 'px';
         ripple.style.height = size + 'px';
 
-        appendContainer.appendChild(ripple);
+        // Append to body so fixed-positioned ripple is not clipped by parents
+        document.body.appendChild(ripple);
 
         // remove once animation ends
         ripple.addEventListener('animationend', () => {
