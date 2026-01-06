@@ -3112,8 +3112,9 @@ async function initializeLayerIcons() {
                     } catch (e) {}
                 } catch (e) {}
             };
-            try { iconDiv.addEventListener('click', _handleIconActivate); } catch (e) {}
-            try { iconDiv.addEventListener('pointerup', (ev) => { try { if (!ev.pointerType || ev.pointerType === 'mouse') return; _handleIconActivate(ev); } catch (e) {} }); } catch (e) {}
+            try { iconDiv._lastActivate = 0; } catch (e) {}
+            try { iconDiv.addEventListener('click', (ev) => { try { const last = iconDiv._lastActivate || 0; if (Date.now() - last < 500) return; _handleIconActivate(ev); } catch (e) {} }); } catch (e) {}
+            try { iconDiv.addEventListener('pointerup', (ev) => { try { if (ev && ev.preventDefault) ev.preventDefault(); if (ev && ev.stopPropagation) ev.stopPropagation(); iconDiv._lastActivate = Date.now(); _handleIconActivate(ev); } catch (e) {} }); } catch (e) {}
         } catch (e) {}
         label.appendChild(iconDiv);
 
