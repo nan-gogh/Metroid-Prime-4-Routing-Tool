@@ -103,7 +103,7 @@
             </div>
             
             <!-- Hints button at bottom of controls -->
-            <button id="hintsToggleBtn" class="hints-toggle control-btn" aria-expanded="false" aria-controls="hintsList">Controls</button>
+            <button id="hintsToggleBtn" class="hints-toggle control-btn pressed" aria-expanded="true" aria-controls="hintsList">Controls</button>
 
             <!-- Local Storage (consent) toggle moved here per preference -->
             <button type="button" class="control-btn" id="saveDataToggle_label" aria-pressed="false">
@@ -113,7 +113,7 @@
             </button>
 
             <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level -->
-            <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
+            <div class="hints-overlay visible" id="hintsOverlay" aria-hidden="false">
                 <div class="hints-list" id="hintsList">
                     <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
                     <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
@@ -146,12 +146,12 @@
                 <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers">
                     <img src="graphics/mp4b_marker_icon.svg" alt="Edit Markers" class="mini-icon">
                 </button>
-                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true" title="Toggle sidebar">
-                    <span class="handle-icon">☰</span>
-                </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
                 <button class="zoom-btn" id="resetView" title="Reset View">𖦏</button>
+                <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true" title="Toggle sidebar">
+                    <span class="handle-icon">☰</span>
+                </button>
             </div>
         </main>
     </div>
