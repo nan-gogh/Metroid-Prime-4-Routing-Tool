@@ -744,7 +744,7 @@ class InteractiveMap {
                             const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
                             if (upgrade.upgraded) {
                                 alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
-                                console.log(`✓ Upgraded ${upgrade.count} legacy route points on import`);
+                                // log removed
                             }
                         }
 
@@ -779,7 +779,7 @@ class InteractiveMap {
                             }
                             customMarkersFromRoute = regenerated;
                             alert(`Upgraded custom markers: ${updatedCount} markers regenerated. UIDs and layers matched by coordinate hash.`);
-                            console.log(`Imported route contained legacy marker UIDs; regenerated ${updatedCount} hashed UIDs`);
+                            // log removed
                         }
 
                         // If custom markers exist in route, merge them with capacity check
@@ -893,9 +893,9 @@ class InteractiveMap {
 
                         // Set the route with all points
                         map.setRoute(routeIndices, length, sources);
-                        console.log('✓ Imported route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
+                        // log removed
                     } catch (err) {
-                        console.error('Import route failed:', err);
+                        // error logging removed
                         alert('Failed to import route: ' + (err.message || String(err)));
                     }
                 };
@@ -1488,7 +1488,7 @@ class InteractiveMap {
                 img.src = href;
             } catch (e) {
                 this.loadingResolution = null;
-                console.error(`Failed to load: ${size}px`);
+                // error logging removed
             }
         })();
     }
@@ -1898,6 +1898,7 @@ class InteractiveMap {
     toggleLayer(layerKey, show) {
         if (!this.layerVisibility) this.layerVisibility = {};
         this.layerVisibility[layerKey] = !!show;
+        // (debug logs removed)
 
         // If hiding a layer that currently has a selected marker, clear selection
         if (!show && this.selectedMarkerLayer === layerKey) {
@@ -1921,7 +1922,7 @@ class InteractiveMap {
 
         // Only determine whether the cursor is over any marker (for pointer cursor).
         // Selection and tooltip display are managed via click/tap toggles, not hover.
-        const markerRadius = this.getHitRadius();
+        // compute per-marker hit testing so highlighted/selected markers (larger) are detected properly
         let foundCursor = false;
 
         // Iterate layers defined in LAYERS to detect hover over any visible marker
@@ -1935,7 +1936,8 @@ class InteractiveMap {
                 const marker = layer.markers[i];
                 const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-                if (Math.hypot(mouseX - screenX, mouseY - screenY) < markerRadius) {
+                const r = this.getMarkerHitRadius(marker, layerKey);
+                if (Math.hypot(mouseX - screenX, mouseY - screenY) < r) {
                     foundCursor = true;
                     break;
                 }
@@ -1950,8 +1952,6 @@ class InteractiveMap {
 
     // Find marker at screen coordinates; returns { marker, index, layerKey } or null
     findMarkerAt(screenX, screenY) {
-        const markerRadius = this.getHitRadius();
-
         const entries = Object.entries(LAYERS || {});
         // Iterate in reverse so later layers (higher in DOM) get priority
         for (let li = entries.length - 1; li >= 0; li--) {
@@ -1963,7 +1963,8 @@ class InteractiveMap {
                 const marker = layer.markers[i];
                 const mx = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const my = marker.y * MAP_SIZE * this.zoom + this.panY;
-                if (Math.hypot(screenX - mx, screenY - my) < markerRadius) {
+                const r = this.getMarkerHitRadius(marker, layerKey);
+                if (Math.hypot(screenX - mx, screenY - my) < r) {
                     return { marker: marker, index: i, layerKey };
                 }
             }
@@ -2089,6 +2090,12 @@ class InteractiveMap {
             this.renderQuadrantGrid();
             this.renderDetailGrid();
         }
+        // Always update the DOM quadrant labels if the helper exists.
+        // The helper decides visibility based on both layer visibility
+        // and highlight state so labels stay in sync with interactions.
+        try {
+            if (typeof this._updateGridQuadLabels === 'function') this._updateGridQuadLabels();
+        } catch (e) { /* _updateGridQuadLabels failed (suppressed) */ }
 
         // Draw markers from all visible layers onto the overlay canvas
         this.renderMarkers();
@@ -2261,7 +2268,8 @@ class InteractiveMap {
         const fontMin = 12;
         const fontMax = 48; // avoid excessively large labels when zooming in
         const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
-        ctx.font = `${fontSize}px Arial`;
+        // Use the same font family as the quadrant DOM labels/page and render bold for a 'fat' appearance
+        ctx.font = `700 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
         ctx.textBaseline = 'middle';
         
         // Always use cyan for labels
@@ -2397,6 +2405,33 @@ class InteractiveMap {
             return this.getBaseMarkerRadius() + (this.touchPadding || 0);
         }
     }
+
+    // Compute per-marker hit radius that accounts for highlight scaling and selection
+    getMarkerHitRadius(marker, layerKey) {
+        try {
+            const base = this.getBaseMarkerRadius();
+            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
+            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
+            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
+
+            // Highlight multiplier (per-layer) if applicable
+            let highlightMult = 1;
+            try {
+                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
+                    const cfg = (this._highlightConfig && this._highlightConfig[layerKey]) ? this._highlightConfig[layerKey] : null;
+                    highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
+                }
+            } catch (e) {}
+
+            // Selected marker gets an additional visual emphasis
+            const isSelected = this.selectedMarker && marker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
+            const rawSize = isSelected ? base * 1.3 * highlightMult : base * highlightMult;
+            const sized = Math.max(1, rawSize * markerScale);
+            return sized + (this.touchPadding || 0);
+        } catch (e) {
+            return this.getHitRadius();
+        }
+    }
     
     renderMarkers() {
         const ctx = this.ctx;
@@ -2428,7 +2463,15 @@ class InteractiveMap {
                 const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
                 // Base size already considers route-node sizing; apply detailScale
                 // here to ensure marker visuals shrink uniformly when zoomed in.
-                const rawSize = isSelected ? baseSize * 1.3 : baseSize;
+                // Apply highlight multiplier when layer is highlighted
+                let highlightMult = 1;
+                try {
+                    if (map && map.highlightedLayers && map.highlightedLayers.has(layerKey)) {
+                        const cfg = (map._highlightConfig && map._highlightConfig[layerKey]) ? map._highlightConfig[layerKey] : null;
+                        highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
+                    }
+                } catch (e) {}
+                const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
                 const size = Math.max(1, rawSize * markerScale);
 
                 // Draw selection halo using the layer color (no lightening)
@@ -2509,7 +2552,53 @@ class InteractiveMap {
             ctx.lineDashOffset = -this._routeDashOffset;
         }
 
-        // Draw path
+        // If the route layer is highlighted, draw a glowing, thicker under-stroke
+        // using the route color before drawing the animated dashed stroke. This
+        // emphasizes the path itself (not markers) when `route` highlight is on.
+        try {
+            const isHighlighted = !!(this.highlightedLayers && this.highlightedLayers.has('route'));
+            if (isHighlighted) {
+                try {
+                    const glowAlpha = 0.85;
+                    const glowColor = routeHex ? hexToRgba(routeHex, glowAlpha) : 'rgba(34,211,238,0.85)';
+                    // Build path first then stroke with a heavy blurred stroke beneath
+                    ctx.save();
+                    ctx.beginPath();
+                    for (let i = 0; i < n; i++) {
+                        const idx = this.currentRoute[i];
+                        const src = this._routeSources[idx];
+                        const m = src && src.marker;
+                        if (!m) continue;
+                        const x = m.x * MAP_SIZE * this.zoom + this.panX;
+                        const y = m.y * MAP_SIZE * this.zoom + this.panY;
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    if (this.routeLooping && n > 0) {
+                        const firstIdx = this.currentRoute[0];
+                        const firstSrc = this._routeSources[firstIdx];
+                        const firstM = firstSrc && firstSrc.marker;
+                        if (firstM) {
+                            const x = firstM.x * MAP_SIZE * this.zoom + this.panX;
+                            const y = firstM.y * MAP_SIZE * this.zoom + this.panY;
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                    // Thicker base for the glow (scale with zoom/detail)
+                    const glowLine = Math.max(1, baseLine * this.zoom * detailScale) * 2.6;
+                    // subtle pulse so glow breathes
+                    const pulse = 1 + Math.sin((performance && performance.now ? performance.now() : Date.now()) / 700) * 0.12;
+                    ctx.lineWidth = glowLine * pulse;
+                    ctx.strokeStyle = glowColor;
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = 18 * pulse;
+                    // Draw glow underneath the main stroke
+                    ctx.stroke();
+                    ctx.restore();
+                } catch (e) {}
+            }
+        } catch (e) {}
+
+        // Draw path (main animated dashed stroke)
         ctx.beginPath();
         for (let i = 0; i < n; i++) {
             const idx = this.currentRoute[i];
@@ -2649,7 +2738,7 @@ class InteractiveMap {
                 const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
                 if (upgrade.upgraded) {
                     alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
-                    console.log(`✓ Upgraded ${upgrade.count} legacy route points to new UID format`);
+                    // log removed
                     // Save the upgraded route back to localStorage
                     if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.saveRoute === 'function') {
                         RouteUtils.saveRoute(obj);
@@ -2733,7 +2822,7 @@ class InteractiveMap {
                 // Stored flag `mp4_route_looping_flag` now represents explicit looping preference
                 this.routeLooping = (loopFlag === '1' || loopFlag === 1 || loopFlag === true);
             } catch (e) { /* default to false */ }
-            console.log('Loaded saved route (points:', sources.length + ', custom markers: ' + customMarkersFromRoute.length + ')');
+            // log removed
             return true;
         } catch (e) {
             console.warn('Failed to load saved route:', e);
@@ -2909,6 +2998,39 @@ async function initializeLayerIcons() {
         }, 300);
     };
 
+    // Helper: convert hex color or rgb(...) strings to rgba(r,g,b,a)
+    function colorToRgba(color, alpha) {
+        try {
+            if (!color) return null;
+            const c = String(color).trim();
+            if (c.startsWith('#')) {
+                let s = c.replace('#','');
+                if (s.length === 3) s = s.split('').map(ch => ch+ch).join('');
+                if (s.length === 6 || s.length === 8) {
+                    const r = parseInt(s.slice(0,2),16);
+                    const g = parseInt(s.slice(2,4),16);
+                    const b = parseInt(s.slice(4,6),16);
+                    const aHex = (s.length === 8) ? parseInt(s.slice(6,8),16)/255 : 1;
+                    const a = (typeof alpha === 'number') ? alpha * aHex : aHex;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+            }
+            // rgb/rgba input: try to extract numbers
+            const m = c.match(/rgba?\(([^)]+)\)/i);
+            if (m) {
+                const parts = m[1].split(',').map(p=>p.trim());
+                const r = parseInt(parts[0]) || 0;
+                const g = parseInt(parts[1]) || 0;
+                const b = parseInt(parts[2]) || 0;
+                let a = 1;
+                if (parts.length >= 4) a = parseFloat(parts[3]) || 1;
+                a = (typeof alpha === 'number') ? alpha * a : a;
+                return `rgba(${r}, ${g}, ${b}, ${a})`;
+            }
+            return null;
+        } catch (e) { return null; }
+    }
+
     // Gesture tracking for pointerdown-swipe toggles
     let _gestureActive = false;
     let _gesturePointerId = null;
@@ -2934,6 +3056,71 @@ async function initializeLayerIcons() {
         if (layer.color) iconDiv.style.backgroundColor = layer.color;
         // allow a separate icon color (useful for white icons on colored backdrops)
         if (layer.iconColor) iconDiv.style.color = layer.iconColor;
+        // Icon click toggles highlight for this layer (separate from visibility toggle on the row)
+        try {
+            // Prevent pointer/touch on the icon backdrop from bubbling to the row
+            try { iconDiv.addEventListener('pointerdown', (ev) => { try { ev.stopPropagation(); } catch (e) {} }); } catch (e) {}
+            try { iconDiv.addEventListener('touchstart', (ev) => { try { ev.stopPropagation(); ev.preventDefault(); } catch (e) {} }, { passive: false }); } catch (e) {}
+            iconDiv.addEventListener('click', (ev) => {
+                try { ev.stopPropagation(); } catch (e) {}
+                // (debug logs removed)
+                try {
+                    const k = label.dataset && label.dataset.layer;
+                    if (!k) return;
+                    if (map && typeof map.toggleLayerHighlight === 'function') {
+                        // (debug logs removed)
+                        map.toggleLayerHighlight(k, (layer && layer.highlightScale) ? layer.highlightScale : 2.0);
+                        // (debug logs removed)
+                        // If highlight was just enabled, ensure the layer is visible so highlights show
+                        try {
+                            if (map.highlightedLayers && map.highlightedLayers.has(k)) {
+                                if (!map.layerVisibility || !map.layerVisibility[k]) {
+                                    // (debug logs removed)
+                                    if (typeof map.toggleLayer === 'function') {
+                                        try { map.toggleLayer(k, true); } catch (e) { /* suppressed */ }
+                                    } else {
+                                        try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = true; } catch (e) {}
+                                        try { if (map && typeof map.renderOverlay === 'function') map.renderOverlay(); else if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+                                    }
+                                    // Reflect sidebar row state if present
+                                    try {
+                                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + k + '"]');
+                                        if (row) { row.classList.add('active'); row.setAttribute('aria-pressed', 'true'); }
+                                    } catch (e) {}
+                                    try { _scheduleSaveLayerVisibility(); } catch (e) {}
+                                    // (debug logs removed)
+                                }
+                            }
+                        } catch (e) {}
+                    } else if (map) {
+                        // fallback minimal toggle
+                        map.highlightedLayers = map.highlightedLayers || new Set();
+                        if (map.highlightedLayers.has(k)) {
+                            map.highlightedLayers.delete(k);
+                        } else {
+                            map.highlightedLayers.add(k);
+                            map._highlightConfig = map._highlightConfig || {}; map._highlightConfig[k] = { scale: (layer && typeof layer.highlightScale === 'number') ? layer.highlightScale : 2.0 };
+                        }
+                        try { if (typeof map.render === 'function') map.render(); } catch (e) {}
+                    }
+                    // Reflect highlight visually on the icon backdrop and apply colorized glow
+                    try {
+                        const isHighlighted = !!(map && map.highlightedLayers && map.highlightedLayers.has(k));
+                        try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) {}
+                        try {
+                            if (isHighlighted) {
+                                const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
+                                const glow1 = colorToRgba(col, 0.72) || 'rgba(34,211,238,0.72)';
+                                const glow2 = colorToRgba(col, 0.32) || 'rgba(34,211,238,0.32)';
+                                iconDiv.style.boxShadow = `0 0 12px ${glow1}, 0 0 28px ${glow2}`;
+                            } else {
+                                iconDiv.style.boxShadow = '';
+                            }
+                        } catch (e) {}
+                    } catch (e) {}
+                } catch (e) {}
+            });
+        } catch (e) {}
         label.appendChild(iconDiv);
 
         // info
@@ -3102,6 +3289,118 @@ function attachPressedHandlers(selector) {
 async function init() {
     // Create map
     map = new InteractiveMap('mapCanvas');
+        // Highlighting runtime state: set of layer keys currently highlighted
+        try {
+            map.highlightedLayers = new Set();
+            map._highlightConfig = Object.assign({}, map._highlightConfig || {});
+            map.setLayerHighlight = function(layerKey, scale) {
+                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
+                try { this.highlightedLayers.add(layerKey); } catch (e) {}
+                // (debug logs removed)
+                try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) {}
+                try { if (typeof this.render === 'function') this.render(); } catch (e) {}
+            };
+            map.clearLayerHighlight = function(layerKey) {
+                try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) {}
+                // (debug logs removed)
+                try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) {}
+                try { if (typeof this.render === 'function') this.render(); } catch (e) {}
+            };
+            map.toggleLayerHighlight = function(layerKey, scale) {
+                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
+                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
+                    try { this.clearLayerHighlight(layerKey); } catch (e) {}
+                } else {
+                    try { this.setLayerHighlight(layerKey, scale); } catch (e) {}
+                }
+            };
+            // Prepare grid quadrant labels (8x8 A1..H8) so they can be toggled
+            // on/off quickly when the `grid` layer is highlighted. Labels are
+            // DOM elements positioned over the map and updated each render.
+            map._createGridQuadLabels = function() {
+                try {
+                    const parent = this.canvas && this.canvas.parentElement;
+                    if (!parent) return;
+                    // (debug logs removed)
+                    // Ensure parent is positioned so absolute children align
+                    try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) {}
+                    // Container for labels
+                    let container = parent.querySelector('#gridQuadLabels');
+                    if (!container) {
+                        container = document.createElement('div');
+                        container.id = 'gridQuadLabels';
+                        container.className = 'grid-quad-labels';
+                        container.setAttribute('aria-hidden', 'true');
+                        // pointer-events none so labels don't interfere with map interaction
+                        container.style.pointerEvents = 'none';
+                        parent.appendChild(container);
+                        // (debug logs removed)
+                    }
+                    container.innerHTML = '';
+                    // Create 8x8 labels A-H (columns) x 1-8 (rows)
+                    const cols = 8, rows = 8;
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            const colLetter = String.fromCharCode(65 + c); // A..H
+                            const rowNumber = (r + 1).toString();
+                            const span = document.createElement('div');
+                            span.className = 'grid-quad-label';
+                            span.dataset.col = c;
+                            span.dataset.row = r;
+                            span.textContent = `${colLetter}${rowNumber}`;
+                            container.appendChild(span);
+                        }
+                    }
+                    // initialize hidden
+                    container.style.display = 'none';
+                    // (debug logs removed)
+                } catch (e) {}
+            };
+
+            map._updateGridQuadLabels = function() {
+                try {
+                    const parent = this.canvas && this.canvas.parentElement;
+                    const container = parent ? parent.querySelector('#gridQuadLabels') : null;
+                    if (!container) return;
+                    const shouldShow = !!(this.layerVisibility && this.layerVisibility.grid) && !!(this.highlightedLayers && this.highlightedLayers.has('grid'));
+                    // (debug logs removed)
+                    container.style.display = shouldShow ? 'block' : 'none';
+                    if (!shouldShow) return;
+                    const cols = 8, rows = 8;
+                    const gridSpacing = MAP_SIZE / 8; // matches renderDetailGrid
+                    const cssWidth = this.canvas.clientWidth;
+                    const cssHeight = this.canvas.clientHeight;
+                    // Position each label in its cell center
+                    const labels = container.querySelectorAll('.grid-quad-label');
+                    // Compute font sizing to match canvas axis labels (scale with zoom)
+                    const fontMin = 12;
+                    const fontMax = 48;
+                    const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
+                    const pad = Math.max(2, Math.round(fontSize * 0.18));
+                    for (let i = 0; i < labels.length; i++) {
+                        const el = labels[i];
+                        const c = Number(el.dataset.col);
+                        const r = Number(el.dataset.row);
+                        // cell center in absolute MAP pixels
+                        const mapX = (gridSpacing * (c + 0.5));
+                        const mapY = (gridSpacing * (r + 0.5));
+                        const screenX = mapX * this.zoom + this.panX;
+                        const screenY = mapY * this.zoom + this.panY;
+                        // Use CSS translate(-50%,-50%) for centering — set left/top directly
+                        el.style.left = Math.round(screenX) + 'px';
+                        el.style.top = Math.round(screenY) + 'px';
+                        // Scale label typography to match outside axis labels
+                        el.style.fontSize = fontSize + 'px';
+                        el.style.padding = pad + 'px ' + (pad * 3) + 'px';
+                        if (i === 0) {
+                            // sample
+                        }
+                    }
+                } catch (e) {}
+            };
+        } catch (e) {}
+        // Now that label creation function exists, prepare DOM labels
+        try { if (typeof map._createGridQuadLabels === 'function') { map._createGridQuadLabels(); } } catch (e) { /* deferred createGridQuadLabels failed (suppressed) */ }
     // Load persisted custom markers (if any) via MarkerUtils so data-layer stays pure
     if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.loadFromLocalStorage === 'function') {
         try { MarkerUtils.loadFromLocalStorage(); } catch (e) { console.warn('Failed to load custom markers:', e); }
@@ -3132,7 +3431,7 @@ async function init() {
 
         if (primaryKey) {
             map.setMarkers(LAYERS[primaryKey].markers);
-            console.log('✓ Loaded markers from', primaryKey + ':', LAYERS[primaryKey].markers.length, 'markers');
+            // log removed
         } else {
             console.warn('No layer marker data available; no markers loaded.');
         }
@@ -3811,7 +4110,7 @@ async function init() {
                 });
                 if (isLegacyMarkersFile) {
                     alert(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
-                    console.log('Imported legacy marker file: regenerated UIDs');
+                    // log removed
                 }
 
                 // Check if current markers exist
@@ -3871,10 +4170,10 @@ async function init() {
                     }
                 }
 
-                console.log('✓ Imported and merged', migratedMarkers.length, 'custom markers');
+                // log removed
                 e.target.value = '';
             } catch (error) {
-                console.error('Import failed:', error);
+                // error logging removed
                 alert('Failed to import markers: ' + (error.message || String(error)));
                 e.target.value = '';
             }
@@ -3980,7 +4279,7 @@ async function init() {
                             if (selectedPos >= 0 && selectedPos < result.tour.length) {
                                 // Rotate tour so selected marker is at index 0
                                 finalTour = result.tour.slice(selectedPos).concat(result.tour.slice(0, selectedPos));
-                                console.log(`✓ Route starting from selected marker (${map.selectedMarker.uid})`);
+                                // log removed
                             }
                         }
                         
@@ -4025,12 +4324,12 @@ async function init() {
                                 } catch (e) {}
                             }
                         } catch (e) {}
-                        console.log('Improved route length (non-looping normalized):', length, 'tour size:', finalTour.length, 'start point:', (selectedMarkerIndex >= 0));
+                        // log removed
                     } else {
                         alert('Advanced solver returned no route.');
                     }
                 } catch (err) {
-                    console.error(err);
+                    // error logging removed
                     alert('Error computing improved route: ' + err.message);
                 } finally {
                     computeImprovedBtn.disabled = false;
@@ -4285,7 +4584,7 @@ async function init() {
             map.setRoute(indices, totalLen, finalSources);
             try { map.selectedMarker = null; map.selectedMarkerLayer = null; map.hideTooltip(); } catch (e) {}
             try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle && routeToggle.getAttribute('aria-pressed') !== 'true') routeToggle.click(); } catch (e) {}
-        } catch (e) { console.error('Nearby compute failed:', e); alert('Failed to compute nearby route.'); } finally { try { endRouteCompute(); } catch (err) {} }
+        } catch (e) { /* Nearby compute failed (suppressed) */ alert('Failed to compute nearby route.'); } finally { try { endRouteCompute(); } catch (err) {} }
     }
 
     const computeNearbyBtn = document.getElementById('computeRouteNearbyBtn');
@@ -4320,6 +4619,14 @@ async function init() {
     // Expose expandRouteNearby for programmatic use
     try { if (typeof map !== 'undefined' && map) map.expandRouteNearby = expandRouteNearby; } catch (e) {}
 
+    // Wire mini on-screen Expand Route button if present
+    try {
+        const computeNearbyMini = document.getElementById('computeRouteNearbyMini');
+        if (computeNearbyMini) {
+            computeNearbyMini.addEventListener('click', (e) => { try { expandRouteNearby(); } catch (err) {} });
+        }
+    } catch (e) {}
+
     // Route direction toggle: single button that flips animation direction
         try {
             const toggleDirBtn = document.getElementById('toggleRouteDirBtn');
@@ -4351,6 +4658,13 @@ async function init() {
             if (toggleDirBtn) {
                 toggleDirBtn.addEventListener('click', toggleRouteDirection);
             }
+            // Expose toggler for mini button and programmatic use
+            try { if (typeof map !== 'undefined' && map) map.toggleRouteDirection = toggleRouteDirection; } catch (e) {}
+            // Wire mini on-screen Reverse Route button if present
+            try {
+                const toggleDirMini = document.getElementById('toggleRouteDirMini');
+                if (toggleDirMini) toggleDirMini.addEventListener('click', (ev) => { try { toggleRouteDirection(); } catch (err) {} });
+            } catch (e) {}
         } catch (e) {}
 
     if (clearRouteBtn) {
@@ -4359,7 +4673,7 @@ async function init() {
                 alert('No route to clear.');
                 return;
             }
-            if (confirm('Clear computed route? This cannot be undone.')) {
+            if (confirm('Clear route? This cannot be undone.')) {
                 map.clearRoute();
                 // Exit route edit mode when route is cleared
                 try { map.editRouteMode = false; } catch (e) {}

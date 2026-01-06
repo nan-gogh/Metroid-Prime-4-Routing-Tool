@@ -48,10 +48,10 @@ const RouteUtils = {
             a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
             a.click();
             URL.revokeObjectURL(url);
-            console.log('✓ Exported route (points:', pts.length + ')');
+            // log removed
             return true;
         } catch (err) {
-            console.error('Export route failed:', err);
+            // error logging removed
             throw err;
         }
     },
@@ -149,7 +149,7 @@ const RouteUtils = {
         } else {
             try { localStorage.setItem('mp4_saved_route', JSON.stringify(payload)); } catch (e) {}
         }
-        console.log('✓ Saved route to localStorage');
+        // log removed
     },
 
     // Load route from localStorage
@@ -181,6 +181,6 @@ const RouteUtils = {
             // Also attempt to clear via helper if present
             try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_saved_route', null); } catch (e) {}
         } catch (e) {}
-        console.log('✓ Cleared route from localStorage');
+        // log removed
     }
 };

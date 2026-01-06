@@ -83,7 +83,7 @@ const MarkerUtils = {
         a.click();
         URL.revokeObjectURL(url);
         
-        console.log('✓ Exported', markers.length, 'custom markers');
+        // log removed
     },
     
     // Import markers from JSON file
@@ -104,7 +104,7 @@ const MarkerUtils = {
                     try {
                         if (MarkerUtils.isLegacyMarkerFile(data.markers)) {
                             isLegacy = true;
-                            console.log('Detected legacy marker file on import; upgrading UIDs...');
+                            // log removed
                         }
                     } catch (e) {
                         console.warn('Legacy detection during import failed:', e);
@@ -154,10 +154,10 @@ const MarkerUtils = {
                         }
                     } catch (e) {}
                     
-                    console.log('✓ Imported', imported.length, 'markers');
+                    // log removed
                     resolve(imported);
                 } catch (error) {
-                    console.error('✗ Import failed:', error.message);
+                    // error logging removed
                     reject(error);
                 }
             };
@@ -282,7 +282,7 @@ const MarkerUtils = {
                 // Do not persist without consent/helper
             }
         } catch (e) {
-            console.error('✗ Failed to save to localStorage:', e);
+            // error logging removed
         }
     }
     ,
@@ -322,7 +322,7 @@ const MarkerUtils = {
                     }
                     // Notify user of upgrade with unified message
                     alert(`Upgraded custom markers: ${upgradedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
-                    console.log(`✓ Upgraded ${upgradedMarkers.length} legacy custom markers to hashed UIDs`);
+                    // log removed
                 }
             } catch (e) {
                 // If any error occurs during legacy detection/upgrade, log and continue
@@ -342,7 +342,7 @@ const MarkerUtils = {
             } catch (e) {}
             return LAYERS.customMarkers.markers;
         } catch (e) {
-            console.error('✗ Failed to load custom markers from localStorage:', e);
+            // error logging removed
             return [];
         }
     },
@@ -369,7 +369,7 @@ const MarkerUtils = {
             } catch (e) {}
             return LAYERS.customMarkers.markers;
         } catch (e) {
-            console.error('✗ Failed to merge custom markers:', e);
+            // error logging removed
             return [];
         }
     },
@@ -426,11 +426,11 @@ const MarkerUtils = {
                 map.currentRouteLength = totalLength * 8192; // MAP_SIZE
                 try { map.saveRouteToStorage(); } catch (e) {}
                 map.render();
-                console.log(`✓ Cleaned up route: removed ${indicesToRemove.length} point(s), ${map.currentRoute.length} remaining`);
+                // log removed
             } else {
                 // No points left, clear the route entirely
                 map.clearRoute();
-                console.log('✓ Route cleared: no valid points remaining after marker deletion');
+                // log removed
             }
         } catch (e) {
             console.warn('Failed to cleanup route references:', e);
