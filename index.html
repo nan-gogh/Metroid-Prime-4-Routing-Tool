@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Metroid Prime 4 Routing Tool Beta</title>
+    <title>VIEWROS GPS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="graphics/mp4b_routing_favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="graphics/mp4b_routing_favicon.png">
@@ -26,8 +27,8 @@
                     <img src="graphics/mp4b_routing_logo_geotag.svg" alt="" class="logo-geotag">
                 </div>
                 <div class="title-block">
-                    <h1>Metroid Prime 4 Routing</h1>
-                    <h2>Sol Valley</h2>
+                    <h1>VIEWROS GPS</h1>
+                    <h2>SOL VALLEY</h2>
                 </div>
             </div>
             
@@ -75,6 +76,17 @@
                     <input type="file" id="importRouteFile" accept=".json" style="display:none;">
                 </div>
 
+                <div class="control-group section-glow" id="settingsSection">
+                    <h3>S e t t i n g s</h3>
+                    <div class="settings-row">
+                        <label for="highlightScaleSlider" class="layer-name">Highlight Size</label>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input id="highlightScaleSlider" type="range" min="0.6" max="4.0" step="0.1" value="1.0" />
+                        </div>
+                        <div id="highlightScaleValue" class="layer-count" style="margin-top:6px;">1.0x</div>
+                    </div>
+                </div>
+
                 <div class="control-group section-glow" id="linksSection">
                     <h3>L i n k s</h3>
                     <button id="githubBtn" class="control-btn">GitHub Repository</button>
@@ -118,17 +130,22 @@
             <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level (hidden by default) -->
             <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
                 <div class="hints-list" id="hintsList">
-                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
-                    <span class="hint-group"><kbd>0</kbd>/<kbd>⛶</kbd> <span class="hint-label">Reset</span></span>
-                    <span class="hint-group"><kbd>Space</kbd>/<kbd>☰</kbd> <span class="hint-label">Toggle sidebar</span></span>
-                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_marker_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
-                    <span class="hint-group"><kbd>X</kbd> <span class="hint-label">Clear Custom Markers</span></span>
                     <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_route_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Route</span></span>
                     <span class="hint-group"><kbd>C</kbd>/<kbd>↔</kbd> <span class="hint-label">Expand Route</span></span>
                     <span class="hint-group"><kbd>&lt;</kbd>/<kbd>⇄</kbd> <span class="hint-label">Reverse Route</span></span>
                     <span class="hint-group"><kbd>Y</kbd> <span class="hint-label">Clear Route</span></span>
+
+                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_marker_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
+                    <span class="hint-group"><kbd>X</kbd> <span class="hint-label">Clear Custom Markers</span></span>
+
+                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+
+                    <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
+                    <span class="hint-group"><kbd>0</kbd>/<kbd>⛶</kbd> <span class="hint-label">Reset</span></span>
+                    
                     <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
+                    
+                    <span class="hint-group"><kbd>Space</kbd>/<kbd>☰</kbd> <span class="hint-label">Toggle sidebar</span></span>
                 </div>
             </div>
 

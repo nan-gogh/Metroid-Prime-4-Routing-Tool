@@ -5,12 +5,18 @@
 }
 
 body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
     /* Match the app's dark-blue theme used by the load overlay (darker) */
     background: #041018;
     color: #e2e2e2;
     overflow: hidden;
     height: 100vh;
+}
+
+/* Headings use Orbitron for a tech/retro look */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 700;
 }
 .root-vars {
     /* Ripple configuration: maximum ripple diameter. Use CSS custom property so JS can read it. */
@@ -409,8 +415,8 @@ body {
     position: absolute;
     transform: translate3d(-50%, -50%, 0);
     font-size: 12px;
-    /* Match the canvas axis labels font family for visual consistency */
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    /* Use Orbitron for quadrant indices (fall back to Space Grotesk then system fonts) */
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-weight: 700;
     color: #22d3ee;
     text-shadow: 0 1px 0 rgba(0,0,0,0.6);
@@ -428,8 +434,14 @@ body {
 }
 
 .layer-name {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
+}
+
+/* Use Orbitron for layer titles to test look-and-feel */
+.layer-name {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 600;
 }
 
 .layer-name {
@@ -463,8 +475,14 @@ body {
 }
 
 .layer-count {
-    font-size: 12px;
+    font-size: 11px;
     color: #9fb9c9;
+}
+
+/* Try Orbitron for layer subtitles (counts/meta) */
+.layer-count {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 500;
 }
 
 /* Data Miners section */
@@ -477,6 +495,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    margin-bottom: 24px; /* ensure consistent spacing to next section */
 }
 
 .dataminer-row {
@@ -494,6 +513,10 @@ body {
     color: #9fb9c9;
     font-size: 12px;
 }
+/* Use Orbitron for contributor names */
+.dataminer-label {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
 
 /* Control buttons */
 .control-btn {
@@ -507,6 +530,7 @@ body {
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
     transition: all 0.2s;
     /* Prevent browser double-tap zoom on touch devices */
     touch-action: manipulation;
@@ -772,7 +796,7 @@ body {
     background: #0e4a6e;
     padding: 2px 6px;
     border-radius: 3px;
-    font-family: monospace;
+    font-family: 'Space Grotesk', monospace;
     color: #22d3ee; /* match pin/icon cyan */
 }
 
@@ -886,7 +910,32 @@ kbd {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    margin-bottom: 12px; /* keep spacing consistent with other control content */
 }
+
+/* Settings slider styling */
+.settings-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.settings-row input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(90deg, rgba(34,211,238,0.35), rgba(34,211,238,0.12));
+    border-radius: 6px;
+}
+.settings-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #22d3ee;
+    box-shadow: 0 0 6px rgba(34,211,238,0.6);
+    cursor: pointer;
+}
+.settings-row input[type="range"]:focus { outline: none; }
 .dev-row {
     display: flex;
     justify-content: space-between;
@@ -896,6 +945,12 @@ kbd {
 .dev-label {
     color: #9fb9c9;
     font-size: 12px;
+}
+.dev-label {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+.dev-value {
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 .dev-value {
     color: #22d3ee;

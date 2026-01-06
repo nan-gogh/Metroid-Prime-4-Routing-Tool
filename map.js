@@ -2062,6 +2062,17 @@ class InteractiveMap {
         this.tooltip.textContent = `${layerName}${idxPart} - ${marker.uid}`;
         this.tooltip.style.left = `${x + 15}px`;
         this.tooltip.style.top = `${y - 10}px`;
+        // Style tooltip using the layer's color when available
+        try {
+            const layerCol = (key && LAYERS && LAYERS[key] && LAYERS[key].color) ? LAYERS[key].color : null;
+            if (layerCol) {
+                try { this.tooltip.style.borderColor = layerCol; } catch (e) {}
+                try { if (typeof colorToRgba === 'function') this.tooltip.style.background = colorToRgba(layerCol, 0.12) || this.tooltip.style.background; } catch (e) {}
+            } else {
+                try { this.tooltip.style.borderColor = '#22d3ee'; } catch (e) {}
+                try { this.tooltip.style.background = 'rgba(10, 25, 41, 0.95)'; } catch (e) {}
+            }
+        } catch (e) {}
         this.tooltip.style.display = 'block';
     }
     
@@ -2269,8 +2280,8 @@ class InteractiveMap {
         const fontMin = 12;
         const fontMax = 48; // avoid excessively large labels when zooming in
         const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
-        // Use the same font family as the quadrant DOM labels/page and render bold for a 'fat' appearance
-        ctx.font = `700 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+        // Use Orbitron (with Space Grotesk fallback) for canvas axis labels to match DOM quadrant labels
+        ctx.font = `700 ${fontSize}px "Orbitron", "Space Grotesk", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif`;
         ctx.textBaseline = 'middle';
         
         // Always use cyan for labels
@@ -2470,6 +2481,12 @@ class InteractiveMap {
                     if (map && map.highlightedLayers && map.highlightedLayers.has(layerKey)) {
                         const cfg = (map._highlightConfig && map._highlightConfig[layerKey]) ? map._highlightConfig[layerKey] : null;
                         highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
+                        try {
+                            const gm = (typeof this.highlightScaleMultiplier === 'number') ? this.highlightScaleMultiplier : 1.0;
+                            highlightMult = highlightMult * gm;
+                            // Ensure highlighted markers are at least slightly larger than normal
+                            highlightMult = Math.max(highlightMult, 1.15);
+                        } catch (e) {}
                     }
                 } catch (e) {}
                 const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
@@ -2892,6 +2909,64 @@ function saveLayerVisibilityToStorage(obj) {
     } catch (e) {}
 }
 
+// Highlight multiplier persistence
+function loadHighlightMultiplierFromStorage() {
+    try {
+        // Only load saved multiplier when storage consent is granted
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        if (!consent) return null;
+        let v = null;
+        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+            v = window._mp4Storage.loadSetting('mp4_highlightMultiplier');
+        } else {
+            try { v = localStorage.getItem('mp4_highlightMultiplier'); } catch (e) { v = null; }
+        }
+        if (v === null || typeof v === 'undefined') return null;
+        return (typeof v === 'string') ? parseFloat(v) : Number(v);
+    } catch (e) { return null; }
+}
+
+function saveHighlightMultiplierToStorage(v) {
+    try {
+        // Only save when user has consented to local storage
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        if (!consent) return;
+        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+            window._mp4Storage.saveSetting('mp4_highlightMultiplier', v);
+        } else {
+            try { localStorage.setItem('mp4_highlightMultiplier', String(v)); } catch (e) {}
+        }
+    } catch (e) {}
+}
+
+// Highlighted layers persistence (consent-gated)
+function loadHighlightedLayersFromStorage() {
+    try {
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        if (!consent) return null;
+        let s = null;
+        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+            s = window._mp4Storage.loadSetting('mp4_highlighted_layers');
+        } else {
+            try { s = localStorage.getItem('mp4_highlighted_layers'); } catch (e) { s = null; }
+        }
+        if (!s) return null;
+        return (typeof s === 'string') ? JSON.parse(s) : s;
+    } catch (e) { return null; }
+}
+
+function saveHighlightedLayersToStorage(obj) {
+    try {
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        if (!consent) return;
+        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+            window._mp4Storage.saveSetting('mp4_highlighted_layers', obj || {});
+        } else {
+            try { localStorage.setItem('mp4_highlighted_layers', JSON.stringify(obj || {})); } catch (e) {}
+        }
+    } catch (e) {}
+}
+
 // Map view persistence (consent-gated). Stores an object {panX, panY, zoom}
 function loadMapViewFromStorage() {
     try {
@@ -3161,6 +3236,21 @@ async function initializeLayerIcons() {
 
         // append to container
         container.appendChild(label);
+        // Ensure icon backdrop reflects any pre-existing highlighted state (e.g. loaded from storage)
+        try {
+            const isHighlightedNow = !!(map && map.highlightedLayers && map.highlightedLayers.has(layerKey));
+            try { iconDiv.classList.toggle('highlighted', isHighlightedNow); } catch (e) {}
+            try {
+                if (isHighlightedNow) {
+                    const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
+                    const glow1 = colorToRgba(col, 0.72) || 'rgba(34,211,238,0.72)';
+                    const glow2 = colorToRgba(col, 0.32) || 'rgba(34,211,238,0.32)';
+                    iconDiv.style.boxShadow = `0 0 12px ${glow1}, 0 0 28px ${glow2}`;
+                } else {
+                    iconDiv.style.boxShadow = '';
+                }
+            } catch (e) {}
+        } catch (e) {}
 
         // Pointer gesture: immediate toggle on pointerdown; swiping across rows toggles them
         label.addEventListener('pointerdown', (ev) => {
@@ -3288,18 +3378,22 @@ async function init() {
         try {
             map.highlightedLayers = new Set();
             map._highlightConfig = Object.assign({}, map._highlightConfig || {});
+            // Global multiplier applied to all highlight scales (user-configurable)
+            try { map.highlightScaleMultiplier = (function(){ const v = loadHighlightMultiplierFromStorage(); return (typeof v === 'number' && !isNaN(v)) ? v : 1.0; })(); } catch (e) { map.highlightScaleMultiplier = 1.0; }
             map.setLayerHighlight = function(layerKey, scale) {
                 try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
                 try { this.highlightedLayers.add(layerKey); } catch (e) {}
                 // (debug logs removed)
                 try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) {}
                 try { if (typeof this.render === 'function') this.render(); } catch (e) {}
+                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
             };
             map.clearLayerHighlight = function(layerKey) {
                 try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) {}
                 // (debug logs removed)
                 try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) {}
                 try { if (typeof this.render === 'function') this.render(); } catch (e) {}
+                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
             };
             map.toggleLayerHighlight = function(layerKey, scale) {
                 try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
@@ -3309,6 +3403,22 @@ async function init() {
                     try { this.setLayerHighlight(layerKey, scale); } catch (e) {}
                 }
             };
+            // Apply any previously saved highlighted layers (consent-gated)
+            try {
+                const saved = (typeof loadHighlightedLayersFromStorage === 'function') ? loadHighlightedLayersFromStorage() : null;
+                if (saved && typeof saved === 'object') {
+                    for (const layerKey of Object.keys(saved)) {
+                        try {
+                            if (!window.LAYERS || !window.LAYERS[layerKey]) continue;
+                            // Ensure layer is visible so the highlight is visible on load
+                            map.layerVisibility = map.layerVisibility || {};
+                            map.layerVisibility[layerKey] = true;
+                            const scale = (saved[layerKey] && typeof saved[layerKey].scale === 'number') ? saved[layerKey].scale : (map._highlightConfig && map._highlightConfig[layerKey] && map._highlightConfig[layerKey].scale) || 2.0;
+                            map.setLayerHighlight(layerKey, scale);
+                        } catch (e) {}
+                    }
+                }
+            } catch (e) {}
             // Prepare grid quadrant labels (8x8 A1..H8) so they can be toggled
             // on/off quickly when the `grid` layer is highlighted. Labels are
             // DOM elements positioned over the map and updated each render.
@@ -3537,6 +3647,8 @@ async function init() {
                                 try { localStorage.setItem('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0'); } catch (e) {}
                             }
                         } catch (e) {}
+                        try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(map && map.highlightScaleMultiplier ? map.highlightScaleMultiplier : 1.0); } catch (e) {}
+                        try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(map && map._highlightConfig ? map._highlightConfig : {}); } catch (e) {}
                         try { saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) {}
                         try { if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.saveToLocalStorage === 'function') MarkerUtils.saveToLocalStorage(); } catch (e) {}
                         try { if (map && typeof map.saveRouteToStorage === 'function') map.saveRouteToStorage(); } catch (e) {}
@@ -3563,7 +3675,7 @@ async function init() {
                             if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
                                 window._mp4Storage.clearSavedData(true);
                             } else {
-                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','mp4_storage_consent'];
+                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','mp4_highlightMultiplier','mp4_highlighted_layers','mp4_storage_consent'];
                                 for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
                             }
                         } catch (e) {}
@@ -3826,8 +3938,15 @@ async function init() {
                 // When entering marker-edit mode, clear any selected marker
                 try {
                     if (map.editMarkersMode) {
-                        map.selectedMarker = null;
-                        map.selectedMarkerLayer = null;
+                            map.selectedMarker = null;
+                            map.selectedMarkerLayer = null;
+                            // Clear any highlights for custom markers to avoid confusing state
+                            try { map.clearLayerHighlight && map.clearLayerHighlight('customMarkers'); } catch (e) {}
+                            // Also update the sidebar icon backdrop visual immediately
+                            try {
+                                const iconEl = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"] .layer-icon');
+                                if (iconEl) { try { iconEl.classList.remove('highlighted'); iconEl.style.boxShadow = ''; } catch (e) {} }
+                            } catch (e) {}
                         try { map.hideTooltip(); } catch (e) {}
                         try { map.render(); } catch (e) {}
                         try { updateEditOverlay(); } catch (e) {}
@@ -3935,6 +4054,13 @@ async function init() {
                         if (map.editRouteMode) {
                             map.selectedMarker = null;
                             map.selectedMarkerLayer = null;
+                            // Clear any highlights for the route layer to avoid confusing state
+                            try { map.clearLayerHighlight && map.clearLayerHighlight('route'); } catch (e) {}
+                            // Also update the sidebar icon backdrop visual immediately
+                            try {
+                                const iconEl = document.querySelector('#layerList .layer-toggle[data-layer="route"] .layer-icon');
+                                if (iconEl) { try { iconEl.classList.remove('highlighted'); iconEl.style.boxShadow = ''; } catch (e) {} }
+                            } catch (e) {}
                             try { map.hideTooltip(); } catch (e) {}
                             try { map.render(); } catch (e) {}
                             try { updateEditOverlay(); } catch (e) {}
@@ -4052,6 +4178,40 @@ async function init() {
         try { map.setTilesetGrayscale(map.tilesetGrayscale); } catch (e) {}
         updateTilesetUI();
     }
+
+    // Settings: highlight size multiplier slider wiring
+    try {
+        const slider = document.getElementById('highlightScaleSlider');
+        const label = document.getElementById('highlightScaleValue');
+        if (slider) {
+            try {
+                let initial = (map && typeof map.highlightScaleMultiplier === 'number') ? map.highlightScaleMultiplier : 1.0;
+                // Respect new slider minimum so UI and state stay consistent
+                try { const minv = parseFloat(slider.getAttribute('min')) || 0.6; if (initial < minv) initial = minv; } catch (e) {}
+                slider.value = initial;
+                try {
+                    const baseScale = 2.0;
+                    const effective = Math.max(1.15, baseScale * Number(initial));
+                    if (label) label.textContent = `${Number(effective).toFixed(2)}x`;
+                } catch (e) { if (label) label.textContent = `${Number(initial).toFixed(1)}x`; }
+            } catch (e) {}
+            slider.addEventListener('input', (ev) => {
+                try {
+                    const v = parseFloat(ev.target.value) || 1.0;
+                    if (map) {
+                        map.highlightScaleMultiplier = v;
+                        try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(v); } catch (e) {}
+                        try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                    }
+                    try {
+                        const baseScale = 2.0;
+                        const effective = Math.max(1.15, baseScale * Number(v));
+                        if (label) label.textContent = `${Number(effective).toFixed(2)}x`;
+                    } catch (e) { if (label) label.textContent = `${Number(v).toFixed(1)}x`; }
+                } catch (e) {}
+            });
+        }
+    } catch (e) {}
     
     document.getElementById('importCustom').addEventListener('click', () => {
         document.getElementById('importFile').click();
