@@ -118,7 +118,8 @@ class InteractiveMap {
         // Ensure the virtual 'route' layer is present and visible by default
         this.layerVisibility.route = true;
         // Grid overlay is a runtime layer (can be toggled via `toggleLayer('grid', show)`)
-        this.layerVisibility.grid = true;
+        // Default grid visibility: OFF on page load.
+        this.layerVisibility.grid = false;
         
         // Layer configuration (runtime constraints, not data)
         this.layerConfig = {
@@ -3060,40 +3061,32 @@ async function initializeLayerIcons() {
         try {
             // Prevent pointer/touch on the icon backdrop from bubbling to the row
             try { iconDiv.addEventListener('pointerdown', (ev) => { try { ev.stopPropagation(); } catch (e) {} }); } catch (e) {}
-            try { iconDiv.addEventListener('touchstart', (ev) => { try { ev.stopPropagation(); ev.preventDefault(); } catch (e) {} }, { passive: false }); } catch (e) {}
-            iconDiv.addEventListener('click', (ev) => {
-                try { ev.stopPropagation(); } catch (e) {}
-                // (debug logs removed)
+            try { iconDiv.addEventListener('touchstart', (ev) => { try { ev.stopPropagation(); } catch (e) {} }, { passive: true }); } catch (e) {}
+            const _handleIconActivate = (ev) => {
+                try { if (ev && ev.stopPropagation) ev.stopPropagation(); } catch (e) {}
                 try {
                     const k = label.dataset && label.dataset.layer;
                     if (!k) return;
                     if (map && typeof map.toggleLayerHighlight === 'function') {
-                        // (debug logs removed)
                         map.toggleLayerHighlight(k, (layer && layer.highlightScale) ? layer.highlightScale : 2.0);
-                        // (debug logs removed)
-                        // If highlight was just enabled, ensure the layer is visible so highlights show
                         try {
                             if (map.highlightedLayers && map.highlightedLayers.has(k)) {
                                 if (!map.layerVisibility || !map.layerVisibility[k]) {
-                                    // (debug logs removed)
                                     if (typeof map.toggleLayer === 'function') {
                                         try { map.toggleLayer(k, true); } catch (e) { /* suppressed */ }
                                     } else {
                                         try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = true; } catch (e) {}
                                         try { if (map && typeof map.renderOverlay === 'function') map.renderOverlay(); else if (map && typeof map.render === 'function') map.render(); } catch (e) {}
                                     }
-                                    // Reflect sidebar row state if present
                                     try {
                                         const row = document.querySelector('#layerList .layer-toggle[data-layer="' + k + '"]');
                                         if (row) { row.classList.add('active'); row.setAttribute('aria-pressed', 'true'); }
                                     } catch (e) {}
                                     try { _scheduleSaveLayerVisibility(); } catch (e) {}
-                                    // (debug logs removed)
                                 }
                             }
                         } catch (e) {}
                     } else if (map) {
-                        // fallback minimal toggle
                         map.highlightedLayers = map.highlightedLayers || new Set();
                         if (map.highlightedLayers.has(k)) {
                             map.highlightedLayers.delete(k);
@@ -3103,7 +3096,6 @@ async function initializeLayerIcons() {
                         }
                         try { if (typeof map.render === 'function') map.render(); } catch (e) {}
                     }
-                    // Reflect highlight visually on the icon backdrop and apply colorized glow
                     try {
                         const isHighlighted = !!(map && map.highlightedLayers && map.highlightedLayers.has(k));
                         try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) {}
@@ -3119,7 +3111,9 @@ async function initializeLayerIcons() {
                         } catch (e) {}
                     } catch (e) {}
                 } catch (e) {}
-            });
+            };
+            try { iconDiv.addEventListener('click', _handleIconActivate); } catch (e) {}
+            try { iconDiv.addEventListener('pointerup', (ev) => { try { if (!ev.pointerType || ev.pointerType === 'mouse') return; _handleIconActivate(ev); } catch (e) {} }); } catch (e) {}
         } catch (e) {}
         label.appendChild(iconDiv);
 
