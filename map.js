@@ -2551,7 +2551,9 @@ class InteractiveMap {
                     try {
                         const gm = (typeof this.highlightScaleMultiplier === 'number') ? this.highlightScaleMultiplier : 1.0;
                         highlightMult = highlightMult * gm;
-                        highlightMult = Math.max(highlightMult, 1.15);
+                        // Allow highlighted markers to shrink down to the slider minimum
+                        // (slider min is 0.6). Previously a 1.15 floor prevented reductions.
+                        highlightMult = Math.max(highlightMult, 0.6);
                     } catch (e) {}
                 }
             } catch (e) {}
@@ -2815,6 +2817,8 @@ class InteractiveMap {
         this.render();
         // Stop animated route when cleared
         this.stopRouteAnimation();
+        // If we were in route edit mode, exit via canonical helper so visuals cleanly update
+        try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('route'); } catch (e) {}
         // Remove persisted route when cleared
         try {
             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.clearRoute === 'function') {
@@ -3102,6 +3106,84 @@ function saveMapViewToStorage(obj) {
     } catch (e) {}
 }
 
+// Module-scoped variables for edit overlay RAF and timer (shared with init() updateEditOverlay)
+let _editOverlayRaf_module = null;
+let _overlayHideTimer_module = null;
+
+// Helper: properly hide the edit overlay with RAF cancellation and transition cleanup
+// This replicates the "turning off" path from updateEditOverlay() but at module scope
+function hideEditOverlayProperly() {
+    try {
+        const ov = document.getElementById('editOverlay');
+        if (!ov) return;
+        // Cancel any ongoing RAF
+        if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) {} _editOverlayRaf_module = null; }
+        // Start fade-out by removing visible class
+        ov.classList.remove('visible');
+        // Keep aria-hidden=false during fade; only mark hidden after transition completes
+        try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
+        if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} }
+        _overlayHideTimer_module = setTimeout(() => {
+            try {
+                // If overlay was re-enabled in the meantime, don't clear
+                if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer_module = null; return; }
+                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
+                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) {}
+            } catch (e) {}
+            _overlayHideTimer_module = null;
+        }, 220);
+    } catch (e) {}
+}
+
+// Helper: exit edit mode for a layer if it's currently in edit mode
+// This is the canonical exit path used by Hide All, manual toggle, and swipe toggle
+// Defined at module scope so it's accessible from both initializeLayerIcons() and init()
+function exitEditModeForLayer(layerKey) {
+    try {
+        if (layerKey === 'customMarkers' && map && map.editMarkersMode) {
+            map.editMarkersMode = false;
+            try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
+            try {
+                const editToggle = document.getElementById('editMarkersToggle');
+                if (editToggle) {
+                    editToggle.setAttribute('aria-pressed', 'false');
+                    editToggle.classList.remove('pressed');
+                }
+            } catch (e) {}
+            try {
+                const mini = document.getElementById('editMarkersToggleMini');
+                if (mini) {
+                    mini.classList.remove('glow');
+                    mini.setAttribute('aria-pressed', 'false');
+                }
+            } catch (e) {}
+            // Properly hide edit overlay with full cleanup
+            hideEditOverlayProperly();
+            try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+        } else if (layerKey === 'route' && map && map.editRouteMode) {
+            map.editRouteMode = false;
+            try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
+            try {
+                const routeEditToggle = document.getElementById('editRouteToggle');
+                if (routeEditToggle) {
+                    routeEditToggle.setAttribute('aria-pressed', 'false');
+                    routeEditToggle.classList.remove('pressed');
+                }
+            } catch (e) {}
+            try {
+                const mini = document.getElementById('editRouteToggleMini');
+                if (mini) {
+                    mini.classList.remove('glow');
+                    mini.setAttribute('aria-pressed', 'false');
+                }
+            } catch (e) {}
+            // Properly hide edit overlay with full cleanup
+            hideEditOverlayProperly();
+            try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+        }
+    } catch (e) {}
+}
+
 async function initializeLayerIcons() {
     // Dynamically build layer toggle list from `LAYERS` so adding layers is data-driven.
     const container = document.getElementById('layerList');
@@ -3385,19 +3467,18 @@ async function initializeLayerIcons() {
                 _gestureToggled.add(label);
 
                 const checked = !label.classList.contains('active');
-                // Prevent turning off the customMarkers layer while in edit mode
-                if (layerKey === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !checked) {
-                    try { label.classList.toggle('active', true); } catch (e) {}
-                    try { label.setAttribute('aria-pressed', 'true'); } catch (e) {}
-                    return;
-                }
-
+                
                 // Immediate visual feedback for responsiveness
                 try { label.classList.toggle('active', checked); } catch (e) {}
                 try { label.setAttribute('aria-pressed', checked ? 'true' : 'false'); } catch (e) {}
 
                 // Update runtime visibility object so other code reads the new state
                 try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[layerKey] = !!checked; } catch (e) {}
+
+                // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
+                if (!checked) {
+                    try { exitEditModeForLayer(layerKey); } catch (e) {}
+                }
 
                 // Queue the heavier work to RAF to batch rapid toggles
                 try { _pendingLayerToggles[layerKey] = !!checked; _scheduleApplyLayerToggles(); } catch (e) {}
@@ -3451,15 +3532,16 @@ async function initializeLayerIcons() {
 
             const k = row.dataset && row.dataset.layer;
             const willChecked = !row.classList.contains('active');
-            if (k === 'customMarkers' && typeof map !== 'undefined' && map && map.editMarkersMode && !willChecked) {
-                try { row.classList.toggle('active', true); } catch (e) {}
-                try { row.setAttribute('aria-pressed', 'true'); } catch (e) {}
-                return;
-            }
 
             try { row.classList.toggle('active', willChecked); } catch (e) {}
             try { row.setAttribute('aria-pressed', willChecked ? 'true' : 'false'); } catch (e) {}
             try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = !!willChecked; } catch (e) {}
+            
+            // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
+            if (!willChecked) {
+                try { exitEditModeForLayer(k); } catch (e) {}
+            }
+
             try { _pendingLayerToggles[k] = !!willChecked; _scheduleApplyLayerToggles(); } catch (e) {}
             try { _scheduleSaveLayerVisibility(); } catch (e) {}
         } catch (e) {}
@@ -3582,13 +3664,32 @@ async function init() {
             // Enter/exit edit-mode helpers that ensure outline is turned on and colored
             map._enterEditMode = function(layerKey, scale) {
                 try {
-                    // edit mode no longer touches any highlighting or indicators
+                    // add edit-mode-outline class only for route and marker layers
+                    const editableLayers = ['route', 'customMarkers', 'greenCrystals'];
+                    if (editableLayers.includes(layerKey)) {
+                        try {
+                            const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
+                            if (row) {
+                                // Set edit-mode outline color from layer's configured color
+                                const layerColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color) ? LAYERS[layerKey].color : '#a78bfa';
+                                row.style.setProperty('--edit-mode-outline-color', layerColor);
+                                row.classList.add('edit-mode-outline');
+                            }
+                        } catch (e) {}
+                    }
                 } catch (e) {}
             };
 
             map._exitEditMode = function(layerKey) {
                 try {
-                    // edit mode no longer touches any highlighting or indicators
+                    // remove edit-mode-outline class
+                    try {
+                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
+                        if (row) {
+                            row.classList.remove('edit-mode-outline');
+                            row.style.removeProperty('--edit-mode-outline-color');
+                        }
+                    } catch (e) {}
                 } catch (e) {}
             };
             // Apply any previously saved highlighted layers (consent-gated)
@@ -3763,6 +3864,17 @@ async function init() {
             try {
                 map.layerVisibility = Object.assign({}, map.layerVisibility || {}, newVisibility);
             } catch (e) { map.layerVisibility = Object.assign({}, newVisibility); }
+            // If we're hiding all layers, ensure any active edit modes are exited
+            if (!checked) {
+                try {
+                    if (newVisibility && newVisibility.customMarkers === false) {
+                        exitEditModeForLayer('customMarkers');
+                    }
+                    if (newVisibility && newVisibility.route === false) {
+                        exitEditModeForLayer('route');
+                    }
+                } catch (e) {}
+            }
             try { saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
             // When hiding all layers, deselect any selected marker so the UI
             // doesn't retain a selection pointing to now-hidden content.
@@ -3988,8 +4100,7 @@ async function init() {
     }
     
     // Helper to show/hide and position the edit overlay when either edit mode is active
-    let _editOverlayRaf = null;
-    let _overlayHideTimer = null;
+    // Use module-scoped variables so exitEditModeForLayer can also control the RAF/timer
     // Global edit-overlay alpha so both RAF-updates and on-show logic agree
     const EDIT_OVERLAY_ALPHA = 0.35;
     function _updateOverlayFrame() {
@@ -4037,16 +4148,16 @@ async function init() {
                 ov.classList.add('visible');
                 try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
                 // continue RAF while visible so overlay follows pan/zoom smoothly
-                _editOverlayRaf = requestAnimationFrame(_updateOverlayFrame);
+                _editOverlayRaf_module = requestAnimationFrame(_updateOverlayFrame);
             } else {
                 // Should not usually reach here because updateEditOverlay controls RAF lifecycle,
                 // but defensively hide overlay and clear inline sizes.
                 ov.classList.remove('visible');
                 try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
                 try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; } catch (e) {}
-                _editOverlayRaf = null;
+                _editOverlayRaf_module = null;
             }
-        } catch (e) { _editOverlayRaf = null; }
+        } catch (e) { _editOverlayRaf_module = null; }
     }
 
     function updateEditOverlay() {
@@ -4085,28 +4196,64 @@ async function init() {
                         }
                     }
                 } catch (e) {}
-                if (_overlayHideTimer) { try { clearTimeout(_overlayHideTimer); } catch (e) {} _overlayHideTimer = null; }
-                if (!_editOverlayRaf) _editOverlayRaf = requestAnimationFrame(_updateOverlayFrame);
+                if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} _overlayHideTimer_module = null; }
+                if (!_editOverlayRaf_module) _editOverlayRaf_module = requestAnimationFrame(_updateOverlayFrame);
                 return;
             }
 
             // Turning off: stop RAF, but keep inline sizing for the transition,
             // then clear sizing after the CSS opacity transition to avoid snapping.
-            if (_editOverlayRaf) { try { cancelAnimationFrame(_editOverlayRaf); } catch (e) {} _editOverlayRaf = null; }
+            if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) {} _editOverlayRaf_module = null; }
             // Start fade-out by removing visible class
             ov.classList.remove('visible');
             // Keep aria-hidden=false during fade; only mark hidden after transition completes
             try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
-            if (_overlayHideTimer) { try { clearTimeout(_overlayHideTimer); } catch (e) {} }
-            _overlayHideTimer = setTimeout(() => {
+            if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} }
+            _overlayHideTimer_module = setTimeout(() => {
                 try {
                     // If overlay was re-enabled in the meantime, don't clear
-                    if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer = null; return; }
+                    if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer_module = null; return; }
                     try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
                     try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) {}
                 } catch (e) {}
-                _overlayHideTimer = null;
+                _overlayHideTimer_module = null;
             }, 220); // slightly longer than CSS transition (160ms) to ensure smooth fade
+        } catch (e) {}
+    }
+    
+    // Unified helper: apply layer color to sidebar and mini edit-toggle buttons
+    function setEditToggleColor(layerKey, sidebarId, miniId, sidebarCssPrefix, on) {
+        try {
+            const layerColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color) ? String(LAYERS[layerKey].color).trim() : '#22d3ee';
+            const hex = layerColor;
+            const parseHexSimple = (h) => {
+                if (!h || h[0] !== '#') return null;
+                const s = h.slice(1);
+                if (s.length === 6) {
+                    return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16) };
+                } else if (s.length === 3) {
+                    return { r: parseInt(s[0]+s[0],16), g: parseInt(s[1]+s[1],16), b: parseInt(s[2]+s[2],16) };
+                } else if (s.length === 8) {
+                    return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16), a: parseInt(s.slice(6,8),16) / 255 };
+                } else if (s.length === 4) {
+                    return { r: parseInt(s[0]+s[0],16), g: parseInt(s[1]+s[1],16), b: parseInt(s[2]+s[2],16), a: parseInt(s[3]+s[3],16) / 255 };
+                }
+                return null;
+            };
+            const rgb = parseHexSimple(hex) || { r: 34, g: 211, b: 238 };
+            const isRoute = (layerKey === 'route');
+            const glow1 = `rgba(${rgb.r},${rgb.g},${rgb.b},${isRoute ? 0.9 : 0.75})`;
+            const glow2 = `rgba(${rgb.r},${rgb.g},${rgb.b},${isRoute ? 0.6 : 0.35})`;
+            const border = hex;
+            const sidebarEl = document.getElementById(sidebarId);
+            const miniEl = document.getElementById(miniId);
+            if (on) {
+                try { if (sidebarEl) { sidebarEl.style.setProperty(`--${sidebarCssPrefix}-border`, border); sidebarEl.style.setProperty(`--${sidebarCssPrefix}-glow1`, glow1); } } catch (e) {}
+                try { if (miniEl) { miniEl.style.setProperty('--edit-layer-glow1', glow1); miniEl.style.setProperty('--edit-layer-glow2', glow2); miniEl.style.setProperty('--edit-layer-border', border); } } catch (e) {}
+            } else {
+                try { if (sidebarEl) { sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-border`); sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-glow1`); } } catch (e) {}
+                try { if (miniEl) { miniEl.style.removeProperty('--edit-layer-glow1'); miniEl.style.removeProperty('--edit-layer-glow2'); } } catch (e) {}
+            }
         } catch (e) {}
     }
     
@@ -4129,6 +4276,7 @@ async function init() {
             const on = !(editToggle.getAttribute('aria-pressed') === 'true');
             try { editToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
             try { editToggle.classList.toggle('pressed', on); } catch (e) {}
+                    try { setEditToggleColor('customMarkers','editMarkersToggle','editMarkersToggleMini','edit-markers', on); } catch (e) {}
             try {
                 map.editMarkersMode = !!on;
                 try {
@@ -4164,7 +4312,7 @@ async function init() {
                             // update mini on-screen route toggle if present
                             try {
                                 const miniRoute = document.getElementById('editRouteToggleMini');
-                                if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                                if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch(e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
                             } catch (e) {}
                             // re-enable route sidebar row if it was disabled
                             try {
@@ -4197,7 +4345,7 @@ async function init() {
                     // Also update mini on-screen toggle if present
                     try {
                         const mini = document.getElementById('editMarkersToggleMini');
-                        if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                        if (mini) { try { setEditToggleColor('customMarkers','editMarkersToggle','editMarkersToggleMini','edit-markers', true); } catch(e) {} mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
                     } catch (e) {}
                 }
                 if (!map.editMarkersMode) {
@@ -4223,9 +4371,27 @@ async function init() {
         });
         // Wire the on-screen mini toggle to proxy clicks to the sidebar toggle
         try {
-            const mini = document.getElementById('editMarkersToggleMini');
+                const mini = document.getElementById('editMarkersToggleMini');
             if (mini) {
                 try { mini.setAttribute('aria-pressed', map.editMarkersMode ? 'true' : 'false'); } catch (e) {}
+                try { if (map.editMarkersMode) { try { setEditToggleColor('customMarkers','editMarkersToggle','editMarkersToggleMini','edit-markers', true); } catch(e) {} } } catch (e) {}
+                // Ensure mini icon uses layer color permanently (set at init)
+                try {
+                    const markerColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS.customMarkers && LAYERS.customMarkers.color) ? String(LAYERS.customMarkers.color).trim() : null;
+                    if (markerColor) {
+                        mini.style.setProperty('--edit-layer-icon', markerColor);
+                        // derive simple rgba press colors
+                        try {
+                            const s = markerColor[0] === '#' ? markerColor.slice(1) : markerColor;
+                            let r=34,g=211,b=238;
+                            if (s.length === 6) { r = parseInt(s.slice(0,2),16); g = parseInt(s.slice(2,4),16); b = parseInt(s.slice(4,6),16); }
+                            else if (s.length === 3) { r = parseInt(s[0]+s[0],16); g = parseInt(s[1]+s[1],16); b = parseInt(s[2]+s[2],16); }
+                            mini.style.setProperty('--edit-layer-border', markerColor);
+                            mini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
+                            mini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
+                        } catch(e) {}
+                    }
+                } catch (e) {}
                 try { mini.classList.toggle('glow', !!map.editMarkersMode); } catch (e) {}
                 mini.addEventListener('click', () => { try { editToggle.click(); } catch (e) {} });
             }
@@ -4234,6 +4400,25 @@ async function init() {
 
     // Edit route toggle - enables route editing interactions
     const routeEditToggle = document.getElementById('editRouteToggle');
+    // Ensure mini toggle vars are set unconditionally
+    try {
+        const mini = document.getElementById('editRouteToggleMini');
+        if (mini) {
+            const routeColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS.route && LAYERS.route.color) ? String(LAYERS.route.color).trim() : null;
+            if (routeColor) {
+                mini.style.setProperty('--edit-layer-icon', routeColor);
+                try {
+                    const s = routeColor[0] === '#' ? routeColor.slice(1) : routeColor;
+                    let r=34,g=211,b=238;
+                    if (s.length === 6) { r = parseInt(s.slice(0,2),16); g = parseInt(s.slice(2,4),16); b = parseInt(s.slice(4,6),16); }
+                    else if (s.length === 3) { r = parseInt(s[0]+s[0],16); g = parseInt(s[1]+s[1],16); b = parseInt(s[2]+s[2],16); }
+                    mini.style.setProperty('--edit-layer-border', routeColor);
+                    mini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
+                    mini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
+                } catch(e) {}
+            }
+        }
+    } catch (e) {}
     if (routeEditToggle && map) {
         // Reflect initial state
         try { routeEditToggle.setAttribute('aria-pressed', map.editRouteMode ? 'true' : 'false'); } catch (e) {}
@@ -4242,6 +4427,7 @@ async function init() {
             const on = !(routeEditToggle.getAttribute('aria-pressed') === 'true');
             try { routeEditToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
             try { routeEditToggle.classList.toggle('pressed', on); } catch (e) {}
+            try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', on); } catch (e) {}
             try {
                 map.editRouteMode = !!on;
                     try {
@@ -4276,7 +4462,7 @@ async function init() {
                             // update mini on-screen markers toggle if present
                             try {
                                 const miniMarkers = document.getElementById('editMarkersToggleMini');
-                                if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed', 'false'); }
+                                if (miniMarkers) { try { setEditToggleColor('customMarkers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed', 'false'); }
                             } catch (e) {}
                             // re-enable customMarkers sidebar row if it was disabled
                             // NOTE: do NOT remove has-inline-highlight here - _exitEditMode already synced it correctly
@@ -4309,7 +4495,7 @@ async function init() {
                     // Also update mini on-screen toggle if present
                     try {
                         const mini = document.getElementById('editRouteToggleMini');
-                        if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                                    if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) {} mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
                     } catch (e) {}
                 }
                 if (!map.editRouteMode) {
@@ -4380,12 +4566,19 @@ async function init() {
         if (slider && label) {
             let initial = (map && typeof map.highlightScaleMultiplier === 'number') ? map.highlightScaleMultiplier : 1.0;
             slider.value = initial;
-            label.textContent = `${Number(initial).toFixed(1)}x`;
+            // Display a mapped user-facing value while keeping internal numbers unchanged.
+            // Users expect the displayed slider to start near 1.2x, so show (internal + 0.6).
+            const displayInitial = Number(initial) + 0.6;
+            const pctInitial = Math.round(displayInitial * 100);
+            label.textContent = `${displayInitial.toFixed(1)}x (${pctInitial}%)`;
             
             slider.addEventListener('input', (ev) => {
                 const v = parseFloat(ev.target.value) || 1.0;
                 if (map) map.highlightScaleMultiplier = v;
-                label.textContent = `${Number(v).toFixed(1)}x`;
+                // Map displayed value to (internal + 0.6) so UI range appears to start around 1.2x
+                const display = Number(v) + 0.6;
+                const pct = Math.round(display * 100);
+                label.textContent = `${display.toFixed(1)}x (${pct}%)`;
                 try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(v); } catch (e) {}
                 try { map.renderOverlay ? map.renderOverlay() : map.render(); } catch (e) {}
             });
@@ -4546,20 +4739,10 @@ async function init() {
                 MarkerUtils.clearCustomMarkers();
                 map.customMarkers = LAYERS.customMarkers.markers;
                 map.updateLayerCounts();
-                // Exit marker edit mode when markers are cleared
-                try { map.editMarkersMode = false; } catch (e) {}
+                // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
+                try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('customMarkers'); } catch (e) {}
                 try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) {}
                 try { map.canvas.style.cursor = 'grab'; } catch (e) {}
-                // Update sidebar & mini toggles if present
-                try {
-                    const markersToggle = document.getElementById('editMarkersToggle');
-                    if (markersToggle) { markersToggle.setAttribute('aria-pressed', 'false'); markersToggle.classList.remove('pressed'); }
-                } catch (e) {}
-                try {
-                    const miniMarkers = document.getElementById('editMarkersToggleMini');
-                    if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed', 'false'); }
-                } catch (e) {}
-                try { updateEditOverlay(); } catch (e) {}
                 try { map.render(); } catch (e) {}
             }
         }
@@ -4670,7 +4853,7 @@ async function init() {
                                 try { updateEditOverlay(); } catch (e) {}
                                 try {
                                     const mini = document.getElementById('editRouteToggleMini');
-                                    if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) {} mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
                                 } catch (e) {}
                                 // Ensure route edit-mode visual state: enter route edit mode helper
                                 try { map._enterEditMode && map._enterEditMode('route', 2.0); } catch (e) {}
@@ -4678,7 +4861,7 @@ async function init() {
                                 try { map.editMarkersMode = false; } catch (e) {}
                                 try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
                                 try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
-                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
                             }
                         } catch (e) {}
                         // log removed
@@ -4703,7 +4886,6 @@ async function init() {
         try {
                 // debug logging removed
             if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length < 2) {
-                alert('Need an existing route with at least 2 waypoints to compute nearby pool.');
                 return;
             }
 
@@ -4717,7 +4899,7 @@ async function init() {
                 routePts.push({ x: src.marker.x, y: src.marker.y });
                 if (src.marker.uid) routeUIDs.add(src.marker.uid);
             }
-            if (routePts.length < 2) { alert('Route must contain at least 2 valid waypoints.'); return; }
+            if (routePts.length < 2) { return; }
 
             // Threshold in pixels for proximity; tuneable
             const THRESHOLD_PX = 160;
@@ -4959,14 +5141,12 @@ async function init() {
         } catch (err) {}
 
         computeNearbyBtn.addEventListener('click', (e) => {
-            try {
-                if (!_computeNearbyBtnPressed) {
-                    // Click did not start on this button (likely came from a drag-end or synthetic); ignore.
-                    return;
-                }
-            } catch (err) {}
+            // Ignore clicks that didn't originate from a pointerdown on this button
+            if (!_computeNearbyBtnPressed) return;
             try {
                 expandRouteNearby();
+            } catch (err) {
+                // suppressed
             } finally {
                 _computeNearbyBtnPressed = false;
             }
@@ -4980,6 +5160,21 @@ async function init() {
     try {
         const computeNearbyMini = document.getElementById('computeRouteNearbyMini');
         if (computeNearbyMini) {
+            try {
+                const routeColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS.route && LAYERS.route.color) ? String(LAYERS.route.color).trim() : null;
+                if (routeColor) {
+                    computeNearbyMini.style.setProperty('--edit-layer-icon', routeColor);
+                    try {
+                        const s = routeColor[0] === '#' ? routeColor.slice(1) : routeColor;
+                        let r=34,g=211,b=238;
+                        if (s.length === 6) { r = parseInt(s.slice(0,2),16); g = parseInt(s.slice(2,4),16); b = parseInt(s.slice(4,6),16); }
+                        else if (s.length === 3) { r = parseInt(s[0]+s[0],16); g = parseInt(s[1]+s[1],16); b = parseInt(s[2]+s[2],16); }
+                        computeNearbyMini.style.setProperty('--edit-layer-border', routeColor);
+                        computeNearbyMini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
+                        computeNearbyMini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
+                    } catch(e) {}
+                }
+            } catch (e) {}
             computeNearbyMini.addEventListener('click', (e) => { try { expandRouteNearby(); } catch (err) {} });
         }
     } catch (e) {}
@@ -5020,7 +5215,24 @@ async function init() {
             // Wire mini on-screen Reverse Route button if present
             try {
                 const toggleDirMini = document.getElementById('toggleRouteDirMini');
-                if (toggleDirMini) toggleDirMini.addEventListener('click', (ev) => { try { toggleRouteDirection(); } catch (err) {} });
+                if (toggleDirMini) {
+                    try {
+                        const routeColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS.route && LAYERS.route.color) ? String(LAYERS.route.color).trim() : null;
+                        if (routeColor) {
+                            toggleDirMini.style.setProperty('--edit-layer-icon', routeColor);
+                            try {
+                                const s = routeColor[0] === '#' ? routeColor.slice(1) : routeColor;
+                                let r=34,g=211,b=238;
+                                if (s.length === 6) { r = parseInt(s.slice(0,2),16); g = parseInt(s.slice(2,4),16); b = parseInt(s.slice(4,6),16); }
+                                else if (s.length === 3) { r = parseInt(s[0]+s[0],16); g = parseInt(s[1]+s[1],16); b = parseInt(s[2]+s[2],16); }
+                                toggleDirMini.style.setProperty('--edit-layer-border', routeColor);
+                                toggleDirMini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
+                                toggleDirMini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
+                            } catch(e) {}
+                        }
+                    } catch (e) {}
+                    toggleDirMini.addEventListener('click', (ev) => { try { toggleRouteDirection(); } catch (err) {} });
+                }
             } catch (e) {}
         } catch (e) {}
 
@@ -5042,7 +5254,7 @@ async function init() {
                 } catch (e) {}
                 try {
                     const miniRoute = document.getElementById('editRouteToggleMini');
-                    if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                    if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
                 } catch (e) {}
                 try { updateEditOverlay(); } catch (e) {}
                 try { map.render(); } catch (e) {}
@@ -5156,7 +5368,7 @@ async function init() {
                                     try { map.editMarkersMode = false; } catch (e) {}
                                     try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
                                     try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
-                                    try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                    try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
                                 } else {
                                     try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
                                 }
@@ -5181,7 +5393,7 @@ async function init() {
                                     try { map.editRouteMode = false; } catch (e) {}
                                     try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
                                     try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle) { routeToggle.setAttribute('aria-pressed','false'); routeToggle.classList.remove('pressed'); } } catch (e) {}
-                                    try { const miniRoute = document.getElementById('editRouteToggleMini'); if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                    try { const miniRoute = document.getElementById('editRouteToggleMini'); if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch(e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed','false'); } } catch (e) {}
                                 } else {
                                     try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
                                 }

@@ -3,7 +3,7 @@
 LAYERS.shrineLift = {
     name: "Shrine Lift",
     icon: "🗿",
-    color: "#d240bcff",
+    color: "#d13592ff",
     prefix: "sl",
     markers: [
         {"uid": "sl_189e3d2a", "x": 0.42200165971942366, "y": 0.7580609877033034},

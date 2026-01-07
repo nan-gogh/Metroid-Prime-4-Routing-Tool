@@ -3,7 +3,7 @@
 LAYERS.customMarkers = {
     name: "Custom Marker",
     icon: "📍",
-    color: "#00fff7ff",
+    color: "#cb3dffff",
     prefix: "cm",
     markers: []
 };

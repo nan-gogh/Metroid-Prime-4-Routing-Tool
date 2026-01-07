@@ -399,11 +399,11 @@ h1, h2, h3, h4, h5, h6 {
     outline-offset: -2px;
 }
 
-/* Edit-mode modifier: when a layer row is being edited, use a distinct color.
-   The JS will toggle the `.editing` class on the row. */
-.sidebar #layerList .layer-toggle.has-inline-highlight.editing {
-    --layer-inline-highlight-color: #f59e0b; /* amber for edit-mode by default */
-    animation: pulse-outline-opacity 0.1s ease-in-out infinite;
+/* Edit-mode only outline: second animated outline visible only during edit mode for route/marker layers */
+.sidebar #layerList .layer-toggle.edit-mode-outline {
+    --edit-mode-outline-color: #a78bfa; /* default purple, overridden by layer color in JS */
+    box-shadow: inset 0 0 0 4px var(--edit-mode-outline-color);
+    animation: pulse-edit-outline 0.4s ease-in-out infinite;
 }
 
 /* Pulsating opacity animation for edit-mode outline only (uses layer's color from CSS variable) */
@@ -415,6 +415,16 @@ h1, h2, h3, h4, h5, h6 {
     50% {
         box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--layer-inline-highlight-color) 0%, transparent);
         outline: 2px solid color-mix(in srgb, var(--layer-inline-highlight-color) 0%, transparent);
+    }
+}
+
+/* Pulsating animation for edit-mode outline (breathing effect) */
+@keyframes pulse-edit-outline {
+    0%, 100% {
+        box-shadow: inset 0 0 0 4px var(--edit-mode-outline-color);
+    }
+    50% {
+        box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--edit-mode-outline-color) 40%, transparent);
     }
 }
 
@@ -700,6 +710,10 @@ h1, h2, h3, h4, h5, h6 {
     z-index: 20; /* above canvas (1) and below zoom controls (50) */
     background: rgba(34, 238, 228, 0.347);
     pointer-events: none; /* allow map interactions through overlay */
+    /* Blend with map tiles beneath for a lighter, screen-like effect */
+    mix-blend-mode: screen;
+    /* Hint to browser about properties that will change */
+    will-change: opacity, background-color;
     opacity: 0;
     transition: opacity 160ms ease;
 }
@@ -744,6 +758,7 @@ h1, h2, h3, h4, h5, h6 {
     height: 18px;
     display: block;
     margin: 0;
+    color: var(--edit-layer-icon, #22d3ee);
 }
 
 /* Nudge the expand-route mini icon slightly upward for visual centering */
@@ -761,6 +776,9 @@ h1, h2, h3, h4, h5, h6 {
     line-height: 20px;
     font-size: 18px; /* slightly larger */
 }
+#editRouteToggleMini {
+    margin-top: 12px;
+}
 
 /* Also center the reverse-direction mini icon */
 #toggleRouteDirMini .mini-icon {
@@ -773,9 +791,12 @@ h1, h2, h3, h4, h5, h6 {
 /* Center the edit-markers mini icon vertically */
 #editMarkersToggleMini .mini-icon {
     display: inline-block;
-    transform: translateY(-2px);
-    line-height: 18px;
-    font-size: 18px;
+    transform: translateY(0px); /* nudged slightly up from previous position */
+    line-height: 20px;
+    font-size: 20px; /* slightly larger for clarity */
+}
+#editMarkersToggleMini {
+    margin-bottom: 12px;
 }
 
 /* Slight nudge for the reset-view mini icon (1px) */
@@ -788,15 +809,28 @@ h1, h2, h3, h4, h5, h6 {
 
 .zoom-btn:active,
 .zoom-btn.pressed {
-    background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
-    border-color: #0891b2;
+    background: linear-gradient(180deg, var(--edit-layer-press1, #0891b2) 0%, var(--edit-layer-press2, #065666) 100%);
+    border-color: var(--edit-layer-border, #0891b2);
     transform: scale(0.95);
+    transition: transform 10ms ease;
 }
 
 /* Glow state for the mini edit-markers toggle in the zoom controls */
 .zoom-btn.glow {
-    box-shadow: 0 0 12px rgba(34, 211, 238, 0.45), 0 0 28px rgba(34, 211, 238, 0.12);
-    border-color: #22d3ee;
+    box-shadow: 0 0 12px var(--edit-layer-glow1, rgba(34, 211, 238, 0.45)), 0 0 28px var(--edit-layer-glow2, rgba(34, 211, 238, 0.12));
+    border-color: var(--edit-layer-border, #22d3ee);
+}
+
+/* Route edit sidebar button: allow per-layer outline/glow via CSS variables */
+#editRouteToggle.pressed {
+    border-color: var(--edit-route-border, #22d3ee);
+    box-shadow: 0 0 12px var(--edit-route-glow1, rgba(34, 211, 238, 0.2));
+}
+
+/* Edit markers sidebar button: per-layer outline/glow via CSS variables */
+#editMarkersToggle.pressed {
+    border-color: var(--edit-markers-border, #22d3ee);
+    box-shadow: 0 0 12px var(--edit-markers-glow1, rgba(34, 211, 238, 0.2));
 }
 
 /* Tooltip */
