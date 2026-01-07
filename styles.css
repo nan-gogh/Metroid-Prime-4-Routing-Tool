@@ -385,6 +385,19 @@ h1, h2, h3, h4, h5, h6 {
     background: rgba(34, 211, 238, 0.12);
 }
 
+/* Inline inset border for layer rows when the layer is highlighted.
+   `has-inline-highlight` is toggled on the row by JS so the border
+   matches the intended visual outline and does not rely on pseudo-elements. */
+.sidebar #layerList .layer-toggle.has-inline-highlight {
+    /* Stronger, more robust inline highlight:
+       - inset box-shadow when supported
+       - outline fallback for cases where box-shadow is overridden or clipped
+       - use higher specificity to reduce accidental overrides */
+    box-shadow: inset 0 0 0 2px #22d3ee !important;
+    outline: 2px solid #22d3ee;
+    outline-offset: -2px;
+}
+
 /* Layer-toggle no-longer uses hidden native checkboxes; state is represented
    by the `.layer-toggle.active` class and `aria-pressed` on the button rows. */
 

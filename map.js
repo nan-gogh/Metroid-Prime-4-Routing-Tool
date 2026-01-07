@@ -3282,6 +3282,7 @@ async function initializeLayerIcons() {
                     try {
                         const isHighlighted = !!(map && map.highlightedLayers && map.highlightedLayers.has(k));
                         try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) {}
+                        try { label.classList.toggle('has-inline-highlight', isHighlighted); } catch (e) {}
                         try {
                             if (isHighlighted) {
                                 const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
@@ -3348,6 +3349,7 @@ async function initializeLayerIcons() {
         try {
             const isHighlightedNow = !!(map && map.highlightedLayers && map.highlightedLayers.has(layerKey));
             try { iconDiv.classList.toggle('highlighted', isHighlightedNow); } catch (e) {}
+            try { label.classList.toggle('has-inline-highlight', isHighlightedNow); } catch (e) {}
             try {
                 if (isHighlightedNow) {
                     const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
@@ -4093,6 +4095,14 @@ async function init() {
             try {
                 map.editMarkersMode = !!on;
                 // When entering marker-edit mode, clear any selected marker
+                // and ensure no layer highlights remain (mutual exclusion)
+                try {
+                    if (map.editMarkersMode) {
+                        try { map.clearLayerHighlight && map.clearLayerHighlight('customMarkers'); } catch (e) {}
+                        try { const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]'); if (row) row.classList.remove('has-inline-highlight'); } catch (e) {}
+                    }
+                } catch (e) {}
+                // When exiting marker-edit mode, leave highlights unchanged
                 try {
                     if (map.editMarkersMode) {
                             map.selectedMarker = null;
@@ -4103,6 +4113,7 @@ async function init() {
                             try {
                                 const iconEl = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"] .layer-icon');
                                 if (iconEl) { try { iconEl.classList.remove('highlighted'); iconEl.style.boxShadow = ''; } catch (e) {} }
+                                try { const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]'); if (row) row.classList.remove('has-inline-highlight'); } catch (e) {}
                             } catch (e) {}
                         try { map.hideTooltip(); } catch (e) {}
                         try { map.render(); } catch (e) {}
@@ -4128,7 +4139,7 @@ async function init() {
                             // re-enable route sidebar row if it was disabled
                             try {
                                 const row = document.querySelector('#layerList .layer-toggle[data-layer="route"]');
-                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); }
+                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); row.classList.remove('has-inline-highlight'); }
                             } catch (e) {}
                         }
                     } catch (e) {}
@@ -4207,6 +4218,13 @@ async function init() {
             try {
                 map.editRouteMode = !!on;
                     // When entering route-edit mode, clear any selected marker
+                    // and clear only the route layer highlight (leave others alone)
+                    try {
+                        if (map.editRouteMode) {
+                            try { map.clearLayerHighlight && map.clearLayerHighlight('route'); } catch (e) {}
+                            try { const r = document.querySelector('#layerList .layer-toggle[data-layer="route"]'); if (r) r.classList.remove('has-inline-highlight'); } catch (e) {}
+                        }
+                    } catch (e) {}
                     try {
                         if (map.editRouteMode) {
                             map.selectedMarker = null;
@@ -4242,7 +4260,7 @@ async function init() {
                             // re-enable customMarkers sidebar row if it was disabled
                             try {
                                 const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]');
-                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); }
+                                if (row) { row.classList.remove('disabled'); row.removeAttribute('aria-disabled'); row.classList.remove('has-inline-highlight'); }
                             } catch (e) {}
                         }
                     } catch (e) {}
@@ -4646,6 +4664,12 @@ async function init() {
                                     const mini = document.getElementById('editRouteToggleMini');
                                     if (mini) { mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
                                 } catch (e) {}
+                                // Enforce mutual exclusion and clear highlights when auto-entering
+                                try { map.clearLayerHighlight && map.clearLayerHighlight('route'); } catch (e) {}
+                                try { map.editMarkersMode = false; } catch (e) {}
+                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
+                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                try { const r = document.querySelector('#layerList .layer-toggle[data-layer="route"]'); if (r) r.classList.remove('has-inline-highlight'); } catch (e) {}
                             }
                         } catch (e) {}
                         // log removed
@@ -5111,9 +5135,21 @@ async function init() {
                         // Toggle Edit Route mode via the sidebar toggle if present
                         const routeToggleEl = document.getElementById('editRouteToggle');
                         if (routeToggleEl) {
-                            try { routeToggleEl.click(); } catch (err) { if (typeof map !== 'undefined' && map) map.editRouteMode = !map.editRouteMode; }
+                            try { routeToggleEl.click(); } catch (err) {
+                                if (typeof map !== 'undefined' && map) map.editRouteMode = !map.editRouteMode;
+                            }
                         } else if (typeof map !== 'undefined' && map) {
                             map.editRouteMode = !map.editRouteMode;
+                                    try {
+                                        if (map.editRouteMode) {
+                                            try { map.clearLayerHighlight && map.clearLayerHighlight('route'); } catch (e) {}
+                                            try { const r = document.querySelector('#layerList .layer-toggle[data-layer="route"]'); if (r) r.classList.remove('has-inline-highlight'); } catch (e) {}
+                                            // disable markers mode
+                                            try { map.editMarkersMode = false; } catch (e) {}
+                                            try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
+                                            try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                        }
+                                    } catch (e) {}
                         }
                     } catch (err) {}
                     try { e.preventDefault(); } catch (err) {}
@@ -5127,6 +5163,16 @@ async function init() {
                             try { editToggleEl.click(); } catch (err) { /* fallback below */ }
                         } else if (typeof map !== 'undefined' && map) {
                             map.editMarkersMode = !map.editMarkersMode;
+                            try {
+                                if (map.editMarkersMode) {
+                                    try { map.clearLayerHighlight && map.clearLayerHighlight('customMarkers'); } catch (e) {}
+                                    try { const r = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]'); if (r) r.classList.remove('has-inline-highlight'); } catch (e) {}
+                                    // disable route mode
+                                    try { map.editRouteMode = false; } catch (e) {}
+                                    try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle) { routeToggle.setAttribute('aria-pressed','false'); routeToggle.classList.remove('pressed'); } } catch (e) {}
+                                    try { const miniRoute = document.getElementById('editRouteToggleMini'); if (miniRoute) { miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                }
+                            } catch (e) {}
                         }
                     } catch (err) {}
                     try { e.preventDefault(); } catch (err) {}
