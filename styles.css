@@ -603,6 +603,12 @@ h1, h2, h3, h4, h5, h6 {
     padding: 12px 12px;
 }
 
+/* Make the edit route sidebar button match edit markers sizing */
+#editRouteToggle {
+    font-size: 16px;
+    padding: 12px 12px;
+}
+
 .control-btn.pressed,
 .control-btn:active {
     background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);

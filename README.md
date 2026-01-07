@@ -1,6 +1,17 @@
-# Metroid Prime 4: Beyond Routing Tool
+# Viewros GPS
 
-A lightweight, mobile-first interactive map for tracking collectibles in Metroid Prime 4: Beyond. Built to work well on desktop and mobile with touch-friendly controls and an in-browser routing tool.
+A lightweight, mobile-first interactive map and routing companion (formerly the Metroid Prime 4 Routing Tool). Built to work well on desktop and mobile with touch-friendly controls and an in-browser routing tool.
+
+## What's New
+
+Recent updates focus on making it easier to focus on the parts of the map that matter and giving the interface a cleaner, more modern look.
+
+- Highlighted layers now emphasize themselves: when you highlight a layer its markers grow slightly so they stand out on the map, and route strokes are emphasized so path segments are easier to follow.
+- Rendering and layer ordering improvements ensure highlights, routes and markers stack and draw consistently — sidebar order and map rendering are synchronized for a more predictable experience.
+- Visual refresh: the UI uses a futuristic display font (Orbitron) for headings and controls, and small design refinements simplify controls like the highlight size slider.
+- Route rendering fixes: single-segment routes now correctly show the glow/highlight effect.
+- Miscellaneous: bug fixes and small usability polish across route editing, marker handling, and the sidebar.
+
 
 ## Features
 
@@ -414,6 +425,13 @@ This tool was developed with contributions from:
 - **Tal** - Spark ignition
 
 ## Changelog
+
+### v0.6.3 - Highlighting, rendering and design polish
+
+- Improved layer highlighting: highlighted layers now increase marker sizes and emphasize routes so you can focus on the parts of the map that matter.
+- Rendering and layer ordering: improved render pipeline and layer ordering so highlights, routes and markers stack and draw consistently across the sidebar and map.
+- Visual refresh: introduced a futuristic display font (Orbitron) for headings and controls, and small UI design refinements for a cleaner look.
+- Bug fixes: a number of small bug fixes and stability improvements across route editing and marker handling.
 
 ### v0.6.0 - Enhanced Routing & Edit Modes
 - **Edit Route Mode**: Interactive waypoint editing with drag-and-drop, segment insertion, and snap-to-marker functionality
