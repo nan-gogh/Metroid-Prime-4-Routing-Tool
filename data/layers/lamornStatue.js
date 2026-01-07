@@ -2,7 +2,7 @@
 // Requires data/init.js to be loaded first
 LAYERS.lamornStatue = {
     name: "Lamorn Statue",
-    icon: "𓀤",
+    icon: "👽",
     color: "#d0d09dff",
     prefix: "ls",
     markers: [

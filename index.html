@@ -79,11 +79,8 @@
                 <div class="control-group section-glow" id="settingsSection">
                     <h3>S e t t i n g s</h3>
                     <div class="settings-row">
-                        <label for="highlightScaleSlider" class="layer-name">Highlight Size</label>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <input id="highlightScaleSlider" type="range" min="0.6" max="4.0" step="0.1" value="1.0" />
-                        </div>
-                        <div id="highlightScaleValue" class="layer-count" style="margin-top:6px;">1.0x</div>
+                        <label for="highlightScaleSlider">Highlight Size <span id="highlightScaleValue">1.0x</span></label>
+                        <input id="highlightScaleSlider" type="range" min="0.6" max="4.0" step="0.1" value="1.0" />
                     </div>
                 </div>
 
@@ -184,30 +181,33 @@
     <div id="tooltip"></div>
     
     <script src="data/init.js"></script>
-    <script src="data/layers/geCrystallization1.js"></script>
-    <script src="data/layers/geCrystallization2.js"></script>
-    <script src="data/layers/geCrystallization3.js"></script>
-    <script src="data/layers/gibardaumRock.js"></script>
-    <script src="data/layers/boostTank.js"></script>
-    <script src="data/layers/energyTank.js"></script>
-    <script src="data/layers/shotUpgrade.js"></script>
-    <script src="data/layers/missileExpansion.js"></script>
-    <script src="data/layers/shotExpansion.js"></script>
-    <script src="data/layers/bombExpansion.js"></script>
-    <script src="data/layers/mechPart.js"></script>
-    <script src="data/layers/areaEntrance.js"></script>
-    <script src="data/layers/saveStation.js"></script>
-    <script src="data/layers/shrineLift.js"></script>
-    <script src="data/layers/tokabisCamp.js"></script>
-    <script src="data/layers/scoutBot.js"></script>
-    <script src="data/layers/gfDebris.js"></script>
+
     <script src="data/layers/lamornStatue.js"></script>
+    <script src="data/layers/gfDebris.js"></script>
+    <script src="data/layers/tokabisCamp.js"></script>
+    <script src="data/layers/shrineLift.js"></script>
+    <script src="data/layers/saveStation.js"></script>
+    <script src="data/layers/areaEntrance.js"></script>
+    <script src="data/layers/scoutBot.js"></script>
+    <script src="data/layers/mechPart.js"></script>
+    <script src="data/layers/bombExpansion.js"></script>
+    <script src="data/layers/shotExpansion.js"></script>
+    <script src="data/layers/missileExpansion.js"></script>
+    <script src="data/layers/shotUpgrade.js"></script>
+    <script src="data/layers/energyTank.js"></script>
+    <script src="data/layers/boostTank.js"></script>
+    <script src="data/layers/gibardaumRock.js"></script>
+    <script src="data/layers/geCrystallization3.js"></script>
+    <script src="data/layers/geCrystallization2.js"></script>
+    <script src="data/layers/geCrystallization1.js"></script>
     <script src="data/layers/customMarkers.js"></script>
     <script src="data/layers/route.js"></script>
     <script src="data/storageHelper.js"></script>
     <script src="data/markerUtils.js"></script>
+
     <script src="data/routeUtils.js"></script>
     <script src="tools/tsp_euclid.js"></script>
+
     <script src="map.js"></script>
     <script src="data/ripple.js"></script>
     <script>
