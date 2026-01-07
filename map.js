@@ -3994,12 +3994,26 @@ async function init() {
                     const lbl = saveLabel.querySelector('.layer-name');
                     if (lbl) lbl.textContent = on ? 'Clear Savedata' : 'Save Progress';
                 } catch (e) {}
+                // Update sidebar handle emphasized state
+                updateSidebarHandleEmphasis();
             });
         }
         // no separate Clear button — deletion handled via consent toggle
     } catch (e) {}
     // Ensure the sidebar counts reflect current map state now that elements exist
     try { map.updateLayerCounts(); } catch (e) {}
+    
+    // Function to update sidebar handle emphasized state based on consent
+    function updateSidebarHandleEmphasis() {
+        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+        const handle = document.getElementById('sidebarHandle');
+        if (handle) {
+            handle.classList.toggle('emphasized', !consent);
+        }
+    }
+    
+    // Set initial emphasized state
+    updateSidebarHandleEmphasis();
     
     // Setup controls
     const zoomInBtn = document.getElementById('zoomIn');
@@ -4020,8 +4034,20 @@ async function init() {
     // For the second group, prevent stuck pressed state by removing on mouseleave
     [zoomInBtn, zoomOutBtn, resetViewBtn, document.getElementById('sidebarHandle')].forEach(btn => {
         if (btn) {
-            btn.addEventListener('mouseleave', () => btn.classList.remove('pressed'));
+            btn.addEventListener('mouseleave', () => {
+                // For emphasized buttons, don't remove pressed on mouseleave to preserve visual feedback
+                if (!btn.classList.contains('emphasized')) {
+                    btn.classList.remove('pressed');
+                }
+            });
         }
+    });
+
+    // Global pointerup to clear pressed states when releasing anywhere (prevents stuck states)
+    document.addEventListener('pointerup', () => {
+        [zoomInBtn, zoomOutBtn, resetViewBtn, document.getElementById('sidebarHandle')].forEach(btn => {
+            if (btn) btn.classList.remove('pressed');
+        });
     });
 
     // Attach pressed handlers to all sidebar control buttons (Compute/Clear/Export/etc.)
@@ -5319,8 +5345,8 @@ async function init() {
         console.warn('Sidebar handle element not found; collapsing unavailable');
     }
 
-    // Always start with the sidebar open on page load
-    setSidebarCollapsed(false, false);
+    // Start with the sidebar collapsed on page load
+    setSidebarCollapsed(true, false);
 
     // Keyboard shortcuts for UI: toggle sidebar and arrow-key panning
     try {

@@ -197,6 +197,21 @@ h1, h2, h3, h4, h5, h6 {
     /* icon glyphs are swapped via JS; no CSS rotation */
 }
 
+/* Sidebar handle emphasized state when consent is not given */
+#sidebarHandle.emphasized {
+    background: linear-gradient(180deg, #04121a 0%, #021018 100%);
+    border-color: #033747;
+    color: #cfeff5;
+    /* inline (inset) cyan border + outer glow placeholder (animated) */
+    box-shadow: inset 0 0 0 2px #22d3ee, 0 0 0 rgba(34,211,238,0);
+    animation: consentPulse 1800ms ease-in-out infinite;
+}
+
+/* When emphasized and pressed, remove animation but keep box-shadow for consistent outline */
+#sidebarHandle.emphasized.pressed {
+    animation: none;
+}
+
 .header {
     padding: 16px;
     border-bottom: 1px solid #0e4a6e;
