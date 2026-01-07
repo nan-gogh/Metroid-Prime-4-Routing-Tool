@@ -2712,12 +2712,10 @@ class InteractiveMap {
                     }
                     // Thicker base for the glow (scale with zoom/detail)
                     const glowLine = Math.max(1, baseLine * this.zoom * detailScale) * 2.6;
-                    // subtle pulse so glow breathes
-                    const pulse = 1 + Math.sin((performance && performance.now ? performance.now() : Date.now()) / 700) * 0.12;
-                    ctx.lineWidth = glowLine * pulse;
+                    ctx.lineWidth = glowLine;
                     ctx.strokeStyle = glowColor;
                     ctx.shadowColor = glowColor;
-                    ctx.shadowBlur = 18 * pulse;
+                    ctx.shadowBlur = 18;
                     ctx.setLineDash([]); // solid line for glow (not dashed)
                     // Draw glow underneath the main stroke
                     ctx.stroke();
@@ -3568,42 +3566,7 @@ async function init() {
             };
 
             // Store previous highlight state for layers so edit-mode can restore it later
-            try { map._prevLayerHighlight = map._prevLayerHighlight || {}; } catch (e) {}
-            map._rememberLayerPrevHighlight = function(layerKey) {
-                try {
-                    this._prevLayerHighlight = this._prevLayerHighlight || {};
-                    this._prevLayerHighlight[layerKey] = !!(this.highlightedLayers && this.highlightedLayers.has(layerKey));
-                    // also remember any inline color custom property so we can restore it
-                    try {
-                        this._prevLayerHighlightColor = this._prevLayerHighlightColor || {};
-                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-                        if (row) {
-                            // read inline-only value (empty string if none)
-                            const inlineVal = row.style.getPropertyValue('--layer-inline-highlight-color');
-                            this._prevLayerHighlightColor[layerKey] = (inlineVal !== null) ? inlineVal : '';
-                        } else {
-                            this._prevLayerHighlightColor[layerKey] = '';
-                        }
-                    } catch (e) {}
-                } catch (e) {}
-            };
-            map._restoreLayerPrevHighlight = function(layerKey) {
-                try {
-                    this._prevLayerHighlight = this._prevLayerHighlight || {};
-                    const was = !!this._prevLayerHighlight[layerKey];
-                    // If it was highlighted before, ensure it's highlighted now; otherwise clear it
-                    if (was) {
-                        if (!(this.highlightedLayers && this.highlightedLayers.has(layerKey))) {
-                            try { this.setLayerHighlight(layerKey, (this._highlightConfig && this._highlightConfig[layerKey] && this._highlightConfig[layerKey].scale) || 2.0); } catch (e) {}
-                        }
-                    } else {
-                        if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
-                            try { this.clearLayerHighlight(layerKey); } catch (e) {}
-                        }
-                    }
-                    try { delete this._prevLayerHighlight[layerKey]; } catch (e) {}
-                } catch (e) {}
-            };
+            // State tracking functions removed - edit mode no longer modifies highlight state
 
             // Read the inline highlight color from CSS (exposed as --layer-inline-highlight-color)
             map.getLayerInlineOutlineColor = function(layerKey) {
@@ -3619,71 +3582,13 @@ async function init() {
             // Enter/exit edit-mode helpers that ensure outline is turned on and colored
             map._enterEditMode = function(layerKey, scale) {
                 try {
-                    this._rememberLayerPrevHighlight(layerKey);
-                    // Keep any existing highlight state active while in edit mode
-                    // add editing class to row so the CSS edit color is applied
-                    try {
-                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-                        if (row) {
-                            row.classList.add('has-inline-highlight');
-                            row.classList.add('editing');
-                            try {
-                                // Use layer's configured color when present, fallback to computed CSS var
-                                const layerColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color) ? LAYERS[layerKey].color : null;
-                                const colorToApply = layerColor || this.getLayerInlineOutlineColor(layerKey) || '#22d3ee';
-                                row.style.setProperty('--layer-inline-highlight-color', colorToApply);
-                            } catch (e) {}
-                        }
-                    } catch (e) {}
+                    // edit mode no longer touches any highlighting or indicators
                 } catch (e) {}
             };
 
             map._exitEditMode = function(layerKey) {
                 try {
-                    // remove editing modifier
-                    try { const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]'); if (row) row.classList.remove('editing'); } catch (e) {}
-                    // restore any previously-stored inline color value
-                    try {
-                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-                        if (row) {
-                            try {
-                                const prev = (this._prevLayerHighlightColor && Object.prototype.hasOwnProperty.call(this._prevLayerHighlightColor, layerKey)) ? this._prevLayerHighlightColor[layerKey] : null;
-                                if (prev === null || prev === undefined || prev === '') {
-                                    // remove inline override if there was none previously
-                                    row.style.removeProperty('--layer-inline-highlight-color');
-                                } else {
-                                    row.style.setProperty('--layer-inline-highlight-color', prev);
-                                }
-                            } catch (e) {}
-                        }
-                        try { if (this._prevLayerHighlightColor) delete this._prevLayerHighlightColor[layerKey]; } catch (e) {}
-                    } catch (e) {}
-                    // restore previous highlight state
-                    try { this._restoreLayerPrevHighlight(layerKey); } catch (e) {}
-                    // sync row class and icon visual with current highlight state
-                    try {
-                        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-                        const now = !!(this.highlightedLayers && this.highlightedLayers.has(layerKey));
-                        if (row) {
-                            if (now) row.classList.add('has-inline-highlight'); else row.classList.remove('has-inline-highlight');
-                            // also sync icon backdrop glow/highlighted class
-                            try {
-                                const iconDiv = row.querySelector('.layer-icon');
-                                if (iconDiv) {
-                                    iconDiv.classList.toggle('highlighted', now);
-                                    if (now) {
-                                        const layer = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS[layerKey]) ? LAYERS[layerKey] : null;
-                                        const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
-                                        const glow1 = colorToRgba(col, 0.72) || 'rgba(34,211,238,0.72)';
-                                        const glow2 = colorToRgba(col, 0.32) || 'rgba(34,211,238,0.32)';
-                                        iconDiv.style.boxShadow = '0 0 12px ' + glow1 + ', 0 0 28px ' + glow2;
-                                    } else {
-                                        iconDiv.style.boxShadow = '';
-                                    }
-                                }
-                            } catch (e) {}
-                        }
-                    } catch (e) {}
+                    // edit mode no longer touches any highlighting or indicators
                 } catch (e) {}
             };
             // Apply any previously saved highlighted layers (consent-gated)
@@ -4285,8 +4190,6 @@ async function init() {
                             if (row) {
                                 row.classList.add('active');
                                 row.setAttribute('aria-pressed', 'true');
-                                row.classList.add('disabled');
-                                row.setAttribute('aria-disabled', 'true');
                             }
                         } catch (e) {}
                         try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
@@ -4307,8 +4210,7 @@ async function init() {
                     try {
                         const row = document.querySelector('#layerList .layer-toggle[data-layer="customMarkers"]');
                         if (row) {
-                            row.classList.remove('disabled');
-                            row.removeAttribute('aria-disabled');
+                            // no longer disabling/enabling row
                         }
                     } catch (e) {}
                     // Also update mini on-screen toggle if present
@@ -4400,8 +4302,6 @@ async function init() {
                             if (row) {
                                 row.classList.add('active');
                                 row.setAttribute('aria-pressed', 'true');
-                                row.classList.add('disabled');
-                                row.setAttribute('aria-disabled', 'true');
                             }
                         } catch (e) {}
                         try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map.layerVisibility); } catch (e) {}
@@ -4419,8 +4319,7 @@ async function init() {
                     try {
                         const row = document.querySelector('#layerList .layer-toggle[data-layer="route"]');
                         if (row) {
-                            row.classList.remove('disabled');
-                            row.removeAttribute('aria-disabled');
+                            // no longer disabling/enabling row
                         }
                     } catch (e) {}
                     // Also update mini on-screen toggle if present
