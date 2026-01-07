@@ -4570,7 +4570,7 @@ async function init() {
             // Users expect the displayed slider to start near 1.2x, so show (internal + 0.6).
             const displayInitial = Number(initial) + 0.6;
             const pctInitial = Math.round(displayInitial * 100);
-            label.textContent = `${displayInitial.toFixed(1)}x (${pctInitial}%)`;
+            label.textContent = `${pctInitial}%`;
             
             slider.addEventListener('input', (ev) => {
                 const v = parseFloat(ev.target.value) || 1.0;
@@ -4578,7 +4578,7 @@ async function init() {
                 // Map displayed value to (internal + 0.6) so UI range appears to start around 1.2x
                 const display = Number(v) + 0.6;
                 const pct = Math.round(display * 100);
-                label.textContent = `${display.toFixed(1)}x (${pct}%)`;
+                label.textContent = `${pct}%`;
                 try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(v); } catch (e) {}
                 try { map.renderOverlay ? map.renderOverlay() : map.render(); } catch (e) {}
             });
