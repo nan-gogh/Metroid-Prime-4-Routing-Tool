@@ -7,8 +7,26 @@
     const _pointerState = new Map(); // pointerId -> {x,y,moved}
     const MOVE_THRESHOLD = 8; // pixels
 
+    // Ensure a dedicated ripple layer exists above all UI so ripples can be
+    // shown regardless of which element handled the pointer event.
+    function ensureRippleLayer() {
+        let layer = document.getElementById('rippleLayer');
+        if (layer) return layer;
+        try {
+            layer = document.createElement('div');
+            layer.id = 'rippleLayer';
+            layer.style.position = 'fixed';
+            layer.style.left = '0'; layer.style.top = '0';
+            layer.style.width = '100%'; layer.style.height = '100%';
+            layer.style.pointerEvents = 'none';
+            layer.style.zIndex = '200001';
+            document.body.appendChild(layer);
+            return layer;
+        } catch (e) { return document.body; }
+    }
+
     function createRippleAt(container, x, y) {
-        if (!container) return;
+        if (!container) container = document.body;
         // If the target is a small control (button/toggle), prefer appending
         // the ripple to a larger parent container so the effect isn't clipped
         // and appears consistent with the map/sidebar ripples.
@@ -48,8 +66,11 @@
         ripple.style.width = size + 'px';
         ripple.style.height = size + 'px';
 
-        // Append to body so fixed-positioned ripple is not clipped by parents
-        document.body.appendChild(ripple);
+        // Append to dedicated ripple layer so ripples can appear above all UI
+        const layer = ensureRippleLayer();
+        // Position relative to viewport: layer is fixed at 0,0 so absolute works
+        ripple.style.position = 'absolute';
+        layer.appendChild(ripple);
 
         // remove once animation ends
         ripple.addEventListener('animationend', () => {
@@ -102,8 +123,9 @@
     }
 
     // Attach pointer listeners to track drags and avoid ripples for drag gestures
-    document.addEventListener('pointerdown', onPointerDown, { passive: true });
-    document.addEventListener('pointermove', onPointerMove, { passive: true });
-    document.addEventListener('pointerup', onPointerUp, { passive: true });
-    document.addEventListener('pointercancel', onPointerCancel, { passive: true });
+    // Use capture so ripples run before handlers that may stop propagation.
+    document.addEventListener('pointerdown', onPointerDown, { passive: true, capture: true });
+    document.addEventListener('pointermove', onPointerMove, { passive: true, capture: true });
+    document.addEventListener('pointerup', onPointerUp, { passive: true, capture: true });
+    document.addEventListener('pointercancel', onPointerCancel, { passive: true, capture: true });
 })();

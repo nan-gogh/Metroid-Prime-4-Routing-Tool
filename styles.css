@@ -209,6 +209,8 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
     gap: 4px;
     width: 48px;
+    /* Nudge whole logo stack slightly to the right for visual balance */
+    transform: translateX(6px);
 }
 .logo-stack img {
     display: block;
@@ -238,14 +240,14 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 .title-block h1 {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     opacity: 0.95;
     margin-bottom: 2px;
 }
 .title-block h2 {
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 500;
     margin: 0;
 }
 
@@ -256,6 +258,8 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
+    /* keep title aligned with nudged logo */
+    margin-left: 6px;
 }
 .title-block h1,
 .title-block h2 {
@@ -280,7 +284,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .header h2 {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
 }
 
@@ -474,6 +478,30 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
 }
 
+/* Consent toggle: when storage consent is OFF, encourage action with dark background and a subtle pulse */
+#saveDataToggle_label:not(.pressed) {
+    background: linear-gradient(180deg, #04121a 0%, #021018 100%);
+    border-color: #033747;
+    color: #cfeff5;
+    /* inline (inset) cyan border + outer glow placeholder (animated)
+       The inset part keeps the "inline outline" look requested. */
+    box-shadow: inset 0 0 0 2px #22d3ee, 0 0 0 rgba(34,211,238,0);
+    animation: consentPulse 1800ms ease-in-out infinite;
+}
+
+@keyframes consentPulse {
+    0% { box-shadow: inset 0 0 0 2px #22d3ee, 0 0 0 0px rgba(34,211,238,0.12); }
+    50% { box-shadow: inset 0 0 0 2px #22d3ee, 0 0 20px 8px rgba(34,211,238,0.18); }
+    100% { box-shadow: inset 0 0 0 2px #22d3ee, 0 0 0 0px rgba(34,211,238,0.00); }
+}
+
+/* When pressed (consent given), restore normal pressed styling (handled via .pressed rules) */
+/* When pressed (consent given), remove pulse and inline border to match normal pressed styling */
+#saveDataToggle_label.pressed {
+    animation: none;
+    box-shadow: none;
+}
+
 .layer-count {
     font-size: 11px;
     color: #9fb9c9;
@@ -534,6 +562,12 @@ h1, h2, h3, h4, h5, h6 {
     transition: all 0.2s;
     /* Prevent browser double-tap zoom on touch devices */
     touch-action: manipulation;
+}
+
+/* Make the edit markers sidebar button icon slightly larger */
+#editMarkersToggle {
+    font-size: 16px; /* increase symbol size */
+    padding: 12px 12px;
 }
 
 .control-btn.pressed,
@@ -671,6 +705,46 @@ h1, h2, h3, h4, h5, h6 {
     height: 18px;
     display: block;
     margin: 0;
+}
+
+/* Nudge the expand-route mini icon slightly upward for visual centering */
+#computeRouteNearbyMini .mini-icon {
+    display: inline-block;
+    transform: translateY(-2px);
+    line-height: 18px;
+    font-size: 16px;
+}
+
+/* Center the edit-route mini icon in the onscreen controls */
+#editRouteToggleMini .mini-icon {
+    display: inline-block;
+    transform: translateY(1px); /* nudged down */
+    line-height: 20px;
+    font-size: 18px; /* slightly larger */
+}
+
+/* Also center the reverse-direction mini icon */
+#toggleRouteDirMini .mini-icon {
+    display: inline-block;
+    transform: translateY(-2px);
+    line-height: 18px;
+    font-size: 16px;
+}
+
+/* Center the edit-markers mini icon vertically */
+#editMarkersToggleMini .mini-icon {
+    display: inline-block;
+    transform: translateY(-2px);
+    line-height: 18px;
+    font-size: 18px;
+}
+
+/* Slight nudge for the reset-view mini icon (1px) */
+#resetView .mini-icon {
+    display: inline-block;
+    transform: translateY(-1px);
+    line-height: 20px;
+    font-size: 20px;
 }
 
 .zoom-btn:active,
@@ -959,23 +1033,10 @@ kbd {
 }
 
 /* Mobile: smaller handle, adjust positioning */
-@media (max-width: 720px) {
-    .sidebar {
-        width: 85vw;
-        max-width: 320px;
-    }
-    
-    .sidebar-handle {
-        left: calc(85vw + 6px);
-        width: 40px;
-        height: 56px;
-    }
-
-    .app-container.sidebar-collapsed .sidebar-handle {
-        left: 6px;
-        transform: translateY(-50%);
-    }
-}
+/* Mobile: smaller handle, adjust positioning (small-screen breakpoint removed) */
+/* Previously contained an @media (max-width: 720px) breakpoint that resized
+   the sidebar and handle on narrow viewports. That behavior was removed to
+   keep a consistent sidebar width across screen sizes. */
 
 /* When the handle is placed inside the zoom controls, keep it static in the control column */
 .zoom-controls .sidebar-handle {
@@ -1021,6 +1082,8 @@ kbd {
 .zoom-controls .sidebar-handle .handle-icon {
     /* no rotation/animation on icon when inside controls */
     transition: none;
+    /* small vertical nudge for tighter visual centering */
+    transform: translateY(-1px);
 }
 
 /* Prevent the sidebar handle from jumping when the sidebar toggles

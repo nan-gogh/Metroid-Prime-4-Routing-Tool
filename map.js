@@ -118,8 +118,22 @@ class InteractiveMap {
         // Ensure the virtual 'route' layer is present and visible by default
         this.layerVisibility.route = true;
         // Grid overlay is a runtime layer (can be toggled via `toggleLayer('grid', show)`)
-        // Default grid visibility: OFF on page load.
-        this.layerVisibility.grid = false;
+        // Default grid visibility: enabled on page load unless saved state says otherwise.
+        try {
+            let g = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                g = window._mp4Storage.loadSetting('mp4_grid_visible');
+            } else {
+                try { g = localStorage.getItem('mp4_grid_visible'); } catch (e) { g = null; }
+            }
+            if (g === null || typeof g === 'undefined') {
+                this.layerVisibility.grid = true;
+            } else {
+                this.layerVisibility.grid = (g === '1' || g === 1 || g === 'true' || g === true);
+            }
+        } catch (e) {
+            this.layerVisibility.grid = true;
+        }
         
         // Layer configuration (runtime constraints, not data)
         this.layerConfig = {
@@ -955,7 +969,7 @@ class InteractiveMap {
             try {
                     if (this._routeInsert && e.pointerId === this._routeInsert.pointerId) {
                     const tempIdx = this._routeInsert.tempIndex;
-                    // If hovered a free marker, snap and finalize; otherwise restore previous route
+                    // If hovered a free marker, snap and finalize
                     if (this._routeInsert.hoverMarker && !this._routeInsert.hoverOccupied) {
                         // Replace temp marker with actual marker reference
                         if (this._routeSources && this._routeSources[tempIdx]) {
@@ -964,16 +978,61 @@ class InteractiveMap {
                         // Recompute length and persist
                         const len = this.computeRouteLengthNormalized(this._routeSources);
                         const indices = this._routeSources.map((_, i) => i);
-                            this.setRoute(indices, len, this._routeSources);
+                        this.setRoute(indices, len, this._routeSources);
+                    } else if (this._routeInsert.hoverMarker && this._routeInsert.hoverOccupied) {
+                        // Hovered a marker that already has a waypoint: overwrite it.
+                        try {
+                            // Find existing index of the occupied marker (exclude tempIdx)
+                            let existingIdx = -1;
+                            for (let i = 0; i < this._routeSources.length; i++) {
+                                if (i === tempIdx) continue;
+                                const s = this._routeSources[i];
+                                if (s && s.marker && s.marker.uid && this._routeInsert.hoverMarker && s.marker.uid === this._routeInsert.hoverMarker.uid) { existingIdx = i; break; }
+                            }
+                            if (existingIdx >= 0) {
+                                // Remove the existing waypoint so we don't have duplicates
+                                this._routeSources.splice(existingIdx, 1);
+                                // Adjust tempIdx if needed
+                                let targetIdx = tempIdx;
+                                if (existingIdx < tempIdx) targetIdx = tempIdx - 1;
+                                // Ensure temp slot exists (if temp was removed by splice above, insert a placeholder)
+                                if (!this._routeSources[targetIdx]) {
+                                    // insert at targetIdx
+                                    this._routeSources.splice(targetIdx, 0, { marker: this._routeInsert.hoverMarker, layerKey: 'temp' });
+                                } else {
+                                    // Replace the marker at the temp slot with the hovered marker
+                                    this._routeSources[targetIdx].marker = this._routeInsert.hoverMarker;
+                                }
+                                // Recompute lengths and set route
+                                const len2 = this.computeRouteLengthNormalized(this._routeSources);
+                                const indices2 = this._routeSources.map((_, i) => i);
+                                this.setRoute(indices2, len2, this._routeSources);
+                            } else {
+                                // Fallback: restore previous route if something unexpected happened
+                                const prev = this._routeInsert.prevSources || [];
+                                const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                                const len = this.computeRouteLengthNormalized(prev);
+                                this.setRoute(prevIdx, len, prev);
+                                try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                            }
+                        } catch (err) {
+                            try {
+                                const prev = this._routeInsert.prevSources || [];
+                                const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                                const len = this.computeRouteLengthNormalized(prev);
+                                this.setRoute(prevIdx, len, prev);
+                                try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                            } catch (err2) {}
+                        }
                     } else {
                         // Restore previous route (remove temp)
                         try {
                             const prev = this._routeInsert.prevSources || [];
-                                const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
-                                const len = this.computeRouteLengthNormalized(prev);
-                                this.setRoute(prevIdx, len, prev);
-                                // Restore previous looping preference
-                                try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+                            const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+                            const len = this.computeRouteLengthNormalized(prev);
+                            this.setRoute(prevIdx, len, prev);
+                            // Restore previous looping preference
+                            try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
                         } catch (err) {}
                     }
                     // clear insertion state
@@ -1009,11 +1068,23 @@ class InteractiveMap {
             }
         });
 
-        // pointerleave similar to mouseleave
-        this.canvas.addEventListener('mouseleave', () => {
+        // pointerleave similar to mouseleave. Keep tooltip visible when cursor
+        // moves into UI areas (sidebar, controls, layer list) so it doesn't
+        // disappear when users move from map to UI to inspect details.
+        this.canvas.addEventListener('mouseleave', (ev) => {
             this.isDragging = false;
             this.canvas.style.cursor = 'grab';
-            this.hideTooltip();
+            try {
+                const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
+                let enteredUi = false;
+                try {
+                    if (related && related.closest) {
+                        enteredUi = !!related.closest('.sidebar, .controls, .zoom-controls, #layerList, .header, .sidebar-handle');
+                    }
+                } catch (e) { enteredUi = false; }
+                // If pointer left into the UI, keep tooltip visible; otherwise hide it.
+                if (!enteredUi) this.hideTooltip();
+            } catch (e) { try { this.hideTooltip(); } catch (e) {} }
             // clear hover preview
             this._routePreview = null;
             // If a route-insert was in progress, cancel and restore
@@ -1152,11 +1223,21 @@ class InteractiveMap {
                     }
                 }
             } else if (e.button === 0 && isQuickTap && !hit) {
+                // If a marker is currently selected, a quick tap anywhere on the
+                // map should deselect it (not start a placement). This avoids
+                // accidental placement while the user intends to dismiss selection.
+                if (this.selectedMarker) {
+                    this.selectedMarker = null;
+                    this.selectedMarkerLayer = null;
+                    try { this.hideTooltip(); } catch (e) {}
+                    try { this.render(); } catch (e) {}
+                    return;
+                }
                 // Quick tap on empty space - place custom marker
                 // Reuse previously computed localX/localY to avoid redundant layout read
                 const clientX = localX;
                 const clientY = localY;
-                
+
                 // Convert to world coordinates (0-1 normalized)
                 const worldX = (clientX - this.panX) / this.zoom / MAP_SIZE;
                 const worldY = (clientY - this.panY) / this.zoom / MAP_SIZE;
@@ -2421,6 +2502,14 @@ class InteractiveMap {
     // Compute per-marker hit radius that accounts for highlight scaling and selection
     getMarkerHitRadius(marker, layerKey) {
         try {
+            // Prefer per-frame rendered size cache when available to guarantee hitbox == visual
+            try {
+                if (this._markerSizeFrame && marker && marker.uid) {
+                    const key = (layerKey || '') + '|' + String(marker.uid);
+                    const last = this._markerSizeFrame[key];
+                    if (typeof last === 'number' && last > 0) return last + (this.touchPadding || 0);
+                }
+            } catch (e) {}
             const base = this.getBaseMarkerRadius();
             const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
             const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
@@ -2444,6 +2533,35 @@ class InteractiveMap {
             return this.getHitRadius();
         }
     }
+
+    // Compute the render size for a marker — extracted so draw and hit-testing share exact logic
+    getMarkerRenderSize(marker, layerKey) {
+        try {
+            const baseSize = this.getBaseMarkerRadius();
+            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
+            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
+            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
+
+            // Highlight multiplier (per-layer) if applicable
+            let highlightMult = 1;
+            try {
+                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
+                    const cfg = (this._highlightConfig && this._highlightConfig[layerKey]) ? this._highlightConfig[layerKey] : null;
+                    highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
+                    try {
+                        const gm = (typeof this.highlightScaleMultiplier === 'number') ? this.highlightScaleMultiplier : 1.0;
+                        highlightMult = highlightMult * gm;
+                        highlightMult = Math.max(highlightMult, 1.15);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+
+            const isSelected = this.selectedMarker && marker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
+            const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
+            const size = Math.max(1, rawSize * markerScale);
+            return size;
+        } catch (e) { return Math.max(1, this.getBaseMarkerRadius()); }
+    }
     
     renderMarkers() {
         const ctx = this.ctx;
@@ -2452,6 +2570,8 @@ class InteractiveMap {
         // Reduce marker shrink effect so markers remain more readable at high zoom.
         const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
         const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
+        // Per-frame cache mapping "<layerKey>|<uid>" -> rendered size
+        try { this._markerSizeFrame = {}; } catch (e) { this._markerSizeFrame = {}; }
         const cssWidth = this.canvas.clientWidth;
         const cssHeight = this.canvas.clientHeight;
         // Generic rendering for all point-marker layers defined in LAYERS.
@@ -2473,24 +2593,12 @@ class InteractiveMap {
                 if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
 
                 const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
-                // Base size already considers route-node sizing; apply detailScale
-                // here to ensure marker visuals shrink uniformly when zoomed in.
-                // Apply highlight multiplier when layer is highlighted
-                let highlightMult = 1;
+                // Compute render size via shared helper and cache it for this frame
+                const size = this.getMarkerRenderSize(marker, layerKey);
                 try {
-                    if (map && map.highlightedLayers && map.highlightedLayers.has(layerKey)) {
-                        const cfg = (map._highlightConfig && map._highlightConfig[layerKey]) ? map._highlightConfig[layerKey] : null;
-                        highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
-                        try {
-                            const gm = (typeof this.highlightScaleMultiplier === 'number') ? this.highlightScaleMultiplier : 1.0;
-                            highlightMult = highlightMult * gm;
-                            // Ensure highlighted markers are at least slightly larger than normal
-                            highlightMult = Math.max(highlightMult, 1.15);
-                        } catch (e) {}
-                    }
+                    const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i));
+                    this._markerSizeFrame[key] = size;
                 } catch (e) {}
-                const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
-                const size = Math.max(1, rawSize * markerScale);
 
                 // Draw selection halo using the layer color (no lightening)
                 if (isSelected) {
@@ -3387,6 +3495,28 @@ async function init() {
                 try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) {}
                 try { if (typeof this.render === 'function') this.render(); } catch (e) {}
                 try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
+                // Ensure hit-testing is recalculated to match new visual sizes.
+                try {
+                    if (typeof this.checkMarkerHover === 'function') {
+                        if (typeof this.lastMouseX === 'number' && typeof this.lastMouseY === 'number') {
+                            try {
+                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
+                                if (rect) {
+                                    const lx = this.lastMouseX - rect.left;
+                                    const ly = this.lastMouseY - rect.top;
+                                    try { this.checkMarkerHover(lx, ly); } catch (e) {}
+                                } else {
+                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) {}
+                                }
+                            } catch (e) {}
+                        } else {
+                            try {
+                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
+                                if (rect) this.checkMarkerHover(rect.width / 2, rect.height / 2);
+                            } catch (e) {}
+                        }
+                    }
+                } catch (e) {}
             };
             map.clearLayerHighlight = function(layerKey) {
                 try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) {}
@@ -3394,6 +3524,25 @@ async function init() {
                 try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) {}
                 try { if (typeof this.render === 'function') this.render(); } catch (e) {}
                 try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
+                // Recompute hit testing after clearing highlight
+                try {
+                    if (typeof this.checkMarkerHover === 'function') {
+                        if (typeof this.lastMouseX === 'number' && typeof this.lastMouseY === 'number') {
+                            try {
+                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
+                                if (rect) {
+                                    const lx = this.lastMouseX - rect.left;
+                                    const ly = this.lastMouseY - rect.top;
+                                    try { this.checkMarkerHover(lx, ly); } catch (e) {}
+                                } else {
+                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) {}
+                                }
+                            } catch (e) {}
+                        } else {
+                            try { const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null; if (rect) this.checkMarkerHover(rect.width/2, rect.height/2); } catch (e) {}
+                        }
+                    }
+                } catch (e) {}
             };
             map.toggleLayerHighlight = function(layerKey, scale) {
                 try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
@@ -3611,6 +3760,10 @@ async function init() {
             const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
             try { saveLabel.classList.toggle('pressed', !!consent); } catch (e) {}
             try { saveLabel.setAttribute('aria-pressed', !!consent ? 'true' : 'false'); } catch (e) {}
+                try {
+                    const lbl = saveLabel.querySelector('.layer-name');
+                    if (lbl) lbl.textContent = consent ? 'Clear Savedata' : 'Save Progress';
+                } catch (e) {}
 
             saveLabel.addEventListener('click', async (ev) => {
                 const current = saveLabel.getAttribute('aria-pressed') === 'true';
@@ -3686,6 +3839,10 @@ async function init() {
                 }
                 // reflect state attribute after all processing
                 try { saveLabel.setAttribute('aria-pressed', !!on ? 'true' : 'false'); } catch (e) {}
+                try {
+                    const lbl = saveLabel.querySelector('.layer-name');
+                    if (lbl) lbl.textContent = on ? 'Clear Savedata' : 'Save Progress';
+                } catch (e) {}
             });
         }
         // no separate Clear button — deletion handled via consent toggle
@@ -4208,6 +4365,18 @@ async function init() {
                         const effective = Math.max(1.15, baseScale * Number(v));
                         if (label) label.textContent = `${Number(effective).toFixed(2)}x`;
                     } catch (e) { if (label) label.textContent = `${Number(v).toFixed(1)}x`; }
+                } catch (e) {}
+            });
+            // When user releases the slider (change), force a full render and hit re-check
+            slider.addEventListener('change', (ev) => {
+                try {
+                    if (map) {
+                        try { map.render(); } catch (e) {}
+                        try { if (typeof map.checkMarkerHover === 'function') {
+                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
+                            else { const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null; if (rect) map.checkMarkerHover(rect.width/2, rect.height/2); }
+                        } } catch (e) {}
+                    }
                 } catch (e) {}
             });
         }

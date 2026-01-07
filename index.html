@@ -28,7 +28,7 @@
                 </div>
                 <div class="title-block">
                     <h1>VIEWROS GPS</h1>
-                    <h2>SOL VALLEY</h2>
+                    <h2>S O L  V A L L E Y</h2>
                 </div>
             </div>
             
@@ -56,7 +56,7 @@
             
                 <div class="control-group section-glow">
                     <h3>R o u t i n g</h3>
-                    <button id="editRouteToggle" class="control-btn" aria-pressed="false">Edit Route</button>
+                    <button id="editRouteToggle" class="control-btn" aria-pressed="false" aria-label="Edit Route">⇡</button>
                     <button id="computeRouteImprovedBtn" class="control-btn">Compute Route</button>
                     <button id="computeRouteNearbyBtn" class="control-btn">Expand Route</button>
                     <button id="loopRouteBtn" class="control-btn" aria-pressed="false">Loop Route</button>
@@ -68,7 +68,7 @@
                 
                 <div class="control-group section-glow" id="customMarkerControls">
                     <h3>M a r k e r s</h3>
-                    <button id="editMarkersToggle" class="control-btn" aria-pressed="false">Edit Markers</button>
+                    <button id="editMarkersToggle" class="control-btn" aria-pressed="false" aria-label="Edit Markers">⚲</button>
                     <button id="exportCustom" class="control-btn">Export Markers</button>
                     <button id="importCustom" class="control-btn">Import Markers</button>
                     <button id="clearCustom" class="control-btn danger">Clear Markers</button>
@@ -129,21 +129,24 @@
 
             <!-- Hints overlay moved inside sidebar so it aligns with sidebar layout at any zoom level (hidden by default) -->
             <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
-                <div class="hints-list" id="hintsList">
-                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_route_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Route</span></span>
+                    <div class="hints-list" id="hintsList">
+                    <span class="hint-group"><kbd>E</kbd>/<kbd>⇡</kbd> <span class="hint-label">Edit Route</span></span>
                     <span class="hint-group"><kbd>C</kbd>/<kbd>↔</kbd> <span class="hint-label">Expand Route</span></span>
                     <span class="hint-group"><kbd>&lt;</kbd>/<kbd>⇄</kbd> <span class="hint-label">Reverse Route</span></span>
                     <span class="hint-group"><kbd>Y</kbd> <span class="hint-label">Clear Route</span></span>
 
-                    <span class="hint-group"><kbd>E</kbd>/<kbd><img src="graphics/mp4b_marker_icon.svg" alt="pin" class="hint-icon"></kbd> <span class="hint-label">Edit Custom Markers</span></span>
+                    <span class="hint-group"><kbd>E</kbd>/<kbd>⚲</kbd> <span class="hint-label">Edit Custom Markers</span></span>
                     <span class="hint-group"><kbd>X</kbd> <span class="hint-label">Clear Custom Markers</span></span>
 
-                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Q</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
+                    <span class="hint-group"><kbd>+</kbd>/<kbd>-</kbd>/<kbd>Pinch</kbd> <span class="hint-label">Zoom</span></span>
 
                     <span class="hint-group"><kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Drag</kbd> <span class="hint-label">Pan</span></span>
-                    <span class="hint-group"><kbd>0</kbd>/<kbd>⛶</kbd> <span class="hint-label">Reset</span></span>
+                    <span class="hint-group"><kbd>Shift</kbd> <span class="hint-label">Dash</span></span>
+                    <span class="hint-group"><kbd>0</kbd>/<kbd>⛶</kbd> <span class="hint-label">Reset View</span></span>
                     
                     <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
+                    
+                    <span class="hint-group"><kbd>Escape</kbd> <span class="hint-label">Exit Edit Modes</span></span>
                     
                     <span class="hint-group"><kbd>Space</kbd>/<kbd>☰</kbd> <span class="hint-label">Toggle sidebar</span></span>
                 </div>
@@ -160,17 +163,17 @@
             <div id="editOverlay" class="edit-overlay" aria-hidden="true"></div>
             
             <div class="zoom-controls">
-                <button id="editRouteToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Route">
-                    <img src="graphics/mp4b_route_icon.svg" alt="Edit Route" class="mini-icon">
+                <button id="editRouteToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Route" aria-label="Edit Route">
+                    <span class="mini-icon">⇡</span>
                 </button>
-                <button id="computeRouteNearbyMini" class="zoom-btn" title="Expand Route" aria-label="Expand Route">↔</button>
-                <button id="toggleRouteDirMini" class="zoom-btn" title="Reverse Route" aria-label="Reverse Route">⇄</button>
-                <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers">
-                    <img src="graphics/mp4b_marker_icon.svg" alt="Edit Markers" class="mini-icon">
+                <button id="computeRouteNearbyMini" class="zoom-btn" title="Expand Route" aria-label="Expand Route"><span class="mini-icon">↔</span></button>
+                <button id="toggleRouteDirMini" class="zoom-btn" title="Reverse Route" aria-label="Reverse Route"><span class="mini-icon">⇄</span></button>
+                <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers" aria-label="Edit Markers">
+                    <span class="mini-icon">⚲</span>
                 </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
-                <button class="zoom-btn" id="resetView" title="Reset View">⛶</button>
+                <button class="zoom-btn" id="resetView" title="Reset View" aria-label="Reset View"><span class="mini-icon">⛶</span></button>
                 <button id="sidebarHandle" class="sidebar-handle" aria-label="Toggle sidebar" aria-expanded="true" title="Toggle sidebar">
                     <span class="handle-icon">☰</span>
                 </button>
@@ -198,6 +201,7 @@
     <script src="data/layers/tokabisCamp.js"></script>
     <script src="data/layers/scoutBot.js"></script>
     <script src="data/layers/gfDebris.js"></script>
+    <script src="data/layers/lamornStatue.js"></script>
     <script src="data/layers/customMarkers.js"></script>
     <script src="data/layers/route.js"></script>
     <script src="data/storageHelper.js"></script>
