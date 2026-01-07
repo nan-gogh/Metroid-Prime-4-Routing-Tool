@@ -152,20 +152,22 @@ h1, h2, h3, h4, h5, h6 {
 .app-container.sidebar-collapsed .sidebar {
     transform: translateX(-100%);
 }
-/* Sidebar handle */
-.sidebar-handle {
+/* Sidebar handle - rebuilt to share animations with mini toggle group */
+#sidebarHandle {
     width: 40px;
     height: 40px;
     background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
     background-color: #0b2236; /* fallback */
     border: 1px solid #0e4a6e;
     border-radius: 8px;
+    color: #22d3ee;
+    font-size: 20px;
     cursor: pointer;
     display: flex;
     justify-content: center;
     align-items: center;
-    /* remove animated transitions to keep handle visually static */
-    transition: none;
+    /* Match zoom-btn transition */
+    transition: background 150ms ease, transform 120ms ease, border-color 150ms;
     padding: 0;
     appearance: none;
     -webkit-appearance: none;
@@ -173,22 +175,25 @@ h1, h2, h3, h4, h5, h6 {
     touch-action: none;
 }
 
-.sidebar-handle:active,
-.sidebar-handle.pressed {
-    /* Keep visual feedback minimal and non-animated */
-    background: linear-gradient(180deg, #0891b2 0%, #065666 100%);
-    border-color: #0891b2;
+#sidebarHandle:active,
+#sidebarHandle.pressed {
+    /* Unified pressed visual feedback with other mini buttons */
+    background: linear-gradient(180deg, var(--edit-layer-press1, #0891b2) 0%, var(--edit-layer-press2, #065666) 100%);
+    border-color: var(--edit-layer-border, #0891b2);
+    transform: scale(0.95);
+    transition: transform 10ms ease;
 }
 
-.sidebar-handle .handle-icon {
-    color: #22d3ee;
+#sidebarHandle .mini-icon {
+    color: var(--edit-layer-icon, #22d3ee);
     font-size: 18px;
     transition: none;
     transform-origin: center center;
     display: inline-block;
+    transform: translateY(-4px);
 }
 
-.app-container.sidebar-collapsed .sidebar-handle .handle-icon {
+.app-container.sidebar-collapsed #sidebarHandle .mini-icon {
     /* icon glyphs are swapped via JS; no CSS rotation */
 }
 
@@ -815,6 +820,31 @@ h1, h2, h3, h4, h5, h6 {
     transition: transform 10ms ease;
 }
 
+/* Route-related mini toggles: keep normal background and border when pressed or active */
+#editRouteToggleMini:active,
+#editRouteToggleMini.pressed,
+#computeRouteNearbyMini:active,
+#computeRouteNearbyMini.pressed,
+#toggleRouteDirMini:active,
+#toggleRouteDirMini.pressed,
+#editMarkersToggleMini:active,
+#editMarkersToggleMini.pressed {
+    background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
+    border-color: var(--edit-layer-border, #0e4a6e);
+}
+
+/* Unified mini buttons: no background change on press, keep normal background */
+#sidebarHandle:active,
+#sidebarHandle.pressed,
+#resetView:active,
+#resetView.pressed,
+#zoomOut:active,
+#zoomOut.pressed,
+#zoomIn:active,
+#zoomIn.pressed {
+    background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
+}
+
 /* Glow state for the mini edit-markers toggle in the zoom controls */
 .zoom-btn.glow {
     box-shadow: 0 0 12px var(--edit-layer-glow1, rgba(34, 211, 238, 0.45)), 0 0 28px var(--edit-layer-glow2, rgba(34, 211, 238, 0.12));
@@ -1134,16 +1164,15 @@ kbd {
    keep a consistent sidebar width across screen sizes. */
 
 /* When the handle is placed inside the zoom controls, keep it static in the control column */
-.zoom-controls .sidebar-handle {
+.zoom-controls #sidebarHandle {
     position: relative;
     left: auto;
     top: auto;
-    transform: none;
     /* match zoom control button shape: square and consistent radius */
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
 }
@@ -1184,9 +1213,8 @@ kbd {
 /* Prevent the sidebar handle from jumping when the sidebar toggles
    (override the generic collapsed-state rule when the handle is inside
    the zoom control column). Use strong specificity and non-animated rules. */
-.app-container.sidebar-collapsed .zoom-controls .sidebar-handle {
+.app-container.sidebar-collapsed .zoom-controls #sidebarHandle {
     position: relative !important;
     left: auto !important;
     top: auto !important;
-    transform: none !important;
 }

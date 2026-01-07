@@ -4017,6 +4017,13 @@ async function init() {
         btn.addEventListener('pointercancel', () => btn.classList.remove('pressed'));
     });
 
+    // For the second group, prevent stuck pressed state by removing on mouseleave
+    [zoomInBtn, zoomOutBtn, resetViewBtn, document.getElementById('sidebarHandle')].forEach(btn => {
+        if (btn) {
+            btn.addEventListener('mouseleave', () => btn.classList.remove('pressed'));
+        }
+    });
+
     // Attach pressed handlers to all sidebar control buttons (Compute/Clear/Export/etc.)
     attachPressedHandlers('.control-btn');
 
