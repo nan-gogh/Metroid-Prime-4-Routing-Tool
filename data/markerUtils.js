@@ -55,6 +55,9 @@ const MarkerUtils = {
     // Export custom markers to JSON
     exportCustomMarkers() {
         const markers = LAYERS.customMarkers.markers;
+        if (markers.length === 0) {
+            throw new Error('No custom markers to export.');
+        }
         const dataHash = MarkerUtils.hashMarkerData(markers);
         const now = new Date();
         const timestamp = now.getTime(); // milliseconds

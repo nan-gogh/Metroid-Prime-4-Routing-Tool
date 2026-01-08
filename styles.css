@@ -24,6 +24,13 @@ h1, h2, h3, h4, h5, h6 {
 
 :root {
     --ripple-max-size: 140px; /* maximum diameter for ripple rings (slightly smaller) */
+    /* Sidebar background used across sidebar and footer */
+    --sidebar-bg: linear-gradient(180deg, #0a1929 0%, #041018 100%);
+    /* Height of the footer area (buttons + spacing). Adjust to match actual button sizes. */
+    --sidebar-footer-height: 120px;
+    /* vertical offset used to align sidebar gradient and hints/consent overlay
+       (footer height). Keep in sync by referencing the footer height variable. */
+    --sidebar-overlay-bottom: var(--sidebar-footer-height);
 }
 .load-fade-keeper {}
 
@@ -105,7 +112,7 @@ h1, h2, h3, h4, h5, h6 {
     top: 0;
     bottom: 0;
     width: 280px;
-    background: linear-gradient(180deg, #0a1929 0%, #041018 100%);
+    background: var(--sidebar-bg);
     border-right: 1px solid #0e4a6e;
     display: flex;
     flex-direction: column;
@@ -121,14 +128,14 @@ h1, h2, h3, h4, h5, h6 {
    — cyan from below, fading to transparent above. Non-interactive. */
 .sidebar::after {
     /* Gradient overlay anchored to the top edge of the sidebar and ending
-       at the same vertical position as the hints overlay bottom.
-       Non-interactive and visually above sidebar content. */
+       at the same vertical position as the hints/consent overlay bottom.
+       Use CSS variable so we keep the edges synced. */
     content: "";
     position: absolute;
     left: 0;
     right: 0;
     top: 0; /* align upper edge with sidebar upper edge */
-    bottom: calc(56px + 56px); /* align lower edge with hints overlay bottom */
+    bottom: var(--sidebar-overlay-bottom); /* align lower edge with overlay bottom */
     pointer-events: none;
     z-index: 2; /* keep overlay above backgrounds but below interactive controls */
     background: linear-gradient(to top, rgba(34,211,238,0.32) 0%, rgba(34,211,238,0.08) 30%, rgba(34,211,238,0) 100%);
@@ -534,7 +541,7 @@ h1, h2, h3, h4, h5, h6 {
 #saveDataToggle_label {
     width: calc(100% - 32px); /* same as .hints-toggle */
     padding: 10px 12px;
-    margin: 0px 16px 12px 16px;
+    margin: 12px 16px 12px 16px; /* match hints-toggle margins */
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -542,7 +549,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Consent toggle: when storage consent is OFF, encourage action with dark background and a subtle pulse */
-#saveDataToggle_label:not(.pressed) {
+#saveDataToggle_label:not(.active) {
     background: linear-gradient(180deg, #04121a 0%, #021018 100%);
     border-color: #033747;
     color: #cfeff5;
@@ -560,9 +567,86 @@ h1, h2, h3, h4, h5, h6 {
 
 /* When pressed (consent given), restore normal pressed styling (handled via .pressed rules) */
 /* When pressed (consent given), remove pulse and inline border to match normal pressed styling */
-#saveDataToggle_label.pressed {
+#saveDataToggle_label.active {
     animation: none;
     box-shadow: none;
+}
+
+/* ===== Consent toggle - cloned styles for per-button adjustments ===== */
+/* Base appearance for consent toggle when not emphasized (consent given or neutral) */
+#saveDataToggle_label {
+    /* clone of .control-toggle base but full-width like other sidebar toggles */
+    width: calc(100% - 32px); /* account for 16px left + 16px right margin */
+    padding: 10px 12px;
+    /* margin inherited from earlier rule */
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #0d4a6e 0%, #0a2f47 100%);
+    border: 1px solid #269cdc;
+    color: #22d3ee;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    transition: all 0.2s;
+    touch-action: manipulation;
+}
+
+/* Pressed appearance for consent toggle (both emphasized and regular) */
+#saveDataToggle_label.pressed,
+#saveDataToggle_label:active {
+    /* clone of .control-toggle.pressed */
+    background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
+    border-color: #22d3ee;
+    color: #22d3ee;
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
+}
+
+/* Active appearance for consent toggle (consent given) - match danger/clear buttons base */
+#saveDataToggle_label.active {
+    /* use danger base background (not the pressed variant) so pressing can show pressed state */
+    background: linear-gradient(135deg, #7f1d1d 0%, #5f0f0f 100%);
+    border-color: #dc2626;
+    color: #fca5a5;
+    box-shadow: none !important; /* no glow for active consent */
+}
+#saveDataToggle_label.active .layer-name {
+    color: #fca5a5;
+}
+
+/* Pressed appearance for consent toggle when active (match danger pressed) */
+#saveDataToggle_label.active.pressed,
+#saveDataToggle_label.active:active {
+    /* match .control-btn.danger.pressed */
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%) !important;
+    border-color: #f87171 !important;
+    color: #fca5a5 !important;
+    /* do NOT add box-shadow for consent button even when pressed */
+    box-shadow: none !important;
+    animation: none !important; /* ensure any pulse is stopped */
+}
+#saveDataToggle_label.active.pressed .layer-name,
+#saveDataToggle_label.active:active .layer-name {
+    color: #fca5a5 !important;
+}
+
+/* Ensure emphasized (no consent) keeps its special look unless pressed */
+#saveDataToggle_label:not(.active) {
+    /* existing emphasized styling preserved above */
+}
+
+/* ===================================================================== */
+
+/* Pressed state for emphasized consent toggle (when not consented) */
+#saveDataToggle_label:not(.active).pressed,
+#saveDataToggle_label:not(.active):active {
+    /* Match the emphasized sidebar handle's background and remove glow */
+    background: linear-gradient(180deg, #0d2137 0%, #091521 100%);
+    border-color: #22d3ee;
+    color: #22d3ee;
+    animation: none;
+    /* inset cyan outline + intense outer cyan glow */
+    box-shadow: inset 0 0 0 2px #22d3ee, 0 0 14px rgba(34,211,238,0.95), 0 0 36px rgba(34,211,238,0.6);
 }
 
 .layer-count {
@@ -627,6 +711,24 @@ h1, h2, h3, h4, h5, h6 {
     touch-action: manipulation;
 }
 
+/* Control toggles (same as buttons) */
+.control-toggle {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #0d4a6e 0%, #0a2f47 100%);
+    border: 1px solid #269cdc;
+    color: #22d3ee;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Orbitron', 'Space Grotesk', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    transition: all 0.2s;
+    /* Prevent browser double-tap zoom on touch devices */
+    touch-action: manipulation;
+}
+
 /* Make the edit markers sidebar button icon slightly larger */
 #editMarkersToggle {
     font-size: 16px; /* increase symbol size */
@@ -646,6 +748,23 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
 }
 
+.control-toggle.pressed,
+.control-toggle:active {
+    background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
+    border-color: #22d3ee;
+    transform: scale(0.98);
+}
+
+.control-toggle.active {
+    background: linear-gradient(135deg, #0e5a7d 0%, #0b3a54 100%);
+    border-color: #22d3ee;
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.6);
+}
+
+.control-toggle.active.pressed {
+    box-shadow: none;
+}
+
 .control-btn:active {
     transform: scale(0.98);
 }
@@ -656,11 +775,84 @@ h1, h2, h3, h4, h5, h6 {
     border-color: #dc2626;
 }
 
+.control-toggle.danger {
+    background: linear-gradient(135deg, #7f1d1d 0%, #5f0f0f 100%);
+    color: #fca5a5;
+    border-color: #dc2626;
+}
+
 .control-btn.danger.pressed,
 .control-btn.danger:active {
     background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
     border-color: #f87171;
     box-shadow: 0 0 8px rgba(248, 113, 113, 0.2);
+}
+
+.control-toggle.danger.pressed,
+.control-toggle.danger:active {
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
+    border-color: #f87171;
+    transform: scale(0.98);
+}
+
+.control-toggle.active.danger {
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
+    border-color: #f87171;
+    box-shadow: 0 0 20px rgba(248, 113, 113, 0.6);
+}
+
+.control-toggle.active.danger.pressed {
+    box-shadow: none;
+}
+
+.control-toggle.danger.pressed,
+.control-toggle.danger:active {
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
+    border-color: #f87171;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.2);
+    transform: scale(0.98);
+}
+
+/* Ensure active toggles temporarily lose their glow when pressed
+   and use the same pressed visuals as the idle->pressed transition.
+   This covers both the JS-added `pressed` class and the browser
+   `:active` pseudo-class. */
+.control-toggle.active.pressed,
+.control-toggle.active:active {
+    box-shadow: none;
+    background: linear-gradient(135deg, #0d4a6e 0%, #0a2f47 100%);
+    border-color: #269cdc;
+    color: #22d3ee;
+    transform: scale(0.98);
+}
+
+.control-toggle.active.danger.pressed,
+.control-toggle.active.danger:active {
+    box-shadow: none;
+    background: linear-gradient(135deg, #7f1d1d 0%, #5f0f0f 100%);
+    border-color: #dc2626;
+    color: #fca5a5;
+    transform: scale(0.98);
+}
+
+/* Remove size change on pressed states for toggles so they don't shrink */
+.control-toggle.pressed,
+.control-toggle:active,
+.control-toggle.danger.pressed,
+.control-toggle.danger:active,
+.control-toggle.active.pressed,
+.control-toggle.active:active,
+.control-toggle.active.danger.pressed,
+.control-toggle.active.danger:active {
+    transform: none !important;
+}
+
+/* Prevent sidebar buttons from resizing in pressed state */
+.sidebar .control-btn.pressed,
+.sidebar .control-btn:active,
+.sidebar .control-btn.danger.pressed,
+.sidebar .control-btn.danger:active {
+    transform: none !important;
 }
 
 /* Status bar */
@@ -900,23 +1092,22 @@ h1, h2, h3, h4, h5, h6 {
    Timing is arranged so contents fade out first when collapsing, then the container moves down. */
 
 .hints-overlay {
-    position: absolute; /* positioned relative to the sidebar now */
-     /* positioned flush above hints button (accounts for button height + margins)
-         Increased to account for the consent toggle placed below the hints button. */
-     bottom: calc(60px + 57px);
-    left: 0px; /* nudge left 1px to align with sidebar border */
+    position: absolute; /* positioned relative to the sidebar */
+    /* positioned flush above hints/consent area using shared variable */
+    bottom: var(--sidebar-overlay-bottom);
+    left: 0px; /* align with sidebar border */
     width: calc(100% + 1px);
-    background: linear-gradient(180deg, #0a1929 0%, #041018 100%);
+    /* use the same base background as the sidebar so this overlay visually
+       matches and can be adjusted independently */
+    background: var(--sidebar-bg);
     border-right: 1px solid #0e4a6e;
     border-top: 1px solid #0e4a6e;
-    z-index: 998;
+    z-index: 250; /* sit above sidebar background but below interactive buttons */
     display: block;
     overflow: hidden; /* hide content during collapsed state */
     pointer-events: none;
     opacity: 1; /* container stays visible even when collapsed */
     max-height: 1px; /* collapsed to a 1px high strip */
-    /* Use clip-path to reveal from the bottom so a 1px strip remains visible while collapsed.
-       Using clip-path gives a clear 'pivot from bottom' reveal without fully scaling the element to zero. */
     clip-path: inset(calc(100% - 1px) 0 0 0);
     -webkit-clip-path: inset(calc(100% - 1px) 0 0 0);
     transition: clip-path 220ms ease 80ms, -webkit-clip-path 220ms ease 80ms, max-height 220ms ease 80ms, opacity 120ms ease 0ms;
@@ -927,10 +1118,36 @@ h1, h2, h3, h4, h5, h6 {
     /* Opening: reveal via clip-path from bottom to full height */
     clip-path: inset(0 0 0 0);
     -webkit-clip-path: inset(0 0 0 0);
-    max-height: 420px; /* large enough to contain contents; use overflow-y for scrolling */
+    max-height: calc(100vh - var(--sidebar-footer-height)); /* viewport-aware height, leaves space for footer */
     pointer-events: auto;
     overflow-y: auto;
     transition: clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, -webkit-clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, max-height 220ms cubic-bezier(.2,.9,.18,1) 0ms, opacity 120ms ease 0ms;
+}
+
+/* Footer container at bottom of sidebar */
+.sidebar-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--sidebar-footer-height);
+    background: var(--sidebar-bg);
+    border-top: 1px solid #0e4a6e;
+    z-index: 300; /* above sidebar background */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0; /* vertical spacing inside footer */
+    box-sizing: border-box;
+}
+
+/* Ensure consent and hints buttons render above the overlay box and fit nicely inside footer */
+.sidebar-footer .hints-toggle,
+.sidebar-footer #saveDataToggle_label {
+    position: relative;
+    z-index: 310;
+    width: calc(100% - 32px);
+    margin: 6px 16px;
 }
 
 .hints-overlay.closed {
@@ -948,7 +1165,7 @@ h1, h2, h3, h4, h5, h6 {
        expands, and becomes interactive. */
     clip-path: inset(0 0 0 0);
     -webkit-clip-path: inset(0 0 0 0);
-    max-height: 420px;
+    max-height: calc(100vh - var(--sidebar-footer-height));
     pointer-events: auto;
     overflow-y: auto;
     opacity: 1;

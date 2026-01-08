@@ -3147,7 +3147,7 @@ function exitEditModeForLayer(layerKey) {
                 const editToggle = document.getElementById('editMarkersToggle');
                 if (editToggle) {
                     editToggle.setAttribute('aria-pressed', 'false');
-                    editToggle.classList.remove('pressed');
+                    editToggle.classList.remove('active');
                 }
             } catch (e) {}
             try {
@@ -3167,7 +3167,7 @@ function exitEditModeForLayer(layerKey) {
                 const routeEditToggle = document.getElementById('editRouteToggle');
                 if (routeEditToggle) {
                     routeEditToggle.setAttribute('aria-pressed', 'false');
-                    routeEditToggle.classList.remove('pressed');
+                    routeEditToggle.classList.remove('active');
                 }
             } catch (e) {}
             try {
@@ -3567,9 +3567,12 @@ async function initializeLayerIcons() {
 function attachPressedHandlers(selector) {
     const els = document.querySelectorAll(selector);
     els.forEach(el => {
+        // Skip tileset toggles, they have special handling
+        if (el.id === 'tilesetSatBtn' || el.id === 'tilesetHoloBtn') return;
         el.addEventListener('pointerdown', () => el.classList.add('pressed'));
         el.addEventListener('pointerup', () => el.classList.remove('pressed'));
         el.addEventListener('pointercancel', () => el.classList.remove('pressed'));
+        el.addEventListener('mouseleave', () => el.classList.remove('pressed'));
     });
 }
 
@@ -3909,7 +3912,7 @@ async function init() {
         if (saveLabel) {
             // Initialize state from consent flag
             const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-            try { saveLabel.classList.toggle('pressed', !!consent); } catch (e) {}
+            try { saveLabel.classList.toggle('active', !!consent); } catch (e) {}
             try { saveLabel.setAttribute('aria-pressed', !!consent ? 'true' : 'false'); } catch (e) {}
                 try {
                     const lbl = saveLabel.querySelector('.layer-name');
@@ -3959,7 +3962,7 @@ async function init() {
                         try { if (map && typeof map.saveViewToStorage === 'function') map.saveViewToStorage(); } catch (e) {}
                         // Route direction persistence removed; do not save `routeDir`.
                     } catch (e) {}
-                    try { saveLabel.classList.toggle('pressed', true); } catch (e) {}
+                    try { saveLabel.classList.toggle('active', true); } catch (e) {}
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
                     const confirmMsg = 'Disable local storage? This will permanently delete the following saved data from this device:\n\n' +
@@ -3972,7 +3975,7 @@ async function init() {
                         'Tap OK to delete saved data and continue, or Cancel to keep it.';
                     if (!confirm(confirmMsg)) {
                         try { saveLabel.setAttribute('aria-pressed', 'true'); } catch (e) {}
-                        try { saveLabel.classList.toggle('pressed', true); } catch (e) {}
+                        try { saveLabel.classList.toggle('active', true); } catch (e) {}
                         try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
                     } else {
                         try {
@@ -3983,7 +3986,7 @@ async function init() {
                                 for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
                             }
                         } catch (e) {}
-                        try { saveLabel.classList.toggle('pressed', false); } catch (e) {}
+                        try { saveLabel.classList.toggle('active', false); } catch (e) {}
                         try { saveLabel.setAttribute('aria-pressed', 'false'); } catch (e) {}
                         try { location.reload(); } catch (e) { /* fallback: continue without reload */ }
                     }
@@ -4096,11 +4099,12 @@ async function init() {
                 }
             } catch (e) { consentMarginBottom = 0; }
 
-            // Compute distance from bottom of sidebar to top of the hints button,
-            // then add consent toggle bottom margin so overlay clears that gap below.
-            const rawOffset = Math.round(sidebarRect.bottom - hintRect.top + consentMarginBottom);
-            const bottomOffset = Math.max(0, rawOffset);
-            hintsOverlay.style.bottom = bottomOffset + 'px';
+            // Align overlay's bottom to the footer height so it always sits
+            // immediately above the footer area (CSS variable controls height).
+            try {
+                hintsOverlay.style.bottom = 'var(--sidebar-footer-height)';
+            } catch (e) {}
+
         } catch (e) {}
     }
     try { positionHintsOverlay(); } catch (e) {}
@@ -4294,8 +4298,14 @@ async function init() {
     
     // Custom marker controls
     document.getElementById('exportCustom').addEventListener('click', () => {
-        if (typeof MarkerUtils !== 'undefined') {
-            MarkerUtils.exportCustomMarkers();
+        try {
+            if (typeof MarkerUtils !== 'undefined') {
+                MarkerUtils.exportCustomMarkers();
+            } else {
+                alert('Marker utilities not available.');
+            }
+        } catch (err) {
+            alert('Failed to export custom markers: ' + (err.message || String(err)));
         }
     });
 
@@ -4304,11 +4314,11 @@ async function init() {
     if (editToggle && map) {
         // Reflect initial state
         try { editToggle.setAttribute('aria-pressed', map.editMarkersMode ? 'true' : 'false'); } catch (e) {}
-        try { editToggle.classList.toggle('pressed', !!map.editMarkersMode); } catch (e) {}
+        try { editToggle.classList.toggle('active', !!map.editMarkersMode); } catch (e) {}
         editToggle.addEventListener('click', () => {
             const on = !(editToggle.getAttribute('aria-pressed') === 'true');
             try { editToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
-            try { editToggle.classList.toggle('pressed', on); } catch (e) {}
+            try { editToggle.classList.toggle('active', on); } catch (e) {}
                     try { setEditToggleColor('customMarkers','editMarkersToggle','editMarkersToggleMini','edit-markers', on); } catch (e) {}
             try {
                 map.editMarkersMode = !!on;
@@ -4340,7 +4350,7 @@ async function init() {
                             // update sidebar toggle UI if present
                             try {
                                 const routeToggle = document.getElementById('editRouteToggle');
-                                if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('pressed'); }
+                                if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
                             } catch (e) {}
                             // update mini on-screen route toggle if present
                             try {
@@ -4455,11 +4465,11 @@ async function init() {
     if (routeEditToggle && map) {
         // Reflect initial state
         try { routeEditToggle.setAttribute('aria-pressed', map.editRouteMode ? 'true' : 'false'); } catch (e) {}
-        try { routeEditToggle.classList.toggle('pressed', !!map.editRouteMode); } catch (e) {}
+        try { routeEditToggle.classList.toggle('active', !!map.editRouteMode); } catch (e) {}
         routeEditToggle.addEventListener('click', () => {
             const on = !(routeEditToggle.getAttribute('aria-pressed') === 'true');
             try { routeEditToggle.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch (e) {}
-            try { routeEditToggle.classList.toggle('pressed', on); } catch (e) {}
+            try { routeEditToggle.classList.toggle('active', on); } catch (e) {}
             try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', on); } catch (e) {}
             try {
                 map.editRouteMode = !!on;
@@ -4490,7 +4500,7 @@ async function init() {
                             // update sidebar toggle UI if present
                             try {
                                 const markersToggle = document.getElementById('editMarkersToggle');
-                                if (markersToggle) { markersToggle.setAttribute('aria-pressed', 'false'); markersToggle.classList.remove('pressed'); }
+                                if (markersToggle) { markersToggle.setAttribute('aria-pressed', 'false'); markersToggle.classList.remove('active'); }
                             } catch (e) {}
                             // update mini on-screen markers toggle if present
                             try {
@@ -4566,14 +4576,14 @@ async function init() {
     function updateTilesetUI() {
         if (!tilesetSatBtn || !tilesetHoloBtn) return;
         const current = (map && map.tileset) ? map.tileset : 'sat';
-        tilesetSatBtn.classList.toggle('pressed', current === 'sat');
-        tilesetHoloBtn.classList.toggle('pressed', current === 'holo');
+        tilesetSatBtn.classList.toggle('active', current === 'sat');
+        tilesetHoloBtn.classList.toggle('active', current === 'holo');
         tilesetSatBtn.setAttribute('aria-pressed', current === 'sat' ? 'true' : 'false');
         tilesetHoloBtn.setAttribute('aria-pressed', current === 'holo' ? 'true' : 'false');
         // Grayscale button reflects map.tilesetGrayscale
         if (tilesetGrayscaleBtn) {
             const g = (map && map.tilesetGrayscale) ? true : false;
-            tilesetGrayscaleBtn.classList.toggle('pressed', g);
+            tilesetGrayscaleBtn.classList.toggle('active', g);
             tilesetGrayscaleBtn.setAttribute('aria-pressed', g ? 'true' : 'false');
         }
     }
@@ -4893,7 +4903,7 @@ async function init() {
                                 // Disable markers edit mode (and properly exit it)
                                 try { map.editMarkersMode = false; } catch (e) {}
                                 try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
-                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
+                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) {}
                                 try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
                             }
                         } catch (e) {}
@@ -5283,7 +5293,7 @@ async function init() {
                 // Update sidebar & mini toggles if present
                 try {
                     const routeToggle = document.getElementById('editRouteToggle');
-                    if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('pressed'); }
+                    if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
                 } catch (e) {}
                 try {
                     const miniRoute = document.getElementById('editRouteToggleMini');
@@ -5314,7 +5324,7 @@ async function init() {
                 }
                 if (hintsToggle) {
                     hintsToggle.setAttribute('aria-expanded', 'false');
-                    hintsToggle.classList.remove('pressed');
+                    hintsToggle.classList.remove('active');
                 }
             } catch (e) {}
         } else {
@@ -5400,7 +5410,7 @@ async function init() {
                                     // disable markers mode and exit it cleanly
                                     try { map.editMarkersMode = false; } catch (e) {}
                                     try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
-                                    try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('pressed'); } } catch (e) {}
+                                    try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) {}
                                     try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
                                 } else {
                                     try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
@@ -5425,7 +5435,7 @@ async function init() {
                                     // disable route mode and exit it cleanly
                                     try { map.editRouteMode = false; } catch (e) {}
                                     try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
-                                    try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle) { routeToggle.setAttribute('aria-pressed','false'); routeToggle.classList.remove('pressed'); } } catch (e) {}
+                                    try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle) { routeToggle.setAttribute('aria-pressed','false'); routeToggle.classList.remove('active'); } } catch (e) {}
                                     try { const miniRoute = document.getElementById('editRouteToggleMini'); if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch(e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed','false'); } } catch (e) {}
                                 } else {
                                     try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
@@ -5443,9 +5453,9 @@ async function init() {
                         const sat = document.getElementById('tilesetSatBtn');
                         const holo = document.getElementById('tilesetHoloBtn');
                         const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (sat) { sat.classList.add('pressed'); sat.setAttribute('aria-pressed', 'true'); }
-                        if (holo) { holo.classList.remove('pressed'); holo.setAttribute('aria-pressed', 'false'); }
-                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                        if (sat) { sat.classList.add('active'); sat.setAttribute('aria-pressed', 'true'); }
+                        if (holo) { holo.classList.remove('active'); holo.setAttribute('aria-pressed', 'false'); }
+                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
                     } catch (err) {}
                     e.preventDefault();
                     return;
@@ -5455,9 +5465,9 @@ async function init() {
                         const sat = document.getElementById('tilesetSatBtn');
                         const holo = document.getElementById('tilesetHoloBtn');
                         const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (holo) { holo.classList.add('pressed'); holo.setAttribute('aria-pressed', 'true'); }
-                        if (sat) { sat.classList.remove('pressed'); sat.setAttribute('aria-pressed', 'false'); }
-                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                        if (holo) { holo.classList.add('active'); holo.setAttribute('aria-pressed', 'true'); }
+                        if (sat) { sat.classList.remove('active'); sat.setAttribute('aria-pressed', 'false'); }
+                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
                     } catch (err) {}
                     e.preventDefault();
                     return;
@@ -5465,7 +5475,7 @@ async function init() {
                     try { map.setTilesetGrayscale(!map.tilesetGrayscale); } catch (err) {}
                     try {
                         const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (gbtn) { gbtn.classList.toggle('pressed', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
+                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
                     } catch (err) {}
                     try { e.preventDefault(); } catch (err) {}
                     return;
@@ -5642,7 +5652,7 @@ async function init() {
                     hintsOverlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     // Mirror visual pressed state like other toggle buttons
-                    try { hintsToggle.classList.toggle('pressed', !!isOpen); } catch (e) {}
+                    try { hintsToggle.classList.toggle('active', !!isOpen); } catch (e) {}
                     // No map.resize() needed — overlay is outside layout flow
                 });
             }

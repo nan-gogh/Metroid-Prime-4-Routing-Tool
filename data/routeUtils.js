@@ -5,7 +5,7 @@ const RouteUtils = {
     exportRoute(map, MarkerUtils) {
         try {
             if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
-                throw new Error('No computed route to export.');
+                throw new Error('No route to export.');
             }
             const pts = [];
             for (let i = 0; i < map.currentRoute.length; i++) {
