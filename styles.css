@@ -946,12 +946,31 @@ h1, h2, h3, h4, h5, h6 {
     align-items: flex-end;
     gap: 4px;
     z-index: 50;
+    /* Make only the actual buttons catch pointer events so empty space is click-through */
+    pointer-events: none;
+}
+
+/* Re-enable pointer events on the individual buttons */
+.zoom-controls .zoom-btn {
+    pointer-events: auto;
 }
 
 .mini-row {
+    position: absolute;
+    /* place to the left of the sidebar handle; adjust if button size changes */
+    right: 44px; /* moved closer to sidebar handle */
+    bottom: 0;
     display: flex;
     flex-direction: row;
     gap: 4px;
+    /* keep the container out of pointer flow so clicks between buttons hit the map */
+    pointer-events: none;
+}
+
+/* Allow clicks through the empty areas of the mini-row so the map can be dragged
+   when clicking between buttons. Buttons remain interactive via pointer-events:auto. */
+.mini-row .zoom-btn {
+    pointer-events: auto;
 }
 
 .zoom-btn {
