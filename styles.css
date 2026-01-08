@@ -338,6 +338,9 @@ h1, h2, h3, h4, h5, h6 {
     margin-bottom: 20px;
 }
 
+/* Reduce spacing before the footer: last control group shouldn't add extra gap */
+/* (reverted experimental spacing tweak) */
+
 .control-group h3 {
     font-size: 12px;
     text-transform: uppercase;
@@ -541,7 +544,7 @@ h1, h2, h3, h4, h5, h6 {
 #saveDataToggle_label {
     width: calc(100% - 32px); /* same as .hints-toggle */
     padding: 10px 12px;
-    margin: 12px 16px 12px 16px; /* match hints-toggle margins */
+    margin: 6px 16px 6px 16px; /* match hints-toggle margins */
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -940,8 +943,15 @@ h1, h2, h3, h4, h5, h6 {
     right: 20px;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 4px;
     z-index: 50;
+}
+
+.mini-row {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
 }
 
 .zoom-btn {
@@ -982,33 +992,41 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Center the edit-route mini icon in the onscreen controls */
+/* Center edit-route icon inside its mini-toggle */
 #editRouteToggleMini .mini-icon {
-    display: inline-block;
-    transform: translateY(1px); /* nudged down */
-    line-height: 20px;
-    font-size: 18px; /* slightly larger */
-}
-#editRouteToggleMini {
-    margin-top: 12px;
+    display: block;
+    transform: none;
+    margin: 0;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 16px;
+    text-align: center;
 }
 
 /* Also center the reverse-direction mini icon */
+/* Center reverse-direction icon inside its mini-toggle */
 #toggleRouteDirMini .mini-icon {
-    display: inline-block;
-    transform: translateY(-2px);
+    display: block;
+    transform: none;
+    margin: 0;
+    width: 18px;
+    height: 18px;
     line-height: 18px;
     font-size: 16px;
+    text-align: center;
 }
 
-/* Center the edit-markers mini icon vertically */
+/* Center edit-markers icon inside its mini-toggle */
 #editMarkersToggleMini .mini-icon {
-    display: inline-block;
-    transform: translateY(0px); /* nudged slightly up from previous position */
-    line-height: 20px;
-    font-size: 20px; /* slightly larger for clarity */
-}
-#editMarkersToggleMini {
-    margin-bottom: 12px;
+    display: block;
+    transform: none;
+    margin: 0;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 16px;
+    text-align: center;
 }
 
 /* Slight nudge for the reset-view mini icon (1px) */
@@ -1085,55 +1103,41 @@ h1, h2, h3, h4, h5, h6 {
     white-space: nowrap;
 }
 
-/* Keyboard hints - overlay container (positioned above hints button)
-   Behavior:
-   - Collapsed: container stays at full opacity but only 1px tall; contents are transparent.
-   - Open: container translates up (move up) and expands to full max-height; contents fade in.
-   Timing is arranged so contents fade out first when collapsing, then the container moves down. */
-
+/* Keyboard hints - in-flow list inside the footer (expands to push content) */
 .hints-overlay {
-    position: absolute; /* positioned relative to the sidebar */
-    /* positioned flush above hints/consent area using shared variable */
-    bottom: var(--sidebar-overlay-bottom);
-    left: 0px; /* align with sidebar border */
-    width: calc(100% + 1px);
-    /* use the same base background as the sidebar so this overlay visually
-       matches and can be adjusted independently */
+    width: 100%;
+    /* use the same base background as the sidebar so this list visually matches */
     background: var(--sidebar-bg);
-    border-right: 1px solid #0e4a6e;
-    border-top: 1px solid #0e4a6e;
-    z-index: 250; /* sit above sidebar background but below interactive buttons */
+    /* no border for a cleaner hints box */
+    border-top: none;
+    z-index: 250; /* sit above sidebar background but below footer buttons */
     display: block;
-    overflow: hidden; /* hide content during collapsed state */
+    overflow: hidden; /* collapse when closed */
     pointer-events: none;
-    opacity: 1; /* container stays visible even when collapsed */
-    max-height: 1px; /* collapsed to a 1px high strip */
-    clip-path: inset(calc(100% - 1px) 0 0 0);
-    -webkit-clip-path: inset(calc(100% - 1px) 0 0 0);
-    transition: clip-path 220ms ease 80ms, -webkit-clip-path 220ms ease 80ms, max-height 220ms ease 80ms, opacity 120ms ease 0ms;
-    will-change: clip-path, max-height, opacity;
+    opacity: 0; /* visually hidden when closed */
+    max-height: 0; /* collapsed */
+    transition: max-height 260ms cubic-bezier(.2,.9,.18,1), opacity 150ms ease;
+    will-change: max-height, opacity;
 }
 
-.hints-overlay.open {
-    /* Opening: reveal via clip-path from bottom to full height */
-    clip-path: inset(0 0 0 0);
-    -webkit-clip-path: inset(0 0 0 0);
-    max-height: calc(100vh - var(--sidebar-footer-height)); /* viewport-aware height, leaves space for footer */
+.hints-overlay.open,
+.hints-overlay.visible {
+    opacity: 1;
     pointer-events: auto;
     overflow-y: auto;
-    transition: clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, -webkit-clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, max-height 220ms cubic-bezier(.2,.9,.18,1) 0ms, opacity 120ms ease 0ms;
+    /* limit to a comfortable size relative to viewport */
+    max-height: min(60vh, calc(100vh - var(--sidebar-footer-height)));
+    height: auto; /* fallback */
 }
 
-/* Footer container at bottom of sidebar */
+/* Footer container at bottom of sidebar — now in-flow so toggles push content */
 .sidebar-footer {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--sidebar-footer-height);
+    position: relative;
+    width: 100%;
+    min-height: var(--sidebar-footer-height);
     background: var(--sidebar-bg);
     border-top: 1px solid #0e4a6e;
-    z-index: 300; /* above sidebar background */
+    z-index: 300; /* keep above sidebar background */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1147,30 +1151,13 @@ h1, h2, h3, h4, h5, h6 {
     position: relative;
     z-index: 310;
     width: calc(100% - 32px);
-    margin: 6px 16px;
 }
 
 .hints-overlay.closed {
-    /* Explicit closed state: collapse back to 1px strip (clip-path) */
-    clip-path: inset(calc(100% - 1px) 0 0 0);
-    -webkit-clip-path: inset(calc(100% - 1px) 0 0 0);
-    max-height: 1px;
+    /* Explicit closed state: collapse */
+    max-height: 0;
     pointer-events: none;
     overflow: hidden;
-}
-
-.hints-overlay.visible {
-    /* Support the existing JS which toggles the `visible` class.
-       Make `.visible` equivalent to `.open` so the overlay reveals via clip-path,
-       expands, and becomes interactive. */
-    clip-path: inset(0 0 0 0);
-    -webkit-clip-path: inset(0 0 0 0);
-    max-height: calc(100vh - var(--sidebar-footer-height));
-    pointer-events: auto;
-    overflow-y: auto;
-    opacity: 1;
-    transition: clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, -webkit-clip-path 220ms cubic-bezier(.2,.9,.18,1) 0ms, max-height 220ms cubic-bezier(.2,.9,.18,1) 0ms, opacity 120ms ease 0ms;
-    height: auto; /* fallback for browsers that don't apply clip-path */
 }
 
 /* When sidebar is collapsed, hint overlay is hidden entirely */
@@ -1179,17 +1166,6 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
 }
 
-.hints-list {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 11px;
-    color: #a0c4d8;
-    opacity: 0; /* contents hidden when overlay is collapsed */
-    transition: opacity 180ms ease; /* fade in/out */
-    pointer-events: none; /* disable interactions when hidden */
-}
 
 /* Hide native scrollbars but keep scrolling functional */
 .hints-overlay {
@@ -1228,6 +1204,42 @@ kbd {
     font-size: 11px;
 }
 
+/* Right-align hint text (labels) while keeping command keys on the left */
+.hint-label {
+    margin-left: auto;
+    text-align: right;
+}
+
+/* Decorative connector line between key(s) and label */
+.hint-group {
+    position: relative;
+}
+.hint-group::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(160,196,216,0.06), rgba(160,196,216,0.14), rgba(160,196,216,0.06));
+    transform: translateY(-50%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* Ensure keys and labels sit above the connector and mask it where they overlap */
+.hint-group kbd,
+.hint-group .hint-label {
+    position: relative;
+    z-index: 1;
+}
+
+/* Give label a matching footer background so it masks the connector cleanly */
+.hint-group .hint-label {
+    background: var(--sidebar-bg);
+    padding: 0 8px;
+}
+
 /* Small inline icon used inside hint-group (e.g. pin SVG) */
 .hint-icon {
     width: 12px;
@@ -1241,7 +1253,7 @@ kbd {
 .hints-toggle {
     width: calc(100% - 32px); /* account for 16px left + 16px right margin */
     padding: 10px 12px;
-    margin: 12px 16px 12px 16px;
+    margin: 20px 16px 6px 16px;
     background: linear-gradient(135deg, #0d4a6e 0%, #0a2f47 100%);
     border: 1px solid #269cdc;
     color: #22d3ee;
@@ -1265,6 +1277,8 @@ kbd {
     border-color: #22d3ee;
     box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
 }
+
+/* (removed temporary adjacent-sibling hack during investigation) */
 
 .hints-toggle:active {
     transform: scale(0.98);
@@ -1295,11 +1309,15 @@ kbd {
 
 /* Collapsible hints list (fully hidden by default, expands when visible) */
 .hints-list {
-    overflow: hidden;
+    padding: 6px 16px 16px; /* remove top padding; rely on footer spacing */
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
-    pointer-events: none; /* default to none; enabled when overlay is open */
+    font-size: 11px;
+    color: #a0c4d8;
+    opacity: 0; /* contents hidden when collapsed */
+    transition: opacity 180ms ease; /* fade in/out */
+    pointer-events: none; /* disable interactions when hidden */
 }
 
 .hints-overlay.open .hints-list,
@@ -1389,6 +1407,30 @@ kbd {
     font-size: 12px;
 }
 
+/* Decorative connector line between dev stat label and value (masked under label/value) */
+.dev-row {
+    position: relative;
+}
+.dev-row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(160,196,216,0.06), rgba(160,196,216,0.14), rgba(160,196,216,0.06));
+    transform: translateY(-50%);
+    z-index: 0;
+    pointer-events: none;
+}
+.dev-row .dev-label,
+.dev-row .dev-value {
+    position: relative;
+    z-index: 1;
+    background: var(--sidebar-bg);
+    padding: 0 8px;
+}
+
 /* Mobile: smaller handle, adjust positioning */
 /* Mobile: smaller handle, adjust positioning (small-screen breakpoint removed) */
 /* Previously contained an @media (max-width: 720px) breakpoint that resized
@@ -1449,4 +1491,11 @@ kbd {
     position: relative !important;
     left: auto !important;
     top: auto !important;
+}
+
+/* When the hints overlay is collapsed, reduce the Hints button top
+   margin so the footer doesn't leave a large empty gap. This is a
+   conservative, local fix that only applies when the overlay is closed. */
+.sidebar-footer .hints-overlay.closed + .hints-toggle {
+    margin-top: 6px;
 }

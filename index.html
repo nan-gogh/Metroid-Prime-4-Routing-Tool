@@ -116,17 +116,7 @@
             
             <!-- Footer: contains hints and consent (kept at bottom of sidebar) -->
             <div class="sidebar-footer">
-                <!-- Hints button at bottom of controls (closed by default) -->
-                <button id="hintsToggleBtn" class="hints-toggle control-toggle" aria-expanded="false" aria-controls="hintsList" aria-pressed="false">Controls</button>
-
-                <!-- Local Storage (consent) toggle -->
-                <button type="button" class="control-toggle" id="saveDataToggle_label" aria-pressed="false">
-                    <div class="layer-info">
-                        <div class="layer-name">Local Storage Consent</div>
-                    </div>
-                </button>
-
-                <!-- Hints overlay: positioned above footer (hidden by default) -->
+                <!-- Hints overlay: moved to be part of the footer (hidden by default) -->
                 <div class="hints-overlay" id="hintsOverlay" aria-hidden="true">
                     <div class="hints-list" id="hintsList">
                         <span class="hint-group"><kbd>E</kbd>/<kbd>⇡</kbd> <span class="hint-label">Edit Route</span></span>
@@ -143,13 +133,23 @@
                         <span class="hint-group"><kbd>Shift</kbd> <span class="hint-label">Dash</span></span>
                         <span class="hint-group"><kbd>0</kbd>/<kbd>⛶</kbd> <span class="hint-label">Reset View</span></span>
 
-                        <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> <span class="hint-label">Satellite / Holo / Grayscale</span></span>
+                        <span class="hint-group"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> <span class="hint-label">Mapstyle / Grayscale</span></span>
 
                         <span class="hint-group"><kbd>Escape</kbd> <span class="hint-label">Exit Edit Modes</span></span>
 
                         <span class="hint-group"><kbd>Space</kbd>/<kbd>☰</kbd> <span class="hint-label">Toggle sidebar</span></span>
                     </div>
                 </div>
+
+                <!-- Hints button at bottom of controls (closed by default) -->
+                <button id="hintsToggleBtn" class="hints-toggle control-toggle" aria-expanded="false" aria-controls="hintsList" aria-pressed="false">Controls</button>
+
+                <!-- Local Storage (consent) toggle -->
+                <button type="button" class="control-toggle" id="saveDataToggle_label" aria-pressed="false">
+                    <div class="layer-info">
+                        <div class="layer-name">Local Storage Consent</div>
+                    </div>
+                </button>
             </div>
 
         </aside>
@@ -163,18 +163,20 @@
             <div id="editOverlay" class="edit-overlay" aria-hidden="true"></div>
             
             <div class="zoom-controls">
-                <button id="editRouteToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Route" aria-label="Edit Route">
-                    <span class="mini-icon">⇡</span>
-                </button>
-                <button id="computeRouteNearbyMini" class="zoom-btn" title="Expand Route" aria-label="Expand Route"><span class="mini-icon">↔</span></button>
-                <button id="toggleRouteDirMini" class="zoom-btn" title="Reverse Route" aria-label="Reverse Route"><span class="mini-icon">⇄</span></button>
-                <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers" aria-label="Edit Markers">
-                    <span class="mini-icon">⚲</span>
-                </button>
                 <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
                 <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
                 <button class="zoom-btn" id="resetView" title="Reset View" aria-label="Reset View"><span class="mini-icon">⛶</span></button>
-                <button class="zoom-btn" id="sidebarHandle" title="Toggle sidebar" aria-label="Toggle sidebar" ><span class="mini-icon">☰</span></button>
+                <div class="mini-row">
+                    <button id="editRouteToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Route" aria-label="Edit Route">
+                        <span class="mini-icon">⇡</span>
+                    </button>
+                    <button id="computeRouteNearbyMini" class="zoom-btn" title="Expand Route" aria-label="Expand Route"><span class="mini-icon">↔</span></button>
+                    <button id="toggleRouteDirMini" class="zoom-btn" title="Reverse Route" aria-label="Reverse Route"><span class="mini-icon">⇄</span></button>
+                    <button id="editMarkersToggleMini" class="zoom-btn" aria-pressed="false" title="Edit Markers" aria-label="Edit Markers">
+                        <span class="mini-icon">⚲</span>
+                    </button>
+                    <button class="zoom-btn" id="sidebarHandle" title="Toggle sidebar" aria-label="Toggle sidebar" ><span class="mini-icon">☰</span></button>
+                </div>
             </div>
         </main>
     </div>

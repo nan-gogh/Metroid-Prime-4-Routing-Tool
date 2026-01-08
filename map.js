@@ -5320,6 +5320,8 @@ async function init() {
                 const hintsToggle = document.getElementById('hintsToggleBtn');
                 if (hintsOverlay) {
                     hintsOverlay.classList.remove('visible');
+                    // Mark closed explicitly so CSS can target the closed state
+                    try { hintsOverlay.classList.add('closed'); } catch (e) {}
                     hintsOverlay.setAttribute('aria-hidden', 'true');
                 }
                 if (hintsToggle) {
@@ -5648,12 +5650,14 @@ async function init() {
             if (hintsToggle && hintsOverlay && hintsList) {
                 hintsToggle.addEventListener('click', () => {
                     const isOpen = hintsOverlay.classList.toggle('visible');
+                    // Keep an explicit "closed" class so CSS can easily target the closed state
+                    try { hintsOverlay.classList.toggle('closed', !isOpen); } catch (e) {}
                     hintsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
                     hintsOverlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     // Mirror visual pressed state like other toggle buttons
                     try { hintsToggle.classList.toggle('active', !!isOpen); } catch (e) {}
-                    // No map.resize() needed — overlay is outside layout flow
+                    // No map.resize() needed — the hints list is now in-flow inside the footer
                 });
             }
         } catch (e) {}
