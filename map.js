@@ -2397,6 +2397,7 @@ class InteractiveMap {
                 const buckets = new Array(cols * rows);
                 for (let i = 0; i < buckets.length; i++) buckets[i] = [];
                 try {
+                    const greenKeys = GREEN_CRYSTAL_LAYERS;
                     greenKeys.forEach(k => {
                         const layer = LAYERS[k];
                         if (layer && Array.isArray(layer.markers)) {
@@ -2409,7 +2410,7 @@ class InteractiveMap {
                             });
                         }
                     });
-                } catch (e) {}
+                } catch (e) { console.debug('renderDetailGrid: failed to build heatmap buckets', e); }
 
                 // For each cell with markers, compute the target total alpha and split it across markers
                 for (let idx = 0; idx < buckets.length; idx++) {
@@ -2507,9 +2508,9 @@ class InteractiveMap {
             const cols = 8, rows = 8;
             const buckets = new Array(cols * rows);
             for (let i = 0; i < buckets.length; i++) buckets[i] = [];
-            const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
             try {
                 if (typeof LAYERS !== 'undefined') {
+                    const greenKeys = GREEN_CRYSTAL_LAYERS;
                     greenKeys.forEach(k => {
                         const layer = LAYERS[k];
                         if (layer && Array.isArray(layer.markers)) {
@@ -2523,7 +2524,7 @@ class InteractiveMap {
                         }
                     });
                 }
-            } catch (e) {}
+            } catch (e) { console.debug('renderHeatmap: failed to build buckets', e); }
 
             // Compute maxCount for mapping range
             const counts = buckets.map(b => b.length);
@@ -4022,7 +4023,7 @@ async function init() {
                     const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
                     const pad = Math.max(2, Math.round(fontSize * 0.18));
                     // Precompute counts of green crystal markers per cell (8x8)
-                    const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
+                    const greenKeys = GREEN_CRYSTAL_LAYERS;
                     const counts = new Array(cols * rows).fill(0);
                     try {
                         if (typeof LAYERS !== 'undefined') {
@@ -4039,7 +4040,7 @@ async function init() {
                                 }
                             });
                         }
-                    } catch (e) { /* non-fatal */ }
+                    } catch (e) { console.debug('updateGridQuadLabels: failed to compute counts', e); }
 
                     for (let i = 0; i < labels.length; i++) {
                         const el = labels[i];
