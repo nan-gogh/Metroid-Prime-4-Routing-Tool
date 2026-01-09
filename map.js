@@ -55,6 +55,27 @@ class InteractiveMap {
                     this.routeRenderer
                 ].filter(Boolean));
             }
+
+            // Phase 2: input and state scaffolds
+            try {
+                if (typeof MapState !== 'undefined') this._state = new MapState();
+                if (typeof SelectionState !== 'undefined') this._selection = new SelectionState();
+                if (typeof RouteState !== 'undefined') this._routeState = new RouteState();
+                if (typeof LayerState !== 'undefined') this._layerState = new LayerState(Object.keys(LAYERS || {}));
+
+                if (typeof PointerHandler !== 'undefined') {
+                    this.pointerHandler = new PointerHandler(this, MP4Config);
+                    try { this.pointerHandler.init(); } catch (e) { console.debug('PointerHandler.init failed', e); }
+                }
+                if (typeof KeyboardHandler !== 'undefined') {
+                    this.keyboardHandler = new KeyboardHandler(this, MP4Config);
+                    try { this.keyboardHandler.init(); } catch (e) { console.debug('KeyboardHandler.init failed', e); }
+                }
+                if (typeof GestureHandler !== 'undefined') {
+                    this.gestureHandler = new GestureHandler(this, MP4Config);
+                    try { this.gestureHandler.init(); } catch (e) { console.debug('GestureHandler.init failed', e); }
+                }
+            } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', e); }
         } catch (e) { console.debug('InteractiveMap: renderer scaffolding setup failed', e); }
         // Map state
         this.zoom = DEFAULT_ZOOM;
