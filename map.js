@@ -65,14 +65,14 @@ class InteractiveMap {
                 this._lowSpec = true;
                 this._bitmapLimit = 1;
             }
-        } catch (e) {}
+        } catch (e) { console.debug('InteractiveMap: device detection failed', e); }
 
     // Loop Route toggle: explicit control for closing/opening computed/manual routes
     try {
         const loopBtn = document.getElementById('loopRouteBtn');
         const updateLoopUI = () => {
             if (!loopBtn) return;
-            try { loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false'); } catch (e) {}
+            try { loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false'); } catch (e) { console.debug('updateLoopUI: failed to set aria-pressed', e); }
         };
         if (loopBtn) {
             loopBtn.addEventListener('click', () => {
@@ -81,15 +81,15 @@ class InteractiveMap {
                     if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                         window._mp4Storage.saveSetting('mp4_route_looping_flag', map.routeLooping ? '1' : '0');
                     } else {
-                        try { localStorage.setItem('mp4_route_looping_flag', map.routeLooping ? '1' : '0'); } catch (e) {}
+                        try { localStorage.setItem('mp4_route_looping_flag', map.routeLooping ? '1' : '0'); } catch (e) { console.debug('loopRoute: failed to write localStorage', e); }
                     }
-                } catch (e) {}
-                try { map.render(); } catch (e) {}
+                } catch (e) { console.debug('loopRoute: failed to persist loop flag', e); }
+                try { map.render(); } catch (e) { console.debug('loopRoute: failed to request render', e); }
                 updateLoopUI();
             });
         }
         updateLoopUI();
-    } catch (e) {}
+    } catch (e) { console.debug('InteractiveMap: loop controls initialization failed', e); }
         
         // Markers
         this.markers = [];
@@ -241,21 +241,21 @@ class InteractiveMap {
                     try {
                         if (window.fetch && window.createImageBitmap) {
                             const controller = new AbortController();
-                            try { this._imageControllers[i] = controller; } catch (e) {}
+                            try { this._imageControllers[i] = controller; } catch (e) { console.debug('tileLoader: failed to set _imageControllers[' + i + ']', e); }
                             const resp = await fetch(href, { signal: controller.signal });
-                            try { delete this._imageControllers[i]; } catch (e) {}
+                            try { delete this._imageControllers[i]; } catch (e) { console.debug('tileLoader: failed to delete _imageControllers[' + i + ']', e); }
                             if (!resp.ok) throw new Error('fetch-failed');
                             const blob = await resp.blob();
                             // Generation may have changed while fetching
                             if (this._tilesetGeneration !== gen) { return; }
                             const bmp = await createImageBitmap(blob);
-                            try { bmp._tilesetFolder = folder; } catch (e) {}
+                            try { bmp._tilesetFolder = folder; } catch (e) { console.debug('tileLoader: failed to tag ImageBitmap with tileset folder', e); }
                             if (this._tilesetGeneration === gen) {
-                                try { this._imageBitmaps[i] = bmp; } catch (e) {}
-                                try { this.images[i] = bmp; } catch (e) {}
+                                try { this._imageBitmaps[i] = bmp; } catch (e) { console.debug('tileLoader: failed to store ImageBitmap in _imageBitmaps[' + i + ']', e); }
+                                try { this.images[i] = bmp; } catch (e) { console.debug('tileLoader: failed to set images[' + i + ']', e); }
                             } else {
-                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
-                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
+                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { console.debug('tileLoader: failed to close stale ImageBitmap', e); }
+                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { console.debug('tileLoader: failed to close stale ImageBitmap (2)', e); }
                             }
                             return;
                         }
@@ -268,14 +268,14 @@ class InteractiveMap {
                     try {
                         const img = new Image();
                         try { img._tilesetFolder = folder; } catch (e) {}
-                        try { this._imageElements[i] = img; } catch (e) {}
+                        try { this._imageElements[i] = img; } catch (e) { console.debug('tileLoader: failed to set _imageElements[' + i + ']', e); }
                         img.onload = () => {
                             try {
                                 if (this._tilesetGeneration !== gen) {
                                     try { img.onload = null; img.onerror = null; img.src = ''; } catch (e) {}
                                     return;
                                 }
-                                try { this.images[i] = img; } catch (e) {}
+                                try { this.images[i] = img; } catch (e) { console.debug('tileLoader: failed to set images[' + i + ']', e); }
                             } catch (e) {}
                         };
                         img.onerror = () => {
@@ -2368,7 +2368,7 @@ class InteractiveMap {
         // Optional green-crystal heatmap (draw into heatmap canvas, above tiles)
         if (this._showGridHeatmap && this.ctxHeatmap) {
             try {
-                const cols = 8, rows = 8;
+                const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
                 const counts = new Array(cols * rows).fill(0);
                 const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
                 if (typeof LAYERS !== 'undefined') {
@@ -2423,8 +2423,7 @@ class InteractiveMap {
                     const t = Math.pow(tRaw, gamma);
 
                     // HSL hue shifts with t (yellow-green -> green)
-                    const hueLow = 90; const hueHigh = 130;
-                    const hue = Math.round(hueLow + (hueHigh - hueLow) * t);
+                    const hue = Math.round(MP4Config.HEATMAP.HUE_RANGE.MIN + (MP4Config.HEATMAP.HUE_RANGE.MAX - MP4Config.HEATMAP.HUE_RANGE.MIN) * t);
                     const sat = 100; // max saturation
                     const light = 55; // fixed lightness
 
@@ -2505,7 +2504,7 @@ class InteractiveMap {
             // Clear previous heatmap
             try { this.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
             if (!this._showGridHeatmap) return;
-            const cols = 8, rows = 8;
+            const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
             const buckets = new Array(cols * rows);
             for (let i = 0; i < buckets.length; i++) buckets[i] = [];
             try {
@@ -2543,8 +2542,7 @@ class InteractiveMap {
                 const gamma = 0.6;
                 const t = Math.pow(tRaw, gamma);
                 // Hue mapping
-                const hueLow = 90; const hueHigh = 130;
-                const hue = Math.round(hueLow + (hueHigh - hueLow) * t);
+                const hue = Math.round(MP4Config.HEATMAP.HUE_RANGE.MIN + (MP4Config.HEATMAP.HUE_RANGE.MAX - MP4Config.HEATMAP.HUE_RANGE.MIN) * t);
                 const sat = 100;
                 const light = 55;
                 // alpha mapping per cell
@@ -3956,7 +3954,7 @@ async function init() {
                     if (!parent) return;
                     // (debug logs removed)
                     // Ensure parent is positioned so absolute children align
-                    try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) {}
+                    try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) { console.debug('grid labels init: failed to set parent position', e); }
                     // Container for labels
                     let container = parent.querySelector('#gridQuadLabels');
                     if (!container) {
@@ -3970,8 +3968,8 @@ async function init() {
                         // (debug logs removed)
                     }
                     container.innerHTML = '';
-                    // Create 8x8 labels A-H (columns) x 1-8 (rows)
-                    const cols = 8, rows = 8;
+                    // Create label grid using configured columns/rows
+                    const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
                     for (let r = 0; r < rows; r++) {
                         for (let c = 0; c < cols; c++) {
                             const colLetter = String.fromCharCode(65 + c); // A..H
@@ -4011,8 +4009,8 @@ async function init() {
                     container.style.display = shouldShow ? 'block' : 'none';
                     // Inline heatmap toggle removed; sidebar control manages heatmap state.
                     if (!shouldShow) return;
-                    const cols = 8, rows = 8;
-                    const gridSpacing = MAP_SIZE / 8; // matches renderDetailGrid
+                    const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
+                    const gridSpacing = MAP_SIZE / MP4Config.GRID.COLS; // matches renderDetailGrid
                     const cssWidth = this.canvas.clientWidth;
                     const cssHeight = this.canvas.clientHeight;
                     // Position each label in its cell center
