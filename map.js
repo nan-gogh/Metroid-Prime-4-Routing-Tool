@@ -2550,82 +2550,12 @@ class InteractiveMap {
 
     // Draw standalone heatmap into the dedicated heatmap canvas (independent of grid layer visibility)
     renderHeatmap() {
-        if (!this.ctxHeatmap || !this.canvasHeatmap) return;
-        try {
-            const cssWidth = this.canvas.clientWidth;
-            const cssHeight = this.canvas.clientHeight;
-            // Clear previous heatmap
-            try { this.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
-            if (!this._showGridHeatmap) return;
-            const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-            const buckets = new Array(cols * rows);
-            for (let i = 0; i < buckets.length; i++) buckets[i] = [];
-            try {
-                if (typeof LAYERS !== 'undefined') {
-                    const greenKeys = GREEN_CRYSTAL_LAYERS;
-                    greenKeys.forEach(k => {
-                        const layer = LAYERS[k];
-                        if (layer && Array.isArray(layer.markers)) {
-                            layer.markers.forEach(m => {
-                                const mx = Number(m.x); const my = Number(m.y);
-                                if (!isFinite(mx) || !isFinite(my)) return;
-                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                                buckets[rr * cols + cc].push({mx, my});
-                            });
-                        }
-                    });
-                }
-            } catch (e) { console.debug('renderHeatmap: failed to build buckets', e); }
-
-            // Compute maxCount for mapping range
-            const counts = buckets.map(b => b.length);
-            const maxCount = Math.max(1, ...counts);
-            const rangeMin = 1;
-            const rangeMax = Math.max(16, maxCount || 16);
-
-            const hmCtx = this.ctxHeatmap;
-            hmCtx.save();
-            for (let idx = 0; idx < buckets.length; idx++) {
-                const markers = buckets[idx];
-                const cnt = markers.length;
-                if (!cnt) continue;
-                // Normalize and gamma
-                const tRaw = Math.min(1, Math.max(0, (cnt - rangeMin) / (rangeMax - rangeMin)));
-                const gamma = 0.6;
-                const t = Math.pow(tRaw, gamma);
-                // Hue mapping
-                const hue = Math.round(MP4Config.HEATMAP.HUE_RANGE.MIN + (MP4Config.HEATMAP.HUE_RANGE.MAX - MP4Config.HEATMAP.HUE_RANGE.MIN) * t);
-                const sat = 100;
-                const light = 55;
-                // alpha mapping per cell
-                const alphaMin = 0.1; const alphaMax = 1; const steps = 5;
-                const ratioForAlpha = Math.min(1, Math.max(0, (cnt - 1) / steps));
-                const targetAlpha = Math.max(alphaMin, Math.min(alphaMax, alphaMin + ratioForAlpha * (alphaMax - alphaMin)));
-                const perMarkerAlpha = Math.max(0.01, targetAlpha / cnt);
-
-                // Draw per-marker blobs
-                for (let m of markers) {
-                    try {
-                        const screenX = m.mx * MAP_SIZE * this.zoom + this.panX;
-                        const screenY = m.my * MAP_SIZE * this.zoom + this.panY;
-                        if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
-                        const radius = Math.max(8, Math.round((MAP_SIZE / 8) * this.zoom * 0.45));
-                        const cx = Math.round(screenX);
-                        const cy = Math.round(screenY);
-                        const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-                        g.addColorStop(0.0, `hsla(${hue}, ${sat}%, ${light}%, ${perMarkerAlpha})`);
-                        g.addColorStop(0.5, `hsla(${hue}, ${sat}%, ${light}%, ${Math.max(0.02, perMarkerAlpha * 0.6)})`);
-                        g.addColorStop(1.0, `hsla(${hue}, ${sat}%, ${light}%, 0)`);
-                        hmCtx.globalCompositeOperation = 'lighter';
-                        hmCtx.fillStyle = g;
-                        hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-                        hmCtx.globalCompositeOperation = 'source-over';
-                    } catch (e) {}
-                }
-            }
-            hmCtx.restore();
-        } catch (e) { /* non-fatal */ }
+        // Delegate to HeatmapRenderer when available (Phase 2 migration)
+        if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') {
+            try { this.heatmapRenderer.render(); } catch (e) { console.debug('map.renderHeatmap: heatmapRenderer.render failed', e); }
+            return;
+        }
+        // Fallback: no-op
     }
     
     // Draw axis index labels for the 8x8 grid
