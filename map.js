@@ -19,6 +19,10 @@ class InteractiveMap {
         // context and leave the overlay for routes/markers.
         this.canvasTiles = document.getElementById('mapTiles');
         this.ctxTiles = this.canvasTiles ? this.canvasTiles.getContext('2d') : null;
+        // Heatmap canvas (optional) sits above tiles but beneath overlay markers
+        this.canvasHeatmap = document.getElementById('heatmapCanvas');
+        this.ctxHeatmap = this.canvasHeatmap ? this.canvasHeatmap.getContext('2d') : null;
+        this._showGridHeatmap = false; // runtime state (persisted via storage)
         
         // Map state
         this.zoom = DEFAULT_ZOOM;
@@ -178,6 +182,16 @@ class InteractiveMap {
             }
             this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
         } catch (e) { this.tilesetGrayscale = false; }
+        // Optional grid heatmap flag; persisted as 'mp4_grid_heatmap'
+        try {
+            let gh = null;
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                gh = window._mp4Storage.loadSetting('mp4_grid_heatmap');
+            } else {
+                try { gh = localStorage.getItem('mp4_grid_heatmap'); } catch (e) { gh = null; }
+            }
+            this._showGridHeatmap = (gh === '1' || gh === 1 || gh === true);
+        } catch (e) { this._showGridHeatmap = false; }
         
         // Setup
         this.resize();
@@ -297,10 +311,21 @@ class InteractiveMap {
             this.canvasTiles.height = Math.max(1, Math.floor(cssHeight * dpr));
         }
 
+        // Size heatmap canvas if present
+        if (this.canvasHeatmap && this.ctxHeatmap) {
+            this.canvasHeatmap.style.width = cssWidth + 'px';
+            this.canvasHeatmap.style.height = cssHeight + 'px';
+            this.canvasHeatmap.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasHeatmap.height = Math.max(1, Math.floor(cssHeight * dpr));
+        }
+
         // Scale drawing so we can use CSS pixels in drawing code
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (this.ctxTiles) {
             try { this.ctxTiles.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
+        }
+        if (this.ctxHeatmap) {
+            try { this.ctxHeatmap.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
         }
         // compute a device-aware minimum zoom so smallest resolution can be reached
         const minRes = RESOLUTIONS[0];
@@ -1625,7 +1650,28 @@ class InteractiveMap {
             try { this.renderTiles(); } catch (e) {}
         } catch (e) {}
     }
-    
+
+    // Toggle and persist the grid heatmap overlay
+    setGridHeatmap(enabled) {
+        enabled = !!enabled;
+        if (this._showGridHeatmap === enabled) return;
+        this._showGridHeatmap = enabled;
+        try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_grid_heatmap', this._showGridHeatmap ? '1' : '0'); /* do not write without consent/helper */ } catch (e) {}
+        try {
+            // Redraw the full overlay so we clear any previously painted heatmap pixels
+            try { this.renderOverlay(); } catch (e) {}
+            // Inline heatmap toggle removed; nothing to update here.
+            // Update sidebar button state if present
+            try {
+                const btn = document.getElementById('gridHeatmapBtn');
+                if (btn) {
+                    btn.classList.toggle('active', this._showGridHeatmap);
+                    btn.setAttribute('aria-pressed', this._showGridHeatmap ? 'true' : 'false');
+                }
+            } catch (e) {}
+        } catch (e) {}
+    }
+
     getNeededResolution() {
         // Calculate displayed size of the map on screen in CSS pixels
         const displayedCss = MAP_SIZE * this.zoom;
@@ -2190,6 +2236,11 @@ class InteractiveMap {
             if (typeof this._updateGridQuadLabels === 'function') this._updateGridQuadLabels();
         } catch (e) { /* _updateGridQuadLabels failed (suppressed) */ }
 
+        // Render heatmap independently of the grid layer visibility so it adapts to zoom/pan even when grid is off
+        try {
+            if (this._showGridHeatmap) this.renderHeatmap();
+        } catch (e) {}
+
         // Draw markers from all visible layers onto the overlay canvas
         this.renderMarkers();
 
@@ -2303,9 +2354,112 @@ class InteractiveMap {
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
         const gridSpacing = MAP_SIZE / 8;
         
+        // Clear heatmap backing canvas so it doesn't accumulate between draws
+        try {
+            if (this.ctxHeatmap && this.canvasHeatmap) {
+                this.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight);
+            }
+        } catch (e) {}
+        
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
         const opacity = Math.min(0.4, 0.05 + this.zoom * 0.3);
+
+        // Optional green-crystal heatmap (draw into heatmap canvas, above tiles)
+        if (this._showGridHeatmap && this.ctxHeatmap) {
+            try {
+                const cols = 8, rows = 8;
+                const counts = new Array(cols * rows).fill(0);
+                const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
+                if (typeof LAYERS !== 'undefined') {
+                    greenKeys.forEach(k => {
+                        const layer = LAYERS[k];
+                        if (layer && Array.isArray(layer.markers)) {
+                            layer.markers.forEach(m => {
+                                const mx = Number(m.x); const my = Number(m.y);
+                                if (!isFinite(mx) || !isFinite(my)) return;
+                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
+                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
+                                counts[rr * cols + cc]++;
+                            });
+                        }
+                    });
+                }
+                const maxCount = Math.max(1, ...counts);
+                const hmCtx = this.ctxHeatmap;
+                hmCtx.save();
+                // draw heatmap cells into the dedicated canvas; CSS `mix-blend-mode: screen` is used to composite with tiles beneath
+                hmCtx.globalCompositeOperation = 'source-over';
+                // Map counts (1..16) into a more visible green ramp using HSL and a gamma curve
+                const rangeMin = 1;
+                const rangeMax = Math.max(16, maxCount || 16);
+                // Build buckets of markers per 8x8 cell so we can draw a soft radial blob per marker (lighter and more organic)
+                const buckets = new Array(cols * rows);
+                for (let i = 0; i < buckets.length; i++) buckets[i] = [];
+                try {
+                    greenKeys.forEach(k => {
+                        const layer = LAYERS[k];
+                        if (layer && Array.isArray(layer.markers)) {
+                            layer.markers.forEach(m => {
+                                const mx = Number(m.x); const my = Number(m.y);
+                                if (!isFinite(mx) || !isFinite(my)) return;
+                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
+                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
+                                buckets[rr * cols + cc].push({mx, my});
+                            });
+                        }
+                    });
+                } catch (e) {}
+
+                // For each cell with markers, compute the target total alpha and split it across markers
+                for (let idx = 0; idx < buckets.length; idx++) {
+                    const markers = buckets[idx];
+                    const cnt = markers.length;
+                    if (!cnt) continue;
+                    // Normalize in [0..1] relative to expected range (1..16)
+                    const tRaw = Math.min(1, Math.max(0, (cnt - rangeMin) / (rangeMax - rangeMin)));
+                    const gamma = 0.6;
+                    const t = Math.pow(tRaw, gamma);
+
+                    // HSL hue shifts with t (yellow-green -> green)
+                    const hueLow = 90; const hueHigh = 130;
+                    const hue = Math.round(hueLow + (hueHigh - hueLow) * t);
+                    const sat = 100; // max saturation
+                    const light = 55; // fixed lightness
+
+                    // Target alpha for the whole cell (raised to improve visibility)
+                    const alphaMin = 0.01; const alphaMax = 0.75; const steps = 15;
+                    const ratioForAlpha = Math.min(1, Math.max(0, (cnt - 1) / steps));
+                    const targetAlpha = Math.max(alphaMin, Math.min(alphaMax, alphaMin + ratioForAlpha * (alphaMax - alphaMin)));
+                    // Split alpha among markers and apply a slight boost so individual blobs are more visible
+                    const alphaBoost = 1.4;
+                    const perMarkerAlpha = Math.min(alphaMax, Math.max(0.01, (targetAlpha * alphaBoost) / cnt));
+
+                    // Draw a radial gradient for each marker (smaller radius for less blur)
+                    for (let m of markers) {
+                        try {
+                            const screenX = m.mx * MAP_SIZE * this.zoom + this.panX;
+                            const screenY = m.my * MAP_SIZE * this.zoom + this.panY;
+                            // Skip off-screen markers early
+                            if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
+                            const radius = Math.max(8, Math.round((MAP_SIZE / 8) * this.zoom * 0.45));
+                            const cx = Math.round(screenX);
+                            const cy = Math.round(screenY);
+                            const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+                            g.addColorStop(0.0, `hsla(${hue}, ${sat}%, ${light}%, ${perMarkerAlpha})`);
+                            g.addColorStop(0.5, `hsla(${hue}, ${sat}%, ${light}%, ${Math.max(0.02, perMarkerAlpha * 0.6)})`);
+                            g.addColorStop(1.0, `hsla(${hue}, ${sat}%, ${light}%, 0)`);
+                            hmCtx.globalCompositeOperation = 'lighter';
+                            hmCtx.fillStyle = g;
+                            hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+                            hmCtx.globalCompositeOperation = 'source-over';
+                        } catch (e) {}
+                    }
+                }
+                hmCtx.restore();
+            } catch (e) { /* non-fatal */ }
+        }
+
         // Cyan gridlines for both satellite and holo views
         ctx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
         ctx.lineWidth = 1;
@@ -2339,6 +2493,87 @@ class InteractiveMap {
         }
         
         this.renderAxisLabels();
+    }
+
+    // Draw standalone heatmap into the dedicated heatmap canvas (independent of grid layer visibility)
+    renderHeatmap() {
+        if (!this.ctxHeatmap || !this.canvasHeatmap) return;
+        try {
+            const cssWidth = this.canvas.clientWidth;
+            const cssHeight = this.canvas.clientHeight;
+            // Clear previous heatmap
+            try { this.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
+            if (!this._showGridHeatmap) return;
+            const cols = 8, rows = 8;
+            const buckets = new Array(cols * rows);
+            for (let i = 0; i < buckets.length; i++) buckets[i] = [];
+            const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
+            try {
+                if (typeof LAYERS !== 'undefined') {
+                    greenKeys.forEach(k => {
+                        const layer = LAYERS[k];
+                        if (layer && Array.isArray(layer.markers)) {
+                            layer.markers.forEach(m => {
+                                const mx = Number(m.x); const my = Number(m.y);
+                                if (!isFinite(mx) || !isFinite(my)) return;
+                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
+                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
+                                buckets[rr * cols + cc].push({mx, my});
+                            });
+                        }
+                    });
+                }
+            } catch (e) {}
+
+            // Compute maxCount for mapping range
+            const counts = buckets.map(b => b.length);
+            const maxCount = Math.max(1, ...counts);
+            const rangeMin = 1;
+            const rangeMax = Math.max(16, maxCount || 16);
+
+            const hmCtx = this.ctxHeatmap;
+            hmCtx.save();
+            for (let idx = 0; idx < buckets.length; idx++) {
+                const markers = buckets[idx];
+                const cnt = markers.length;
+                if (!cnt) continue;
+                // Normalize and gamma
+                const tRaw = Math.min(1, Math.max(0, (cnt - rangeMin) / (rangeMax - rangeMin)));
+                const gamma = 0.6;
+                const t = Math.pow(tRaw, gamma);
+                // Hue mapping
+                const hueLow = 90; const hueHigh = 130;
+                const hue = Math.round(hueLow + (hueHigh - hueLow) * t);
+                const sat = 100;
+                const light = 55;
+                // alpha mapping per cell
+                const alphaMin = 0.1; const alphaMax = 1; const steps = 5;
+                const ratioForAlpha = Math.min(1, Math.max(0, (cnt - 1) / steps));
+                const targetAlpha = Math.max(alphaMin, Math.min(alphaMax, alphaMin + ratioForAlpha * (alphaMax - alphaMin)));
+                const perMarkerAlpha = Math.max(0.01, targetAlpha / cnt);
+
+                // Draw per-marker blobs
+                for (let m of markers) {
+                    try {
+                        const screenX = m.mx * MAP_SIZE * this.zoom + this.panX;
+                        const screenY = m.my * MAP_SIZE * this.zoom + this.panY;
+                        if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
+                        const radius = Math.max(8, Math.round((MAP_SIZE / 8) * this.zoom * 0.45));
+                        const cx = Math.round(screenX);
+                        const cy = Math.round(screenY);
+                        const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+                        g.addColorStop(0.0, `hsla(${hue}, ${sat}%, ${light}%, ${perMarkerAlpha})`);
+                        g.addColorStop(0.5, `hsla(${hue}, ${sat}%, ${light}%, ${Math.max(0.02, perMarkerAlpha * 0.6)})`);
+                        g.addColorStop(1.0, `hsla(${hue}, ${sat}%, ${light}%, 0)`);
+                        hmCtx.globalCompositeOperation = 'lighter';
+                        hmCtx.fillStyle = g;
+                        hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+                        hmCtx.globalCompositeOperation = 'source-over';
+                    } catch (e) {}
+                }
+            }
+            hmCtx.restore();
+        } catch (e) { /* non-fatal */ }
     }
     
     // Draw axis index labels for the 8x8 grid
@@ -3744,10 +3979,21 @@ async function init() {
                             span.className = 'grid-quad-label';
                             span.dataset.col = c;
                             span.dataset.row = r;
-                            span.textContent = `${colLetter}${rowNumber}`;
+                            // Main label (A1..H8)
+                            const labelText = document.createElement('span');
+                            labelText.className = 'grid-quad-index';
+                            labelText.textContent = `${colLetter}${rowNumber}`;
+                            // Count badge for green crystal markers (populated in _updateGridQuadLabels)
+                            const countBadge = document.createElement('span');
+                            countBadge.className = 'grid-quad-count';
+                            countBadge.setAttribute('aria-hidden', 'true');
+                            countBadge.textContent = '';
+                            span.appendChild(labelText);
+                            span.appendChild(countBadge);
                             container.appendChild(span);
                         }
                     }
+                    // In-map heatmap toggle removed. Use the sidebar Mapping Heatmap toggle instead.
                     // initialize hidden
                     container.style.display = 'none';
                     // (debug logs removed)
@@ -3762,6 +4008,7 @@ async function init() {
                     const shouldShow = !!(this.layerVisibility && this.layerVisibility.grid) && !!(this.highlightedLayers && this.highlightedLayers.has('grid'));
                     // (debug logs removed)
                     container.style.display = shouldShow ? 'block' : 'none';
+                    // Inline heatmap toggle removed; sidebar control manages heatmap state.
                     if (!shouldShow) return;
                     const cols = 8, rows = 8;
                     const gridSpacing = MAP_SIZE / 8; // matches renderDetailGrid
@@ -3774,6 +4021,26 @@ async function init() {
                     const fontMax = 48;
                     const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
                     const pad = Math.max(2, Math.round(fontSize * 0.18));
+                    // Precompute counts of green crystal markers per cell (8x8)
+                    const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
+                    const counts = new Array(cols * rows).fill(0);
+                    try {
+                        if (typeof LAYERS !== 'undefined') {
+                            greenKeys.forEach(k => {
+                                const layer = LAYERS[k];
+                                if (layer && Array.isArray(layer.markers)) {
+                                    layer.markers.forEach(m => {
+                                        const mx = Number(m.x); const my = Number(m.y);
+                                        if (!isFinite(mx) || !isFinite(my)) return;
+                                        let cc = Math.floor(Math.min(cols - 1, Math.max(0, mx * cols)));
+                                        let rr = Math.floor(Math.min(rows - 1, Math.max(0, my * rows)));
+                                        counts[rr * cols + cc]++;
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) { /* non-fatal */ }
+
                     for (let i = 0; i < labels.length; i++) {
                         const el = labels[i];
                         const c = Number(el.dataset.col);
@@ -3789,8 +4056,31 @@ async function init() {
                         // Scale label typography to match outside axis labels
                         el.style.fontSize = fontSize + 'px';
                         el.style.padding = pad + 'px ' + (pad * 3) + 'px';
-                        if (i === 0) {
-                            // sample
+                        // Reduce vertical gap between index and badge at low zoom by scaling gap with fontSize
+                        const gapPx = Math.max(2, Math.round(fontSize * 0.12));
+                        el.style.gap = gapPx + 'px';
+                        // Update count badge for this cell
+                        const badge = el.querySelector('.grid-quad-count');
+                        if (badge) {
+                            const val = counts[r * cols + c] || 0;
+                            if (val > 0) {
+                                badge.textContent = val.toString();
+                                // Use the same fontSize as the quadrant index so badges scale identically with zoom
+                                const countFont = fontSize;
+                                // Vertical padding small, horizontal padding scales with font
+                                const countPadV = Math.max(2, Math.round(countFont * 0.15));
+                                const countPadH = Math.max(4, Math.round(countFont * 0.25));
+                                badge.style.fontSize = countFont + 'px';
+                                badge.style.lineHeight = countFont + 'px';
+                                badge.style.height = (countFont + countPadV * 2) + 'px';
+                                badge.style.minWidth = (countFont + countPadH * 2) + 'px';
+                                badge.style.padding = countPadV + 'px ' + countPadH + 'px';
+                                badge.style.borderRadius = Math.round((countFont + countPadV * 2) / 2) + 'px';
+                                badge.style.display = 'inline-block';
+                            } else {
+                                badge.textContent = '';
+                                badge.style.display = 'none';
+                            }
                         }
                     }
                 } catch (e) {}
@@ -3949,9 +4239,11 @@ async function init() {
                             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                                 window._mp4Storage.saveSetting('mp4_tileset', (map && map.tileset) ? map.tileset : 'sat');
                                 window._mp4Storage.saveSetting('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0');
+                                window._mp4Storage.saveSetting('mp4_grid_heatmap', (map && map._showGridHeatmap) ? '1' : '0');
                             } else {
                                 try { localStorage.setItem('mp4_tileset', (map && map.tileset) ? map.tileset : 'sat'); } catch (e) {}
                                 try { localStorage.setItem('mp4_tileset_grayscale', (map && map.tilesetGrayscale) ? '1' : '0'); } catch (e) {}
+                                try { localStorage.setItem('mp4_grid_heatmap', (map && map._showGridHeatmap) ? '1' : '0'); } catch (e) {}
                             }
                         } catch (e) {}
                         try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(map && map.highlightScaleMultiplier ? map.highlightScaleMultiplier : 1.0); } catch (e) {}
@@ -3982,7 +4274,7 @@ async function init() {
                             if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
                                 window._mp4Storage.clearSavedData(true);
                             } else {
-                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_map_view','mp4_route_looping_flag','mp4_highlightMultiplier','mp4_highlighted_layers','mp4_storage_consent'];
+                                const keys = ['mp4_customMarkers','mp4_saved_route','mp4_layerVisibility','mp4_tileset','mp4_tileset_grayscale','mp4_grid_heatmap','mp4_map_view','mp4_route_looping_flag','mp4_highlightMultiplier','mp4_highlighted_layers','mp4_storage_consent'];
                                 for (const k of keys) try { localStorage.removeItem(k); } catch (e) {}
                             }
                         } catch (e) {}
@@ -4586,6 +4878,13 @@ async function init() {
             tilesetGrayscaleBtn.classList.toggle('active', g);
             tilesetGrayscaleBtn.setAttribute('aria-pressed', g ? 'true' : 'false');
         }
+        // Grid heatmap button mirrors map._showGridHeatmap
+        const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
+        if (gridHeatmapBtn) {
+            const h = (map && map._showGridHeatmap) ? true : false;
+            gridHeatmapBtn.classList.toggle('active', h);
+            gridHeatmapBtn.setAttribute('aria-pressed', h ? 'true' : 'false');
+        }
     }
     const tilesetGrayscaleBtn = document.getElementById('tilesetGrayscaleBtn');
     if (tilesetSatBtn && tilesetHoloBtn) {
@@ -4597,8 +4896,16 @@ async function init() {
                 updateTilesetUI();
             });
         }
+        const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
+        if (gridHeatmapBtn) {
+            gridHeatmapBtn.addEventListener('click', () => {
+                map.setGridHeatmap(!map._showGridHeatmap);
+                updateTilesetUI();
+            });
+        }
         // Apply grayscale to canvas on init, then update UI to reflect state
         try { map.setTilesetGrayscale(map.tilesetGrayscale); } catch (e) {}
+        try { map.setGridHeatmap(map._showGridHeatmap); } catch (e) {}
         updateTilesetUI();
     }
 
