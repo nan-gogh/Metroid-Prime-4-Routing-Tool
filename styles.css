@@ -488,6 +488,8 @@ h1, h2, h3, h4, h5, h6 {
     pointer-events: none;
     z-index: 15; /* sit above canvas but below sidebar */
 }
+
+/* In-map heatmap toggle removed; styling not needed. Use sidebar `#gridHeatmapBtn` for controls. */
 .grid-quad-label {
     position: absolute;
     transform: translate3d(-50%, -50%, 0);
@@ -504,6 +506,30 @@ h1, h2, h3, h4, h5, h6 {
     line-height: 1;
     white-space: nowrap;
     pointer-events: none;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.grid-quad-index {
+    display: inline-block;
+}
+
+.grid-quad-count {
+    display: none; /* hidden when zero */
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    border-radius: 12px;
+    padding: 0 6px;
+    background: linear-gradient(180deg, #2ea04aff 0%, #237a2b 100%);
+    color: #001916;
+    font-weight: 700;
+    font-size: 12px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.4), 0 0 6px rgba(46,160,74,0.12) inset;
+    text-align: center;
 }
 
 .layer-info {
@@ -901,9 +927,18 @@ h1, h2, h3, h4, h5, h6 {
     pointer-events: none;
 }
 
+/* heatmap canvas sits above tiles and below overlay */
+#heatmapCanvas {
+    z-index: 1;
+    pointer-events: none;
+    /* Use normal alpha blending so the heatmap composes via RGBA alpha only */
+    mix-blend-mode: normal;
+    will-change: opacity, transform;
+}
+
 /* overlay canvas (interactive) */
 #mapCanvas {
-    z-index: 1;
+    z-index: 2;
     cursor: grab;
     /* Disable browser pinch-to-zoom on the canvas so pointer events
        (including multi-touch pinch) are delivered to the app's JS
