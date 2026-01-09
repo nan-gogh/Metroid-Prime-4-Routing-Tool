@@ -23,7 +23,39 @@ class InteractiveMap {
         this.canvasHeatmap = document.getElementById('heatmapCanvas');
         this.ctxHeatmap = this.canvasHeatmap ? this.canvasHeatmap.getContext('2d') : null;
         this._showGridHeatmap = false; // runtime state (persisted via storage)
-        
+
+        // Phase 2: optional rendering module scaffolds
+        try {
+            if (typeof TileRenderer !== 'undefined') {
+                this.tileRenderer = new TileRenderer(this, MP4Config);
+                try { this.tileRenderer.init(); } catch (e) { console.debug('TileRenderer.init failed', e); }
+            }
+            if (typeof HeatmapRenderer !== 'undefined') {
+                this.heatmapRenderer = new HeatmapRenderer(this, MP4Config);
+                try { this.heatmapRenderer.init(); } catch (e) { console.debug('HeatmapRenderer.init failed', e); }
+            }
+            if (typeof GridRenderer !== 'undefined') {
+                this.gridRenderer = new GridRenderer(this, MP4Config);
+                try { this.gridRenderer.init(); } catch (e) { console.debug('GridRenderer.init failed', e); }
+            }
+            if (typeof MarkerRenderer !== 'undefined') {
+                this.markerRenderer = new MarkerRenderer(this, MP4Config);
+                try { this.markerRenderer.init(); } catch (e) { console.debug('MarkerRenderer.init failed', e); }
+            }
+            if (typeof RouteRenderer !== 'undefined') {
+                this.routeRenderer = new RouteRenderer(this, MP4Config);
+                try { this.routeRenderer.init(); } catch (e) { console.debug('RouteRenderer.init failed', e); }
+            }
+            if (typeof RenderPipeline !== 'undefined') {
+                this.renderPipeline = new RenderPipeline([
+                    this.tileRenderer,
+                    this.heatmapRenderer,
+                    this.gridRenderer,
+                    this.markerRenderer,
+                    this.routeRenderer
+                ].filter(Boolean));
+            }
+        } catch (e) { console.debug('InteractiveMap: renderer scaffolding setup failed', e); }
         // Map state
         this.zoom = DEFAULT_ZOOM;
         this.panX = 0;
