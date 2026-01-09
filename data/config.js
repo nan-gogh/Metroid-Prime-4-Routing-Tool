@@ -18,7 +18,7 @@ const MP4Config = {
     },
 
     LAYERS: {
-        GREEN_CRYSTAL: ['geCrystallization1', 'geCrystallization2', 'geCrystallization3', 'gibardaumRock', 'geCrystalStorage']
+        GREEN_CRYSTAL: ['geCrystallization1', 'geCrystallization2', 'geCrystallization3', 'geCrystalStorage', 'gibardaumRock']
     },
 
     STORAGE_KEYS: {
