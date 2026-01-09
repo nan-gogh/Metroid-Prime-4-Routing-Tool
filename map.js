@@ -2750,212 +2750,21 @@ class InteractiveMap {
     }
     
     renderMarkers() {
-        const ctx = this.ctx;
-        const baseSize = this.getBaseMarkerRadius();
-        const detailScale = this.getDetailScale();
-        // Reduce marker shrink effect so markers remain more readable at high zoom.
-        const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
-        const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-        // Per-frame cache mapping "<layerKey>|<uid>" -> rendered size
-        try { this._markerSizeFrame = {}; } catch (e) { this._markerSizeFrame = {}; }
-        const cssWidth = this.canvas.clientWidth;
-        const cssHeight = this.canvas.clientHeight;
-        // Generic rendering for all point-marker layers defined in LAYERS.
-        const entries = Object.entries(LAYERS || {});
-        for (let li = 0; li < entries.length; li++) {
-            const layerKey = entries[li][0];
-            const layer = entries[li][1];
-            if (!this.layerVisibility[layerKey]) continue;
-            if (!Array.isArray(layer.markers)) continue;
-
-            const color = layer.color || '#888';
-
-            for (let i = 0; i < layer.markers.length; i++) {
-                const marker = layer.markers[i];
-                const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
-                const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-
-                // Skip if off-screen
-                if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
-
-                const isSelected = this.selectedMarker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
-                // Compute render size via shared helper and cache it for this frame
-                const size = this.getMarkerRenderSize(marker, layerKey);
-                try {
-                    const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i));
-                    this._markerSizeFrame[key] = size;
-                } catch (e) {}
-
-                // Draw selection halo using the layer color (no lightening)
-                if (isSelected) {
-                    try {
-                        ctx.save();
-                        ctx.shadowBlur = Math.max(6, size * 1.5);
-                        ctx.shadowColor = color;
-                        ctx.beginPath();
-                        ctx.arc(screenX, screenY, size + 2, 0, Math.PI * 2);
-                        ctx.fillStyle = color;
-                        ctx.fill();
-                        ctx.restore();
-                    } catch (e) {}
-                }
-
-                // Draw marker core
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-                ctx.fillStyle = color;
-                ctx.fill();
-            }
+        // Delegate to MarkerRenderer when available
+        if (this.markerRenderer && typeof this.markerRenderer.render === 'function') {
+            try { this.markerRenderer.render(); } catch (e) { console.debug('map.renderMarkers: markerRenderer.render failed', e); }
+            return;
         }
+        // Fallback: no-op
     }
 
-    // Render a polyline route stored in `this.currentRoute` (array of indices)
     renderRoute() {
-        if (!this.currentRoute || !Array.isArray(this.currentRoute) || this.currentRoute.length === 0) return;
-        if (!this.layerVisibility.route) return;
-        if (!this._routeSources || !Array.isArray(this._routeSources)) return;
-        const ctx = this.ctx;
-        const n = this.currentRoute.length;
-        ctx.save();
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        // Use the route layer's configured color (provided by data/route.js)
-        // so route rendering matches the sidebar icon backdrop. Do not provide
-        // a hardcoded color fallback here — the color should come from data.
-        const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
-        const hexToRgba = (h, a) => {
-            if (!h || typeof h !== 'string') return null;
-            let s = h.replace('#', '').trim();
-            // Expand shorthand 3/4-digit hex (eg. #abc or #abcd)
-            if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
-            if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
-
-            let r = 0, g = 0, b = 0, alphaFromHex = 1;
-            if (s.length === 6) {
-                r = parseInt(s.slice(0, 2), 16);
-                g = parseInt(s.slice(2, 4), 16);
-                b = parseInt(s.slice(4, 6), 16);
-            } else if (s.length === 8) {
-                r = parseInt(s.slice(0, 2), 16);
-                g = parseInt(s.slice(2, 4), 16);
-                b = parseInt(s.slice(4, 6), 16);
-                alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
-            } else {
-                return null;
-            }
-
-            const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        };
-        // Use fully opaque stroke color for the route (no transparency)
-        if (routeHex) ctx.strokeStyle = hexToRgba(routeHex, 1);
-        // Use configurable `routeLineWidth` (base CSS pixels) scaled by zoom
-        // and reduced slightly when zoomed in so strokes remain crisp.
-        const baseLine = (typeof this.routeLineWidth === 'number') ? this.routeLineWidth : 3;
-        const detailScale = this.getDetailScale();
-        ctx.lineWidth = Math.max(1, baseLine * this.zoom * detailScale);
-        // configure dashed stroke for animated route (shorter dashes; scale with zoom and base line width)
-        const spacingScale = Math.max(0.35, baseLine / 5);
-        // Use smaller base multipliers so dashes are shorter and tighter
-        const dashLen = Math.max(3, 8 * this.zoom * spacingScale * detailScale);
-        const gapLen = Math.max(3, 6 * this.zoom * spacingScale * detailScale);
-        if (routeHex) {
-            ctx.setLineDash([dashLen, gapLen]);
-            ctx.lineDashOffset = -this._routeDashOffset;
+        // Delegate to RouteRenderer when available
+        if (this.routeRenderer && typeof this.routeRenderer.render === 'function') {
+            try { this.routeRenderer.render(); } catch (e) { console.debug('map.renderRoute: routeRenderer.render failed', e); }
+            return;
         }
-
-        // If the route layer is highlighted, draw a glowing, thicker under-stroke
-        // using the route color before drawing the animated dashed stroke. This
-        // emphasizes the path itself (not markers) when `route` highlight is on.
-        try {
-            const isHighlighted = !!(this.highlightedLayers && this.highlightedLayers.has('route'));
-            if (isHighlighted) {
-                try {
-                    const glowAlpha = 0.85;
-                    const glowColor = routeHex ? hexToRgba(routeHex, glowAlpha) : 'rgba(34,211,238,0.85)';
-                    // Build path first then stroke with a heavy blurred stroke beneath
-                    ctx.save();
-                    ctx.beginPath();
-                    let glowPathStarted = false;
-                    for (let i = 0; i < n; i++) {
-                        const idx = this.currentRoute[i];
-                        const src = this._routeSources[idx];
-                        const m = src && src.marker;
-                        if (!m) continue;
-                        const x = m.x * MAP_SIZE * this.zoom + this.panX;
-                        const y = m.y * MAP_SIZE * this.zoom + this.panY;
-                        if (!glowPathStarted) { ctx.moveTo(x, y); glowPathStarted = true; } else ctx.lineTo(x, y);
-                    }
-                    if (this.routeLooping && n > 0) {
-                        const firstIdx = this.currentRoute[0];
-                        const firstSrc = this._routeSources[firstIdx];
-                        const firstM = firstSrc && firstSrc.marker;
-                        if (firstM) {
-                            const x = firstM.x * MAP_SIZE * this.zoom + this.panX;
-                            const y = firstM.y * MAP_SIZE * this.zoom + this.panY;
-                            ctx.lineTo(x, y);
-                        }
-                    }
-                    // Thicker base for the glow (scale with zoom/detail)
-                    const glowLine = Math.max(1, baseLine * this.zoom * detailScale) * 2.6;
-                    ctx.lineWidth = glowLine;
-                    ctx.strokeStyle = glowColor;
-                    ctx.shadowColor = glowColor;
-                    ctx.shadowBlur = 18;
-                    ctx.setLineDash([]); // solid line for glow (not dashed)
-                    // Draw glow underneath the main stroke
-                    ctx.stroke();
-                    ctx.restore();
-                } catch (e) {}
-            }
-        } catch (e) {}
-
-        // Draw path (main animated dashed stroke)
-        ctx.beginPath();
-        let mainPathStarted = false;
-        for (let i = 0; i < n; i++) {
-            const idx = this.currentRoute[i];
-            const src = this._routeSources[idx];
-            const m = src && src.marker;
-            if (!m) continue;
-            const x = m.x * MAP_SIZE * this.zoom + this.panX;
-            const y = m.y * MAP_SIZE * this.zoom + this.panY;
-            if (!mainPathStarted) { ctx.moveTo(x, y); mainPathStarted = true; } else ctx.lineTo(x, y);
-        }
-        // Close the loop if no start point was provided (full loop); otherwise open polyline
-        if (this.routeLooping && n > 0) {
-            const firstIdx = this.currentRoute[0];
-            const firstSrc = this._routeSources[firstIdx];
-            const firstM = firstSrc && firstSrc.marker;
-            if (firstM) {
-                const x = firstM.x * MAP_SIZE * this.zoom + this.panX;
-                const y = firstM.y * MAP_SIZE * this.zoom + this.panY;
-                ctx.lineTo(x, y);
-            }
-        }
-        ctx.stroke();
-        // reset dash state so other drawings are unaffected
-        ctx.setLineDash([]);
-
-        // Draw small circles at nodes using the same base color (slightly more opaque)
-        const nodeFill = routeHex ? hexToRgba(routeHex, 0.95) : null;
-        if (nodeFill) ctx.fillStyle = nodeFill;
-        // Node dot size: use the shared helper so sizing (including min/max)
-        // is consistent with marker sizing.
-        const dotSize = this.getRouteNodeSize();
-        for (let i = 0; i < n; i++) {
-            const idx = this.currentRoute[i];
-            const src = this._routeSources[idx];
-            const m = src && src.marker;
-            if (!m) continue;
-            const x = m.x * MAP_SIZE * this.zoom + this.panX;
-            const y = m.y * MAP_SIZE * this.zoom + this.panY;
-            ctx.beginPath();
-            ctx.arc(x, y, dotSize, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        ctx.restore();
+        // Fallback: no-op
     }
 
     setRoute(routeIndices, lengthNormalized, routeSources) {
@@ -3951,88 +3760,10 @@ async function init() {
 
             map._updateGridQuadLabels = function() {
                 try {
-                    const parent = this.canvas && this.canvas.parentElement;
-                    const container = parent ? parent.querySelector('#gridQuadLabels') : null;
-                    if (!container) return;
-                    const shouldShow = !!(this.layerVisibility && this.layerVisibility.grid) && !!(this.highlightedLayers && this.highlightedLayers.has('grid'));
-                    // (debug logs removed)
-                    container.style.display = shouldShow ? 'block' : 'none';
-                    // Inline heatmap toggle removed; sidebar control manages heatmap state.
-                    if (!shouldShow) return;
-                    const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-                    const gridSpacing = MAP_SIZE / MP4Config.GRID.COLS; // matches renderDetailGrid
-                    const cssWidth = this.canvas.clientWidth;
-                    const cssHeight = this.canvas.clientHeight;
-                    // Position each label in its cell center
-                    const labels = container.querySelectorAll('.grid-quad-label');
-                    // Compute font sizing to match canvas axis labels (scale with zoom)
-                    const fontMin = 12;
-                    const fontMax = 48;
-                    const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
-                    const pad = Math.max(2, Math.round(fontSize * 0.18));
-                    // Precompute counts of green crystal markers per cell (8x8)
-                    const greenKeys = GREEN_CRYSTAL_LAYERS;
-                    const counts = new Array(cols * rows).fill(0);
-                    try {
-                        if (typeof LAYERS !== 'undefined') {
-                            greenKeys.forEach(k => {
-                                const layer = LAYERS[k];
-                                if (layer && Array.isArray(layer.markers)) {
-                                    layer.markers.forEach(m => {
-                                        const mx = Number(m.x); const my = Number(m.y);
-                                        if (!isFinite(mx) || !isFinite(my)) return;
-                                        let cc = Math.floor(Math.min(cols - 1, Math.max(0, mx * cols)));
-                                        let rr = Math.floor(Math.min(rows - 1, Math.max(0, my * rows)));
-                                        counts[rr * cols + cc]++;
-                                    });
-                                }
-                            });
-                        }
-                    } catch (e) { console.debug('updateGridQuadLabels: failed to compute counts', e); }
-
-                    for (let i = 0; i < labels.length; i++) {
-                        const el = labels[i];
-                        const c = Number(el.dataset.col);
-                        const r = Number(el.dataset.row);
-                        // cell center in absolute MAP pixels
-                        const mapX = (gridSpacing * (c + 0.5));
-                        const mapY = (gridSpacing * (r + 0.5));
-                        const screenX = mapX * this.zoom + this.panX;
-                        const screenY = mapY * this.zoom + this.panY;
-                        // Use CSS translate(-50%,-50%) for centering — set left/top directly
-                        el.style.left = Math.round(screenX) + 'px';
-                        el.style.top = Math.round(screenY) + 'px';
-                        // Scale label typography to match outside axis labels
-                        el.style.fontSize = fontSize + 'px';
-                        el.style.padding = pad + 'px ' + (pad * 3) + 'px';
-                        // Reduce vertical gap between index and badge at low zoom by scaling gap with fontSize
-                        const gapPx = Math.max(2, Math.round(fontSize * 0.12));
-                        el.style.gap = gapPx + 'px';
-                        // Update count badge for this cell
-                        const badge = el.querySelector('.grid-quad-count');
-                        if (badge) {
-                            const val = counts[r * cols + c] || 0;
-                            if (val > 0) {
-                                badge.textContent = val.toString();
-                                // Use the same fontSize as the quadrant index so badges scale identically with zoom
-                                const countFont = fontSize;
-                                // Vertical padding small, horizontal padding scales with font
-                                const countPadV = Math.max(2, Math.round(countFont * 0.15));
-                                const countPadH = Math.max(4, Math.round(countFont * 0.25));
-                                badge.style.fontSize = countFont + 'px';
-                                badge.style.lineHeight = countFont + 'px';
-                                badge.style.height = (countFont + countPadV * 2) + 'px';
-                                badge.style.minWidth = (countFont + countPadH * 2) + 'px';
-                                badge.style.padding = countPadV + 'px ' + countPadH + 'px';
-                                badge.style.borderRadius = Math.round((countFont + countPadV * 2) / 2) + 'px';
-                                badge.style.display = 'inline-block';
-                            } else {
-                                badge.textContent = '';
-                                badge.style.display = 'none';
-                            }
-                        }
+                    if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') {
+                        try { this.gridRenderer.updateQuadLabels(); } catch (e) { console.debug('map._updateGridQuadLabels delegate failed', e); }
                     }
-                } catch (e) {}
+                } catch (e) { console.debug('map._updateGridQuadLabels failed', e); }
             };
         } catch (e) {}
         // Now that label creation function exists, prepare DOM labels
