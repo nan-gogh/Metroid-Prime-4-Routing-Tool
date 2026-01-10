@@ -3,7 +3,7 @@
 LAYERS.gibardaumRock = {
     name: "Gibardaum Rock",
     icon: "🪨",
-    color: "#134116ff",
+    color: "rgb(21, 72, 25)",
     prefix: "gr",
     markers: [
         {"uid": "gr_7a896e3f","x": 0.8918592198808047,"y": 0.168683548385617},

@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Keyboard Navigation Test</title>
+  <style>body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:20px;} .pass{color:green;} .fail{color:red;}</style>
+</head>
+<body>
+  <h1>Keyboard Navigation Test</h1>
+  <div id="results"></div>
+  <div id="test-output"></div>
+
+  <script>
+    // Mock map object for testing
+    const mockMap = {
+      panX: 100,
+      panY: 100,
+      canvas: { clientWidth: 800, clientHeight: 600 },
+      updateResolution: function() { console.log('updateResolution called'); },
+      render: function() { console.log('render called'); }
+    };
+
+    // Mock MP4Config
+    window.MP4Config = {};
+
+    // Load KeyboardHandler
+    const script = document.createElement('script');
+    script.src = '../input/KeyboardHandler.js';
+    script.onload = function() {
+      runTests();
+    };
+    document.head.appendChild(script);
+
+    function runTests() {
+      const results = document.getElementById('results');
+      const output = document.getElementById('test-output');
+
+      function assert(cond, msg) {
+        const el = document.createElement('div');
+        el.textContent = msg;
+        el.className = cond ? 'pass' : 'fail';
+        results.appendChild(el);
+        if (!cond) console.error('FAILED:', msg);
+      }
+
+      try {
+        // Create KeyboardHandler instance
+        const handler = new KeyboardHandler(mockMap, window.MP4Config);
+        assert(handler instanceof KeyboardHandler, 'KeyboardHandler instance created');
+
+        // Test WASD navigation
+        const initialPanX = mockMap.panX;
+        const initialPanY = mockMap.panY;
+
+        // Simulate 'w' key (up)
+        const upEvent = new KeyboardEvent('keydown', { key: 'w', bubbles: true });
+        handler._onKeyDown(upEvent);
+        assert(mockMap.panY > initialPanY, 'W key moves map up (increases panY)');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate 's' key (down)
+        const downEvent = new KeyboardEvent('keydown', { key: 's', bubbles: true });
+        handler._onKeyDown(downEvent);
+        assert(mockMap.panY < initialPanY, 'S key moves map down (decreases panY)');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate 'a' key (left)
+        const leftEvent = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+        handler._onKeyDown(leftEvent);
+        assert(mockMap.panX > initialPanX, 'A key moves map left (increases panX)');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate 'd' key (right)
+        const rightEvent = new KeyboardEvent('keydown', { key: 'd', bubbles: true });
+        handler._onKeyDown(rightEvent);
+        assert(mockMap.panX < initialPanX, 'D key moves map right (decreases panX)');
+
+        // Test arrow keys
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate ArrowUp
+        const arrowUpEvent = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true });
+        handler._onKeyDown(arrowUpEvent);
+        assert(mockMap.panY > initialPanY, 'ArrowUp key moves map up');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate ArrowDown
+        const arrowDownEvent = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true });
+        handler._onKeyDown(arrowDownEvent);
+        assert(mockMap.panY < initialPanY, 'ArrowDown key moves map down');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate ArrowLeft
+        const arrowLeftEvent = new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true });
+        handler._onKeyDown(arrowLeftEvent);
+        assert(mockMap.panX > initialPanX, 'ArrowLeft key moves map left');
+
+        // Reset
+        mockMap.panX = initialPanX;
+        mockMap.panY = initialPanY;
+
+        // Simulate ArrowRight
+        const arrowRightEvent = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+        handler._onKeyDown(arrowRightEvent);
+        assert(mockMap.panX < initialPanX, 'ArrowRight key moves map right');
+
+        output.textContent = 'All keyboard navigation tests completed. Check console for render/updateResolution calls.';
+
+      } catch (e) {
+        assert(false, 'Test threw exception: ' + e.message);
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>

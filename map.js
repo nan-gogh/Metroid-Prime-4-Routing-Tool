@@ -94,6 +94,30 @@ class InteractiveMap {
                     try { this.gestureHandler.init(); } catch (e) { console.debug('GestureHandler.init failed', e); }
                 }
             } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', e); }
+            
+            // Set up MarkerUtils callback for decoupled marker change notifications
+            try {
+                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setOnMarkersChanged === 'function') {
+                    MarkerUtils.setOnMarkersChanged(() => {
+                        try {
+                            this.customMarkers = LAYERS.customMarkers.markers;
+                            this.updateLayerCounts();
+                            this.render();
+                        } catch (e) {
+                            console.debug('MarkerUtils callback failed:', e);
+                        }
+                    });
+                }
+                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setOnCleanupRouteReferences === 'function') {
+                    MarkerUtils.setOnCleanupRouteReferences((deletedMarkerUid) => {
+                        try {
+                            this.cleanupRouteReferences(deletedMarkerUid);
+                        } catch (e) {
+                            console.debug('Route cleanup failed:', e);
+                        }
+                    });
+                }
+            } catch (e) { console.debug('InteractiveMap: MarkerUtils callback setup failed', e); }
         } catch (e) { console.debug('InteractiveMap: renderer scaffolding setup failed', e); }
         // Map state
         this.zoom = DEFAULT_ZOOM;
@@ -223,7 +247,7 @@ class InteractiveMap {
         // Layer configuration (runtime constraints, not data)
         this.layerConfig = {
             'customMarkers': {
-                maxMarkers: 50
+                maxMarkers: (MP4Config && MP4Config.CUSTOM_MARKERS && MP4Config.CUSTOM_MARKERS.MAX_COUNT) || 50
             }
         };
         // Touch hit padding (CSS pixels) to make tapping easier on mobile
@@ -379,38 +403,7 @@ class InteractiveMap {
     }
     
     bindEvents() {
-        // Mouse wheel zoom (passive: false required for preventDefault to work)
-        this.canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            // Use a larger zoom step for wheel to match programmatic zoomIn/zoomOut (1.3x)
-            const zoomFactor = e.deltaY > 0 ? (1 / 1.3) : 1.3;
-            const newZoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, this.zoom * zoomFactor));
-            
-            // Zoom towards mouse position
-            const worldX = (mouseX - this.panX) / this.zoom;
-            const worldY = (mouseY - this.panY) / this.zoom;
-            
-            this.zoom = newZoom;
-            
-            this.panX = mouseX - worldX * this.zoom;
-            this.panY = mouseY - worldY * this.zoom;
-            
-            this.updateResolution();
-            this.render();
-            // Update hover/cursor state after zoom so cursor matches visual marker size
-            try { this.checkMarkerHover(mouseX, mouseY); } catch (err) {}
-            // Debounce wheel until it stops, then save once
-            try { if (this._wheelSaveTimer) clearTimeout(this._wheelSaveTimer); } catch (e) {}
-            try {
-                this._wheelSaveTimer = setTimeout(() => {
-                    try { this.saveViewToStorage(); } catch (e) {}
-                }, 150);
-            } catch (e) {}
-        }, { passive: false });
+        // Wheel zoom is now handled by PointerHandler
         // Pointer events (unified for mouse + touch + pen)
         this.canvas.addEventListener('pointerdown', (e) => {
             // Removed setPointerCapture to avoid blocking interactions on sidebar after panning
@@ -1315,6 +1308,11 @@ class InteractiveMap {
                     }
                     // Only place markers when edit mode is active
                     if (this.editMarkersMode) {
+                        // Check marker limit before adding
+                        const maxMarkers = this.layerConfig && this.layerConfig.customMarkers && this.layerConfig.customMarkers.maxMarkers || 50;
+                        if (LAYERS.customMarkers.markers.length >= maxMarkers) {
+                            return; // Silently ignore - could show a message but click handler shouldn't alert
+                        }
                         if (typeof MarkerUtils !== 'undefined') {
                             MarkerUtils.addCustomMarker(worldX, worldY);
                             // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
@@ -1331,37 +1329,7 @@ class InteractiveMap {
             this.render();
         });
         
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            // debug logging removed
-            // Global Escape: exit any edit mode
-            if (e.key === 'Escape' || e.key === 'Esc') {
-                try {
-                    // Prefer clicking the toggles so their handlers run UI sync
-                    const markersToggle = document.getElementById('editMarkersToggle');
-                    const routeToggle = document.getElementById('editRouteToggle');
-                    if (map && map.editMarkersMode) {
-                        if (markersToggle) markersToggle.click(); else map.editMarkersMode = false;
-                    }
-                    if (map && map.editRouteMode) {
-                        if (routeToggle) routeToggle.click(); else map.editRouteMode = false;
-                    }
-                    try { updateEditOverlay(); } catch (err) {}
-                } catch (err) {}
-                try { e.preventDefault(); } catch (err) {}
-                return;
-            }
-            if (e.key === '+' || e.key === '=') {
-                this.zoomIn();
-                try { e.preventDefault(); } catch (err) {}
-            } else if (e.key === '-') {
-                this.zoomOut();
-                try { e.preventDefault(); } catch (err) {}
-            } else if (e.key === '0') {
-                this.resetView();
-                try { e.preventDefault(); } catch (err) {}
-            }
-        });
+        // Keyboard shortcuts are now handled by KeyboardHandler
 
         // Ensure sidebar scroll is always responsive by adding explicit wheel handler
         // This bypasses any gesture delays and makes scrolling work immediately
@@ -4755,201 +4723,7 @@ async function init() {
     setSidebarCollapsed(true, false);
 
     // Keyboard shortcuts for UI: toggle sidebar and arrow-key panning
-    try {
-        document.addEventListener('keydown', (e) => {
-                // Global Escape: exit any edit mode
-                if (e.key === 'Escape' || e.key === 'Esc') {
-                    try {
-                        const markersToggle = document.getElementById('editMarkersToggle');
-                        const routeToggle = document.getElementById('editRouteToggle');
-                        if (map && map.editMarkersMode) {
-                            if (markersToggle) markersToggle.click(); else map.editMarkersMode = false;
-                        }
-                        if (map && map.editRouteMode) {
-                            if (routeToggle) routeToggle.click(); else map.editRouteMode = false;
-                        }
-                        try { updateEditOverlay(); } catch (err) {}
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                }
-            // Ignore when typing in form controls, buttons, links or contenteditable elements
-            const active = document.activeElement;
-            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.tagName === 'BUTTON' || active.tagName === 'A' || active.isContentEditable)) return;
-
-            // Toggle sidebar with Space only (avoid accidental toggles)
-            if (e.code === 'Space' || e.key === ' ') {
-                try {
-                    const collapsed = app.classList.contains('sidebar-collapsed');
-                    setSidebarCollapsed(!collapsed);
-                    e.preventDefault();
-                } catch (err) {}
-                return;
-            }
-
-            // Tileset shortcuts: '1' -> Satellite, '2' -> Holographic, '3' -> toggle grayscale
-            // Zoom shortcuts: 'q' -> Zoom In, 'e' -> Zoom Out (case-insensitive)
-            try {
-                if (e.key === 'q' || e.key === 'Q') {
-                    try {
-                        // Toggle Edit Route mode via the sidebar toggle if present
-                        const routeToggleEl = document.getElementById('editRouteToggle');
-                        if (routeToggleEl) {
-                            try { routeToggleEl.click(); } catch (err) {
-                                if (typeof map !== 'undefined' && map) map.editRouteMode = !map.editRouteMode;
-                            }
-                        } else if (typeof map !== 'undefined' && map) {
-                            map.editRouteMode = !map.editRouteMode;
-                            try {
-                                if (map.editRouteMode) {
-                                    try { map._enterEditMode && map._enterEditMode('route', 2.0); } catch (e) {}
-                                    // disable markers mode and exit it cleanly
-                                    try { map.editMarkersMode = false; } catch (e) {}
-                                    try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
-                                    try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) {}
-                                    try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
-                                } else {
-                                    try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
-                                }
-                            } catch (e) {}
-                        }
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                } else if (e.key === 'e' || e.key === 'E') {
-                    try {
-                        // Toggle Edit Markers mode via the sidebar toggle if present
-                        const editToggleEl = document.getElementById('editMarkersToggle');
-                        if (editToggleEl) {
-                            // Avoid toggling when focus is in a form control (checked earlier)
-                            try { editToggleEl.click(); } catch (err) { /* fallback below */ }
-                        } else if (typeof map !== 'undefined' && map) {
-                            map.editMarkersMode = !map.editMarkersMode;
-                            try {
-                                if (map.editMarkersMode) {
-                                    try { map._enterEditMode && map._enterEditMode('customMarkers', 2.0); } catch (e) {}
-                                    // disable route mode and exit it cleanly
-                                    try { map.editRouteMode = false; } catch (e) {}
-                                    try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
-                                    try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle) { routeToggle.setAttribute('aria-pressed','false'); routeToggle.classList.remove('active'); } } catch (e) {}
-                                    try { const miniRoute = document.getElementById('editRouteToggleMini'); if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch(e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed','false'); } } catch (e) {}
-                                } else {
-                                    try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
-                                }
-                            } catch (e) {}
-                        }
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                }
-                if (e.key === '1') {
-                    try { map.setTileset('sat'); } catch (err) {}
-                    // update UI buttons if present
-                    try {
-                        const sat = document.getElementById('tilesetSatBtn');
-                        const holo = document.getElementById('tilesetHoloBtn');
-                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (sat) { sat.classList.add('active'); sat.setAttribute('aria-pressed', 'true'); }
-                        if (holo) { holo.classList.remove('active'); holo.setAttribute('aria-pressed', 'false'); }
-                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
-                    } catch (err) {}
-                    e.preventDefault();
-                    return;
-                } else if (e.key === '2') {
-                    try { map.setTileset('holo'); } catch (err) {}
-                    try {
-                        const sat = document.getElementById('tilesetSatBtn');
-                        const holo = document.getElementById('tilesetHoloBtn');
-                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (holo) { holo.classList.add('active'); holo.setAttribute('aria-pressed', 'true'); }
-                        if (sat) { sat.classList.remove('active'); sat.setAttribute('aria-pressed', 'false'); }
-                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
-                    } catch (err) {}
-                    e.preventDefault();
-                    return;
-                } else if (e.key === '3') {
-                    try { map.setTilesetGrayscale(!map.tilesetGrayscale); } catch (err) {}
-                    try {
-                        const gbtn = document.getElementById('tilesetGrayscaleBtn');
-                        if (gbtn) { gbtn.classList.toggle('active', !!map.tilesetGrayscale); gbtn.setAttribute('aria-pressed', map.tilesetGrayscale ? 'true' : 'false'); }
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                }
-                // Quick clears: Y = clear route, X = clear custom markers
-                if (e.key === 'y' || e.key === 'Y') {
-                    try {
-                        const btn = document.getElementById('clearRouteBtn');
-                        if (btn) btn.click(); else if (typeof map !== 'undefined' && map) map.clearRoute();
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                } else if (e.key === 'x' || e.key === 'X') {
-                    try {
-                        const btn = document.getElementById('clearCustom');
-                        if (btn) btn.click(); else if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.clearCustomMarkers === 'function') MarkerUtils.clearCustomMarkers();
-                    } catch (err) {}
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                } else if (e.key === 'c' || e.key === 'C') {
-                    // Ignore if any modifier key is down (pen buttons or OS gestures may emit modifiers)
-                    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-                        try { expandRouteNearby(); } catch (err) {}
-                    }
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                } else if (e.key === '<') {
-                    // Map '<' to Reverse Route (same as toggleRouteDirBtn)
-                    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-                        try {
-                            const dirBtn = document.getElementById('toggleRouteDirBtn');
-                            if (dirBtn) {
-                                dirBtn.click();
-                            } else {
-                                // Mirror toggleRouteDirection behavior when button not present: reverse waypoints only
-                                try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
-                                try {
-                                    if (Array.isArray(map.currentRoute) && map.currentRoute.length > 1 && Array.isArray(map._routeSources)) {
-                                        const ordered = [];
-                                        for (let i = 0; i < map.currentRoute.length; i++) {
-                                            const idx = map.currentRoute[i];
-                                            const src = map._routeSources && map._routeSources[idx];
-                                            if (src && src.marker) ordered.push({ marker: src.marker, layerKey: src.layerKey });
-                                        }
-                                        if (ordered.length > 1) {
-                                            ordered.reverse();
-                                            const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
-                                            const newIndices = newSources.map((_, i) => i);
-                                            try { map.setRoute(newIndices, map.computeRouteLengthNormalized(newSources), newSources); } catch (e) {}
-                                        }
-                                    }
-                                } catch (e) {}
-                                try { map.render(); } catch (e) {}
-                            }
-                        } catch (err) {}
-                    }
-                    try { e.preventDefault(); } catch (err) {}
-                    return;
-                // 'R' mapping removed to avoid accidental activation
-                }
-            } catch (err) {}
-
-            // Arrow keys + WASD: pan by a fraction of viewport (Shift for larger steps)
-            const stepFrac = e.shiftKey ? 0.25 : 0.08;
-            let moved = false;
-            try {
-                const key = e.key;
-                if (key === 'ArrowLeft' || key === 'a' || key === 'A') { map.panX += Math.round(map.canvas.clientWidth * stepFrac); moved = true; }
-                else if (key === 'ArrowRight' || key === 'd' || key === 'D') { map.panX -= Math.round(map.canvas.clientWidth * stepFrac); moved = true; }
-                else if (key === 'ArrowUp' || key === 'w' || key === 'W') { map.panY += Math.round(map.canvas.clientHeight * stepFrac); moved = true; }
-                else if (key === 'ArrowDown' || key === 's' || key === 'S') { map.panY -= Math.round(map.canvas.clientHeight * stepFrac); moved = true; }
-            } catch (err) {}
-
-            if (moved) {
-                try { e.preventDefault(); map.updateResolution(); map.render(); } catch (err) {}
-            }
-        });
-    } catch (e) {}
+    // Keyboard shortcuts are now handled by KeyboardHandler
 
     // Bind dev sidebar controls (if present)
     try {

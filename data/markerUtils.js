@@ -1,6 +1,32 @@
 // Marker utility functions for export/import
 
 const MarkerUtils = {
+    // Callback for when markers change - set by map during initialization
+    _onMarkersChanged: null,
+    
+    // Callback for route cleanup when markers are deleted
+    _onCleanupRouteReferences: null,
+    
+    // Set callback to be called when markers are modified
+    setOnMarkersChanged(callback) {
+        this._onMarkersChanged = callback;
+    },
+    
+    // Set callback for route cleanup
+    setOnCleanupRouteReferences(callback) {
+        this._onCleanupRouteReferences = callback;
+    },
+    
+    // Internal method to notify listeners of marker changes
+    _notifyMarkersChanged() {
+        if (this._onMarkersChanged) {
+            try {
+                this._onMarkersChanged();
+            } catch (e) {
+                console.debug('MarkerUtils._notifyMarkersChanged failed:', e);
+            }
+        }
+    },
     // Check if a marker with given UID exists in an array
     markerExists(uid, markerArray) {
         if (!Array.isArray(markerArray)) return false;
@@ -160,14 +186,8 @@ const MarkerUtils = {
                     
                     // Persist to localStorage
                     MarkerUtils.saveToLocalStorage();
-                    // Update map runtime state if available
-                    try {
-                        if (typeof map !== 'undefined' && map) {
-                            map.customMarkers = LAYERS.customMarkers.markers;
-                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                            map.render();
-                        }
-                    } catch (e) {}
+                    // Update map runtime state via callback
+                    MarkerUtils._notifyMarkersChanged();
                     
                     // log removed
                     resolve(imported);
@@ -268,24 +288,13 @@ const MarkerUtils = {
     
     // Add a new custom marker
     addCustomMarker(x, y) {
-        const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
-        if (LAYERS.customMarkers.markers.length >= maxMarkers) {
-            return null;
-        }
-        
         const prefix = LAYERS.customMarkers?.prefix || 'cm';
         const uid = MarkerUtils.generateUID(x, y, prefix);
         const marker = { uid, x, y };
         LAYERS.customMarkers.markers.push(marker);
         MarkerUtils.saveToLocalStorage();
-        // Update map runtime state and counts
-        try {
-            if (typeof map !== 'undefined' && map) {
-                map.customMarkers = LAYERS.customMarkers.markers;
-                if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                map.render();
-            }
-        } catch (e) {}
+        // Update map runtime state via callback
+        MarkerUtils._notifyMarkersChanged();
 
         return marker;
     },
@@ -300,22 +309,8 @@ const MarkerUtils = {
             // Clean up route references to this marker if a route exists
             MarkerUtils.cleanupRouteReferences(uid);
             
-            // Update map runtime state and counts
-            try {
-                if (typeof map !== 'undefined' && map) {
-                    map.customMarkers = LAYERS.customMarkers.markers;
-                    if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                    map.render();
-                    // If the deleted marker was selected, clear selection and hide tooltip
-                    try {
-                        if (map.selectedMarker && map.selectedMarker.uid === uid) {
-                            map.selectedMarker = null;
-                            map.selectedMarkerLayer = null;
-                            try { map.hideTooltip(); } catch (e) {}
-                        }
-                    } catch (e) {}
-                }
-            } catch (e) {}
+            // Update map runtime state via callback
+            MarkerUtils._notifyMarkersChanged();
             return true;
         }
         return false;
@@ -337,23 +332,17 @@ const MarkerUtils = {
         
         // Clean up route references for all removed markers
         for (let i = 0; i < uidsToRemove.length; i++) {
-            MarkerUtils.cleanupRouteReferences(uidsToRemove[i]);
+            if (this._onCleanupRouteReferences) {
+                try {
+                    this._onCleanupRouteReferences(uidsToRemove[i]);
+                } catch (e) {
+                    console.debug('Route cleanup callback failed:', e);
+                }
+            }
         }
         
-        // Update map runtime state and counts
-        try {
-            if (typeof map !== 'undefined' && map) {
-                map.customMarkers = LAYERS.customMarkers.markers;
-                if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                map.render();
-                // Clear any selected marker and hide tooltip when all markers are removed
-                try {
-                    map.selectedMarker = null;
-                    map.selectedMarkerLayer = null;
-                    try { map.hideTooltip(); } catch (e) {}
-                } catch (e) {}
-            }
-        } catch (e) {}
+        // Update map runtime state via callback
+        MarkerUtils._notifyMarkersChanged();
     },
     
     // Save to localStorage
@@ -442,14 +431,8 @@ const MarkerUtils = {
             LAYERS.customMarkers.markers = markersArray.slice();
             // Persist to localStorage
             MarkerUtils.saveToLocalStorage();
-            // Update map if present
-            try {
-                if (typeof map !== 'undefined' && map) {
-                    map.customMarkers = LAYERS.customMarkers.markers;
-                    if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                    map.render();
-                }
-            } catch (e) {}
+            // Update map via callback
+            MarkerUtils._notifyMarkersChanged();
             return LAYERS.customMarkers.markers;
         } catch (e) {
             // error logging removed
@@ -458,73 +441,9 @@ const MarkerUtils = {
     },
 
     // Clean up route references when a marker is deleted
-    // Removes any route point that references the given marker UID
+    // NOTE: This method is deprecated - route cleanup is now handled via callback
     cleanupRouteReferences(deletedMarkerUid) {
-        try {
-            if (typeof map === 'undefined' || !map) return;
-            
-            // If no route exists, nothing to clean up
-            if (!map.currentRoute || !Array.isArray(map.currentRoute)) return;
-            if (!map._routeSources || !Array.isArray(map._routeSources)) return;
-            
-            // Find indices of route sources that reference the deleted marker
-            const indicesToRemove = [];
-            for (let i = 0; i < map._routeSources.length; i++) {
-                const src = map._routeSources[i];
-                if (src && src.marker && src.marker.uid === deletedMarkerUid) {
-                    indicesToRemove.push(i);
-                }
-            }
-            
-            // Remove route points in reverse order to maintain indices
-            for (let i = indicesToRemove.length - 1; i >= 0; i--) {
-                const idx = indicesToRemove[i];
-                // Remove from _routeSources
-                map._routeSources.splice(idx, 1);
-                // Remove from currentRoute (indices in currentRoute reference _routeSources)
-                const routeIdx = map.currentRoute.indexOf(idx);
-                if (routeIdx !== -1) {
-                    map.currentRoute.splice(routeIdx, 1);
-                }
-                // Adjust remaining indices in currentRoute that were > idx
-                for (let j = 0; j < map.currentRoute.length; j++) {
-                    if (map.currentRoute[j] > idx) {
-                        map.currentRoute[j]--;
-                    }
-                }
-            }
-            
-            // Recalculate route length and update UI
-            if (map.currentRoute.length > 0) {
-                // Recalculate total route length from remaining points
-                let totalLength = 0;
-                for (let i = 0; i < map.currentRoute.length - 1; i++) {
-                    const p1 = map._routeSources[map.currentRoute[i]].marker;
-                    const p2 = map._routeSources[map.currentRoute[i + 1]].marker;
-                    const dx = p2.x - p1.x;
-                    const dy = p2.y - p1.y;
-                    totalLength += Math.sqrt(dx * dx + dy * dy);
-                }
-                map.currentRouteLengthNormalized = totalLength;
-                map.currentRouteLength = totalLength * 8192; // MAP_SIZE
-                // Invalidate route renderer cache since route structure changed
-                try {
-                    if (map.routeRenderer && typeof map.routeRenderer.invalidateCache === 'function') {
-                        map.routeRenderer.invalidateCache();
-                    }
-                } catch (e) {
-                    console.debug('Failed to invalidate route renderer cache after marker deletion', e);
-                }
-                try { map.saveRouteToStorage(); } catch (e) {}
-                map.render();
-                // log removed
-            } else {
-                // No points left, clear the route entirely
-                map.clearRoute();
-                // log removed
-            }
-        } catch (e) {
-            console.warn('Failed to cleanup route references:', e);
-        }
+        // This method is no longer used - route cleanup is handled by the map via callback
+        console.debug('cleanupRouteReferences is deprecated - using callback instead');
     }
 };

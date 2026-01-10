@@ -5,6 +5,11 @@ const MP4Config = {
     MAP_SIZE: 8192,
     TILE_RESOLUTIONS: [256, 512, 1024, 2048, 4096, 8192],
 
+    ZOOM: {
+        DEFAULT_MIN: 0.05,
+        MAX: 4
+    },
+
     HEATMAP: {
         BLOB_RADIUS: 65,
         OVERLAY_OPACITY: 0.7,
@@ -19,6 +24,10 @@ const MP4Config = {
 
     LAYERS: {
         GREEN_CRYSTAL: ['geCrystallization1', 'geCrystallization2', 'geCrystallization3', 'geCrystalStorage', 'gibardaumRock']
+    },
+
+    CUSTOM_MARKERS: {
+        MAX_COUNT: 50
     },
 
     STORAGE_KEYS: {
