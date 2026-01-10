@@ -34,7 +34,10 @@
               if (markersToggle) markersToggle.click(); else this.map.editMarkersMode = false;
             }
             if (this.map && this.map.editRouteMode) {
-              if (routeToggle) routeToggle.click(); else this.map.editRouteMode = false;
+              if (routeToggle) routeToggle.click(); else {
+                this.map.editRouteMode = false;
+                try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) {}
+              }
             }
             try { if (typeof updateEditOverlay === 'function') updateEditOverlay(); } catch (err) {}
           } catch (err) {}
@@ -163,7 +166,14 @@
 
         // C/c - expand route nearby (only if no modifiers)
         if ((ev.key === 'c' || ev.key === 'C') && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.shiftKey) {
-          try { if (typeof expandRouteNearby === 'function') expandRouteNearby(); } catch (err) {}
+          try { if (this.map && typeof this.map.expandRouteNearby === 'function') this.map.expandRouteNearby(); } catch (err) {}
+          try { ev.preventDefault(); } catch (err) {}
+          return;
+        }
+
+        // 4 - toggle grid heatmap
+        if (ev.key === '4') {
+          try { if (this.map && typeof this.map.setGridHeatmap === 'function') this.map.setGridHeatmap(!this.map._showGridHeatmap); } catch (err) {}
           try { ev.preventDefault(); } catch (err) {}
           return;
         }

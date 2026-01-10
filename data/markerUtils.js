@@ -307,7 +307,13 @@ const MarkerUtils = {
             MarkerUtils.saveToLocalStorage();
             
             // Clean up route references to this marker if a route exists
-            MarkerUtils.cleanupRouteReferences(uid);
+            if (this._onCleanupRouteReferences) {
+                try {
+                    this._onCleanupRouteReferences(uid);
+                } catch (e) {
+                    console.debug('Route cleanup callback failed:', e);
+                }
+            }
             
             // Update map runtime state via callback
             MarkerUtils._notifyMarkersChanged();
@@ -348,28 +354,60 @@ const MarkerUtils = {
     // Save to localStorage
     saveToLocalStorage() {
         try {
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+            console.log('MarkerUtils.saveToLocalStorage called, markers:', LAYERS.customMarkers?.markers?.length || 0);
+
+            // Try StorageUtils first (if available) - this handles consent properly
+            if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveSetting === 'function') {
+                console.log('Trying StorageUtils.saveSetting');
+                const result = StorageUtils.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+                console.log('StorageUtils.saveSetting result:', result);
+                if (result) return true;
+                // If StorageUtils failed, don't try fallbacks - respect consent
+                console.log('StorageUtils failed, not trying fallbacks');
+                return false;
             } else {
-                // Do not persist without consent/helper
+                console.log('StorageUtils not available');
             }
+
+            // Fallback to _mp4Storage - this also handles consent properly
+            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                console.log('Trying _mp4Storage.saveSetting');
+                const result = window._mp4Storage.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+                console.log('_mp4Storage.saveSetting result:', result);
+                if (result) return true;
+                // If _mp4Storage failed, don't try direct localStorage - respect consent
+                console.log('_mp4Storage failed, not trying direct localStorage');
+                return false;
+            } else {
+                console.log('_mp4Storage not available');
+            }
+
+            // No consent-gated storage available - do not save
+            console.log('No consent-gated storage available, not saving');
+            return false;
         } catch (e) {
-            // error logging removed
+            console.warn('Error in MarkerUtils.saveToLocalStorage:', e);
+            return false;
         }
-    }
-    ,
+    },
+
     // Load custom markers from localStorage into LAYERS and update map/UI
     loadFromLocalStorage() {
         try {
             let data = null;
-            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                data = window._mp4Storage.loadSetting('mp4_customMarkers');
-            } else {
-                try {
-                    const saved = localStorage.getItem('mp4_customMarkers');
-                    data = saved ? JSON.parse(saved) : null;
-                } catch (e) { data = null; }
+
+            // Try StorageUtils first (if available) - this handles consent properly
+            if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadSetting === 'function') {
+                data = StorageUtils.loadSetting('mp4_customMarkers');
             }
+
+            // Fallback to _mp4Storage - this also handles consent properly
+            if (data === null && window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                data = window._mp4Storage.loadSetting('mp4_customMarkers');
+            }
+
+            // No direct localStorage fallback - respect consent like other data
+
             if (!data) return [];
             if (!Array.isArray(data)) return [];
 
@@ -419,20 +457,37 @@ const MarkerUtils = {
         }
     },
 
-    // Merge (replace) custom markers with a new set
-    // Takes array of {uid, x, y} and replaces entire LAYERS.customMarkers.markers
+    // Merge custom markers from a route into existing markers
+    // Takes array of {uid, x, y} and adds any that don't already exist
     mergeCustomMarkers(markersArray) {
         try {
             if (!Array.isArray(markersArray)) return [];
-            // Replace entire custom markers array
+            // Ensure custom markers layer exists
             if (!LAYERS.customMarkers) {
                 LAYERS.customMarkers = { name: 'Custom Marker', icon: '📍', color: '#ff6b6b', prefix: 'cm', markers: [] };
             }
-            LAYERS.customMarkers.markers = markersArray.slice();
-            // Persist to localStorage
-            MarkerUtils.saveToLocalStorage();
-            // Update map via callback
-            MarkerUtils._notifyMarkersChanged();
+
+            // Add markers from the array that don't already exist
+            let addedCount = 0;
+            for (const marker of markersArray) {
+                if (marker && marker.uid && !MarkerUtils.markerExists(marker.uid, LAYERS.customMarkers.markers)) {
+                    LAYERS.customMarkers.markers.push({
+                        uid: marker.uid,
+                        x: Number(marker.x),
+                        y: Number(marker.y)
+                    });
+                    addedCount++;
+                }
+            }
+
+            // Only save and notify if we actually added markers
+            if (addedCount > 0) {
+                // Persist to localStorage
+                MarkerUtils.saveToLocalStorage();
+                // Update map via callback
+                MarkerUtils._notifyMarkersChanged();
+            }
+
             return LAYERS.customMarkers.markers;
         } catch (e) {
             // error logging removed
@@ -447,3 +502,6 @@ const MarkerUtils = {
         console.debug('cleanupRouteReferences is deprecated - using callback instead');
     }
 };
+
+// Make MarkerUtils globally available
+window.MarkerUtils = MarkerUtils;
