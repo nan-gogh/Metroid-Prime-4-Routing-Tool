@@ -186,9 +186,9 @@ class InteractiveMap {
 
                 try {
                     if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                        window._mp4Storage.saveSetting('mp4_route_looping_flag', map.routeLooping ? '1' : '0');
+                        window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, map.routeLooping ? '1' : '0');
                     } else {
-                        try { localStorage.setItem('mp4_route_looping_flag', map.routeLooping ? '1' : '0'); } catch (e) { console.debug('loopRoute: failed to write localStorage', e); }
+                        try { localStorage.setItem(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, map.routeLooping ? '1' : '0'); } catch (e) { console.debug('loopRoute: failed to write localStorage', e); }
                     }
                 } catch (e) { console.debug('loopRoute: failed to persist loop flag', e); }
                 try { map.render(); } catch (e) { console.debug('loopRoute: failed to request render', e); }
@@ -208,9 +208,9 @@ class InteractiveMap {
         this._routeDashOffset = 0; // px offset used for animated dashes
         this._routeRaf = null; // requestAnimationFrame id
         this._lastRouteAnimTime = 0;
-        this._routeAnimationSpeed = 100; // pixels per second
+        this._routeAnimationSpeed = MP4Config.ROUTE.ANIMATION_SPEED; // pixels per second
         // Configurable route stroke width (CSS pixels). Multiply by `zoom` in render.
-        this.routeLineWidth = 20; // default base stroke width
+        this.routeLineWidth = MP4Config.ROUTE.LINE_WIDTH; // default base stroke width
         this.hoveredMarker = null;
         this.hoveredMarkerLayer = null; // layer key identifying which LAYERS entry the hovered marker belongs to
         // Selected marker (toggled by click/tap) — used to show persistent tooltip
@@ -1778,7 +1778,7 @@ class InteractiveMap {
             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.clearRoute === 'function') {
                 RouteUtils.clearRoute();
             } else {
-                localStorage.removeItem('mp4_saved_route');
+                localStorage.removeItem(MP4Config.STORAGE_KEYS.ROUTE);
             }
         } catch (e) {}
     }
@@ -1786,22 +1786,39 @@ class InteractiveMap {
     // Persist the current route to localStorage as an ordered list of positions with uid and layer info
     saveRouteToStorage() {
         try {
-            if (!this.currentRoute || !Array.isArray(this._routeSources) || !this.currentRoute.length) return;
+            console.log('saveRouteToStorage called');
+            if (!this.currentRoute || !Array.isArray(this._routeSources) || !this.currentRoute.length) {
+                console.log('No route to save');
+                return;
+            }
 
             const payload = RouteUtils.convertRouteToStorageFormat(this.currentRoute, this._routeSources);
-            if (!payload) return; // conversion failed
+            console.log('Converted payload:', payload);
+            if (!payload) {
+                console.log('convertRouteToStorageFormat returned null');
+                return; // conversion failed
+            }
 
             payload.length = this.currentRouteLengthNormalized;
+            console.log('Final payload to save:', payload);
 
-            RouteUtils.saveRoute(payload);
-        } catch (e) {}
+            const saveResult = RouteUtils.saveRoute(payload);
+            console.log('saveRoute result:', saveResult);
+        } catch (e) {
+            console.error('saveRouteToStorage failed:', e);
+        }
     }
 
     // Attempt to load a previously saved route from localStorage and apply it
     loadRouteFromStorage() {
         try {
+            console.log('loadRouteFromStorage called');
             const obj = RouteUtils.loadRoute();
-            if (!obj) return false;
+            console.log('Loaded route data:', obj);
+            if (!obj) {
+                console.log('No route data to load');
+                return false;
+            }
             
             // Upgrade legacy route points if needed
             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
@@ -1870,7 +1887,7 @@ class InteractiveMap {
             // Coerce direction to a number so persisted string values still work
             const dir = (Number(this._routeAnimationDirection) === -1) ? -1 : 1;
             const zoomFactor = (typeof this.zoom === 'number' && this.zoom > 0) ? this.zoom : 1;
-            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir * zoomFactor + 1000000) % 1000000;
+            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir * zoomFactor + MP4Config.ROUTE.DASH_OFFSET_WRAP) % MP4Config.ROUTE.DASH_OFFSET_WRAP;
             // only continue animating if there is a route
             if (!this.currentRoute || !this.currentRoute.length) {
                 this._routeRaf = null;
@@ -3736,248 +3753,11 @@ async function init() {
 
     // Compute route using current route waypoints plus nearby visible markers
     function expandRouteNearby() {
-        beginRouteCompute();
-        try {
-                // debug logging removed
-            if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length < 2) {
-                return;
-            }
-
-            // Build route waypoints in normalized coordinates
-            const routePts = [];
-            const routeUIDs = new Set();
-            for (let i = 0; i < map.currentRoute.length; i++) {
-                const idx = map.currentRoute[i];
-                const src = map._routeSources && map._routeSources[idx];
-                if (!src || !src.marker) continue;
-                routePts.push({ x: src.marker.x, y: src.marker.y });
-                if (src.marker.uid) routeUIDs.add(src.marker.uid);
-            }
-            if (routePts.length < 2) { return; }
-
-            // Threshold in pixels for proximity; tuneable
-            const THRESHOLD_PX = 160;
-            const thresholdNorm = THRESHOLD_PX / MAP_SIZE;
-
-            // Collect candidate markers from visible layers (exclude virtual 'route')
-            const poolSources = [];
-            const layerEntries = Object.entries(LAYERS || {});
-            for (let li = 0; li < layerEntries.length; li++) {
-                const layerKey = layerEntries[li][0];
-                const layer = layerEntries[li][1];
-                if (layerKey === 'route') continue;
-                if (!map.layerVisibility[layerKey]) continue;
-                if (!Array.isArray(layer.markers)) continue;
-                for (let mi = 0; mi < layer.markers.length; mi++) {
-                    const m = layer.markers[mi];
-                    if (!m) continue;
-                    // Always include route markers (they may be in other layers)
-                    if (m.uid && routeUIDs.has(m.uid)) continue; // will add route points separately
-                    // Compute minimal distance from m to route polyline (normalized units)
-                    let minDist = Infinity;
-                    const len = routePts.length;
-                    const segCount = map.routeLooping ? len : (len - 1);
-                    for (let si = 0; si < segCount; si++) {
-                        const a = routePts[si];
-                        const b = routePts[(si + 1) % len];
-                        if (!a || !b) continue;
-                        const vx = b.x - a.x, vy = b.y - a.y;
-                        const wx = m.x - a.x, wy = m.y - a.y;
-                        const vlen2 = vx * vx + vy * vy;
-                        if (vlen2 <= 0) continue;
-                        const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
-                        const px = a.x + vx * t;
-                        const py = a.y + vy * t;
-                        const dist = Math.hypot(m.x - px, m.y - py);
-                        if (dist < minDist) minDist = dist;
-                    }
-                    if (minDist <= thresholdNorm) {
-                        poolSources.push({ marker: m, layerKey: layerKey, layerIndex: mi });
-                    }
-                }
-            }
-
-            // Assign nearby markers to the nearest route segment (by projection)
-            const routeLen = routePts.length;
-            const segCount = map.routeLooping ? routeLen : (routeLen - 1);
-            const segments = new Array(segCount);
-            for (let si = 0; si < segCount; si++) segments[si] = [];
-            for (let i = 0; i < poolSources.length; i++) {
-                const s = poolSources[i];
-                if (!s || !s.marker) continue;
-                // find closest segment and its t
-                let bestSeg = -1; let bestDist = Infinity; let bestT = 0;
-                for (let si = 0; si < segCount; si++) {
-                    const a = routePts[si];
-                    const b = routePts[(si + 1) % routeLen];
-                    if (!a || !b) continue;
-                    const vx = b.x - a.x, vy = b.y - a.y;
-                    const wx = s.marker.x - a.x, wy = s.marker.y - a.y;
-                    const vlen2 = vx * vx + vy * vy;
-                    if (vlen2 <= 0) continue;
-                    const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
-                    const px = a.x + vx * t, py = a.y + vy * t;
-                    const dist = Math.hypot(s.marker.x - px, s.marker.y - py);
-                    if (dist < bestDist) { bestDist = dist; bestSeg = si; bestT = t; }
-                }
-                if (bestSeg >= 0) segments[bestSeg].push({ src: s, t: bestT, dist: bestDist });
-            }
-
-            // Helper: solve fixed-endpoint shortest Hamiltonian path for small N using DP
-            function solveFixedPathForSegment(pointsArr) {
-                // pointsArr: array of {x,y} with first=start and last=end
-                const n = pointsArr.length;
-                if (n <= 2) return [0, 1];
-                const k = n - 2; // intermediates count
-
-                // Safety: if too many intermediates, fall back to a cheap greedy solver
-                const DP_MAX_K = 14; // 2^14 ~= 16k states
-                // distance matrix
-                const d = Array.from({ length: n }, () => new Array(n).fill(0));
-                for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-                    const dx = pointsArr[i].x - pointsArr[j].x; const dy = pointsArr[i].y - pointsArr[j].y;
-                    d[i][j] = Math.hypot(dx, dy);
-                }
-
-                if (k > DP_MAX_K) {
-                    // Greedy nearest-neighbor between fixed endpoints: start at 0, pick nearest unvisited intermediate, finish at n-1
-                    try {
-                        const visited = new Array(n).fill(false);
-                        visited[0] = true; visited[n - 1] = true;
-                        const order = [0];
-                        let cur = 0;
-                        let remaining = k;
-                        while (remaining > 0) {
-                            let bestIdx = -1; let bestDist = Infinity;
-                            for (let j = 1; j < n - 1; j++) {
-                                if (visited[j]) continue;
-                                if (d[cur][j] < bestDist) { bestDist = d[cur][j]; bestIdx = j; }
-                            }
-                            if (bestIdx < 0) break;
-                            visited[bestIdx] = true;
-                            order.push(bestIdx);
-                            cur = bestIdx;
-                            remaining--;
-                        }
-                        order.push(n - 1);
-                        return order;
-                    } catch (err) {
-                        // Fallback to trivial ordering on error
-                        const seq = [];
-                        for (let i = 0; i < n; i++) seq.push(i);
-                        return seq;
-                    }
-                }
-
-                // DP exact solver for small k
-                try {
-                    const FULL = 1 << k;
-                    const dp = new Array(FULL).fill(null).map(() => new Array(k).fill(Infinity));
-                    const parent = new Array(FULL).fill(null).map(() => new Array(k).fill(-1));
-                    // init
-                    for (let j = 0; j < k; j++) {
-                        const mask = 1 << j;
-                        dp[mask][j] = d[0][j + 1];
-                    }
-                    for (let mask = 1; mask < FULL; mask++) {
-                        for (let last = 0; last < k; last++) {
-                            if (!(mask & (1 << last))) continue;
-                            const prevMask = mask ^ (1 << last);
-                            if (prevMask === 0) continue;
-                            for (let prev = 0; prev < k; prev++) {
-                                if (!(prevMask & (1 << prev))) continue;
-                                const val = dp[prevMask][prev] + d[prev + 1][last + 1];
-                                if (val < dp[mask][last]) { dp[mask][last] = val; parent[mask][last] = prev; }
-                            }
-                        }
-                    }
-                    // close to end
-                    let best = Infinity; let bestLast = -1; const ALL = FULL - 1;
-                    if (k === 0) {
-                        return [0, n - 1];
-                    }
-                    for (let last = 0; last < k; last++) {
-                        const cost = dp[ALL][last] + d[last + 1][n - 1];
-                        if (cost < best) { best = cost; bestLast = last; }
-                    }
-                    // reconstruct
-                    const order = [];
-                    let mask = ALL; let cur = bestLast;
-                    while (cur >= 0) {
-                        order.push(cur + 1);
-                        const p = parent[mask][cur];
-                        mask = mask ^ (1 << cur);
-                        cur = p;
-                    }
-                    order.reverse();
-                    // full path indices
-                    const path = [0].concat(order).concat([n - 1]);
-                    return path;
-                } catch (err) {
-                    // On any unexpected failure, fallback to simple ordering
-                    const seq = [];
-                    for (let i = 0; i < n; i++) seq.push(i);
-                    return seq;
-                }
-            }
-
-            // Build final ordered sources by solving per-segment fixed path
-            const finalSources = [];
-            for (let si = 0; si < segCount; si++) {
-                const aIdx = map.currentRoute[si];
-                const bIdx = map.currentRoute[(si + 1) % map.currentRoute.length];
-                const srcA = map._routeSources && map._routeSources[aIdx];
-                const srcB = map._routeSources && map._routeSources[bIdx];
-                if (!srcA || !srcA.marker || !srcB || !srcB.marker) continue;
-                // gather segment points: start, intermediates, end
-                const pts = [ { x: srcA.marker.x, y: srcA.marker.y, srcObj: { marker: srcA.marker, layerKey: srcA.layerKey } } ];
-                // sort markers along segment by t for deterministic ordering before solving
-                const bucket = segments[si] || [];
-                bucket.sort((p,q) => p.t - q.t);
-                // Limit intermediates per-segment to avoid exponential DP blowup and OOM
-                const MAX_INTERMEDIATES = 14;
-                const limited = (bucket.length > MAX_INTERMEDIATES) ? bucket.slice(0, MAX_INTERMEDIATES) : bucket;
-                for (let bi = 0; bi < limited.length; bi++) {
-                    pts.push({ x: limited[bi].src.marker.x, y: limited[bi].src.marker.y, srcObj: limited[bi].src });
-                }
-                pts.push({ x: srcB.marker.x, y: srcB.marker.y, srcObj: { marker: srcB.marker, layerKey: srcB.layerKey } });
-                if (pts.length <= 2) {
-                    // just append start (except when already added) and let loop continue; avoid duplicating
-                    if (finalSources.length === 0) finalSources.push({ marker: srcA.marker, layerKey: srcA.layerKey, layerIndex: finalSources.length });
-                    finalSources.push({ marker: srcB.marker, layerKey: srcB.layerKey, layerIndex: finalSources.length });
-                    continue;
-                }
-                // prepare points array for DP (x,y only)
-                const pointsArr = pts.map(p => ({ x: p.x, y: p.y }));
-                const order = solveFixedPathForSegment(pointsArr);
-                // append according to order, but avoid duplicating the shared points between segments
-                for (let oi = 0; oi < order.length; oi++) {
-                    const pi = order[oi];
-                    const srcEntry = pts[pi].srcObj;
-                    // skip adding the start if it's already the last appended
-                    if (finalSources.length > 0) {
-                        const last = finalSources[finalSources.length - 1];
-                        if (last && last.marker && srcEntry && srcEntry.marker && last.marker.uid === srcEntry.marker.uid) continue;
-                    }
-                    finalSources.push({ marker: srcEntry.marker, layerKey: srcEntry.layerKey || 'route', layerIndex: finalSources.length });
-                }
-            }
-
-            if (finalSources.length < 2) { alert('Not enough markers in the pool to compute a route.'); return; }
-
-            // compute overall length
-            let totalLen = 0;
-            for (let i = 1; i < finalSources.length; i++) {
-                const a = finalSources[i - 1].marker; const b = finalSources[i].marker;
-                if (!a || !b) continue;
-                const dx = b.x - a.x, dy = b.y - a.y;
-                totalLen += Math.hypot(dx, dy);
-            }
-            const indices = finalSources.map((_, i) => i);
-            map.setRoute(indices, totalLen, finalSources);
-            try { map.selectedMarker = null; map.selectedMarkerLayer = null; map.hideTooltip(); } catch (e) {}
-            try { const routeToggle = document.getElementById('editRouteToggle'); if (routeToggle && routeToggle.getAttribute('aria-pressed') !== 'true') routeToggle.click(); } catch (e) {}
-        } catch (e) { /* Nearby compute failed (suppressed) */ alert('Failed to compute nearby route.'); } finally { try { endRouteCompute(); } catch (err) {} }
+        if (typeof RouteComputation !== 'undefined') {
+            RouteComputation.expandRouteNearby(map, beginRouteCompute, endRouteCompute, LAYERS, MAP_SIZE);
+        } else {
+            console.error('RouteComputation module not available');
+        }
     }
 
     const computeNearbyBtn = document.getElementById('computeRouteNearbyBtn');

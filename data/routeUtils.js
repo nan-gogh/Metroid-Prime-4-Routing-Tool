@@ -2,56 +2,75 @@
 
 const RouteUtils = {
     // Export route points to JSON format
-    exportRoute(map, MarkerUtils) {
+    // Helper: validate route data for export
+    validateRouteForExport(map) {
+        if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
+            throw new Error('No route to export.');
+        }
+    },
+
+    // Helper: extract route points from map data
+    extractRoutePoints(map) {
+        const pts = [];
+        for (let i = 0; i < map.currentRoute.length; i++) {
+            const idx = map.currentRoute[i];
+            const src = map._routeSources && map._routeSources[idx];
+            if (!src || !src.marker) continue;
+            pts.push({
+                uid: src.marker.uid || '',
+                x: Number(src.marker.x),
+                y: Number(src.marker.y)
+            });
+        }
+        if (!pts.length) throw new Error('No valid points to export.');
+        return pts;
+    },
+
+    // Helper: generate hash for route points
+    generateRouteHash(points, MarkerUtils) {
         try {
-            if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
-                throw new Error('No route to export.');
+            if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.hashMarkerData === 'function') {
+                return MarkerUtils.hashMarkerData(points.map(p => ({ x: p.x, y: p.y })));
             }
-            const pts = [];
-            for (let i = 0; i < map.currentRoute.length; i++) {
-                const idx = map.currentRoute[i];
-                const src = map._routeSources && map._routeSources[idx];
-                if (!src || !src.marker) continue;
-                // Capture uid, x, y (no layer field needed — prefix in UID determines layer)
-                pts.push({
-                    uid: src.marker.uid || '',
-                    x: Number(src.marker.x),
-                    y: Number(src.marker.y)
-                });
-            }
-            if (!pts.length) throw new Error('No valid points to export.');
+        } catch (e) {}
+        return '';
+    },
 
-            const now = new Date();
-            const timestamp = now.getTime();
-            let hash = '';
-            try {
-                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.hashMarkerData === 'function') {
-                    // reuse hash function by mapping points to marker-like objects
-                    hash = MarkerUtils.hashMarkerData(pts.map(p => ({ x: p.x, y: p.y })));
-                }
-            } catch (e) { hash = ''; }
-
-            const exported = now.toISOString();
-            const pointsJson = pts.map(p => JSON.stringify({ uid: p.uid, x: p.x, y: p.y })).join(',\n    ');
-            const json = `{
+    // Helper: create JSON string for route export
+    createRouteJson(points, timestamp, hash, length) {
+        const exported = new Date(timestamp).toISOString();
+        const pointsJson = points.map(p => JSON.stringify({ uid: p.uid, x: p.x, y: p.y })).join(',\n    ');
+        return `{
   "exported": "${exported}",
-  "count": ${pts.length},
-  "length": ${map.currentRouteLengthNormalized || 0},
+  "count": ${points.length},
+  "length": ${length || 0},
   "points": [
     ${pointsJson}
   ]
 }`;
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            // log removed
+    },
+
+    // Helper: download route file as blob
+    downloadRouteFile(json, timestamp, hash) {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    },
+
+    exportRoute(map, MarkerUtils) {
+        try {
+            RouteUtils.validateRouteForExport(map);
+            const points = RouteUtils.extractRoutePoints(map);
+            const timestamp = Date.now();
+            const hash = RouteUtils.generateRouteHash(points, MarkerUtils);
+            const json = RouteUtils.createRouteJson(points, timestamp, hash, map.currentRouteLengthNormalized);
+            RouteUtils.downloadRouteFile(json, timestamp, hash);
             return true;
         } catch (err) {
-            // error logging removed
             throw err;
         }
     },
@@ -93,25 +112,32 @@ const RouteUtils = {
 
 
     // Helper: find layer key by matching coordinate hash (ignoring UID prefix)
-    findLayerKeyByCoordinateHash(x, y, LAYERS) {
-        const targetHash = RouteUtils.getCoordinateHash(x, y);
-        try {
-            const entries = Object.entries(LAYERS || {});
-            for (let i = 0; i < entries.length; i++) {
-                const layerKey = entries[i][0];
-                const layer = entries[i][1];
-                if (layer && Array.isArray(layer.markers)) {
-                    for (let m = 0; m < layer.markers.length; m++) {
-                        const marker = layer.markers[m];
-                        const markerHash = RouteUtils.extractHashFromUID(marker.uid);
-                        if (markerHash === targetHash) {
-                            return layerKey;
-                        }
+    // Helper: check if a marker matches the target coordinates
+    markerMatchesCoordinates(marker, targetHash) {
+        const markerHash = RouteUtils.extractHashFromUID(marker.uid);
+        return markerHash === targetHash;
+    },
+
+    // Helper: find layer key containing a specific marker
+    findLayerKeyForMarker(layers, targetHash) {
+        const entries = Object.entries(layers || {});
+        for (let i = 0; i < entries.length; i++) {
+            const [layerKey, layer] = entries[i];
+            if (layer && Array.isArray(layer.markers)) {
+                for (let m = 0; m < layer.markers.length; m++) {
+                    if (RouteUtils.markerMatchesCoordinates(layer.markers[m], targetHash)) {
+                        return layerKey;
                     }
                 }
             }
-        } catch (e) {}
-        return 'customMarkers'; // fallback
+        }
+        return null;
+    },
+
+    findLayerKeyByCoordinateHash(x, y, LAYERS) {
+        const targetHash = RouteUtils.getCoordinateHash(x, y);
+        const layerKey = RouteUtils.findLayerKeyForMarker(LAYERS, targetHash);
+        return layerKey || 'customMarkers'; // fallback
     },
 
     // Helper: extract prefix from UID (everything before the last underscore)
@@ -137,102 +163,91 @@ const RouteUtils = {
         return 'customMarkers'; // fallback
     },
 
+    // Helper: check if route contains legacy points (without uid)
+    isLegacyRoute(routePoints) {
+        return routePoints.some(p => typeof p.uid === 'undefined');
+    },
+
+    // Helper: generate UID for a single point
+    generatePointUid(point, LAYERS) {
+        if (typeof point.x !== 'number' || typeof point.y !== 'number') {
+            return null;
+        }
+        const hash = RouteUtils.getCoordinateHash(point.x, point.y);
+        const layerKey = RouteUtils.findLayerKeyByCoordinateHash(point.x, point.y, LAYERS);
+        const layerPrefix = (LAYERS[layerKey]?.prefix) || 'cm';
+        return `${layerPrefix}_${hash}`;
+    },
+
+    // Helper: upgrade a single point in place
+    upgradeSinglePoint(point, LAYERS) {
+        if (typeof point.uid === 'undefined') {
+            point.uid = RouteUtils.generatePointUid(point, LAYERS);
+            return point.uid !== null;
+        }
+        return false;
+    },
+
     // Upgrade legacy route points in place
     upgradeLegacyRoute(routePoints, LAYERS) {
-        const isLegacy = routePoints.some(p => typeof p.uid === 'undefined');
-        if (!isLegacy) return { upgraded: false, count: 0 };
+        if (!RouteUtils.isLegacyRoute(routePoints)) {
+            return { upgraded: false, count: 0 };
+        }
 
         let upgradedCount = 0;
         for (let i = 0; i < routePoints.length; i++) {
-            const p = routePoints[i];
-            if (typeof p.uid === 'undefined') {
-                if (typeof p.x === 'number' && typeof p.y === 'number') {
-                    const hash = RouteUtils.getCoordinateHash(p.x, p.y);
-                    const layerKey = RouteUtils.findLayerKeyByCoordinateHash(p.x, p.y, LAYERS);
-                    const layerPrefix = (LAYERS[layerKey]?.prefix) || 'cm';
-                    p.uid = `${layerPrefix}_${hash}`;
-                    upgradedCount++;
-                }
+            if (RouteUtils.upgradeSinglePoint(routePoints[i], LAYERS)) {
+                upgradedCount++;
             }
         }
         return { upgraded: true, count: upgradedCount };
     },
 
-    // Save route to localStorage
-    saveRoute(routeData) {
-        const payload = { points: routeData.points, length: routeData.length };
-        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-            window._mp4Storage.saveSetting('mp4_saved_route', payload);
-        } else {
-            try { localStorage.setItem('mp4_saved_route', JSON.stringify(payload)); } catch (e) {}
-        }
-        // log removed
-    },
 
-    // Load route from localStorage
-    loadRoute() {
-        try {
-            let obj = null;
-            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                obj = window._mp4Storage.loadSetting('mp4_saved_route');
-            } else {
-                try {
-                    const raw = localStorage.getItem('mp4_saved_route');
-                    obj = raw ? JSON.parse(raw) : null;
-                } catch (e) { obj = null; }
-            }
-            if (!obj) return null;
-            if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) return null;
-            return obj;
-        } catch (e) {
-            console.warn('Failed to load route from localStorage:', e);
-            return null;
-        }
-    },
 
     // Clear route from localStorage
     clearRoute() {
         try {
             // Remove persisted route key unconditionally so Clear Route always clears saved data
-            try { localStorage.removeItem('mp4_saved_route'); } catch (e) {}
+            try { localStorage.removeItem(MP4Config.STORAGE_KEYS.ROUTE); } catch (e) {}
             // Also attempt to clear via helper if present
-            try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_saved_route', null); } catch (e) {}
+            try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE, null); } catch (e) {}
         } catch (e) {}
         // log removed
     },
 
     // Clean up route references when a marker is deleted
+    // Helper: filter out route sources that reference a deleted marker
+    filterRouteSources(sources, deletedMarkerUid) {
+        return sources.filter(src => src && src.marker && src.marker.uid !== deletedMarkerUid);
+    },
+
+    // Helper: create new indices for filtered sources
+    reindexRouteSources(filteredSources) {
+        return filteredSources.map((_, index) => index);
+    },
+
+    // Helper: update route if sources were changed
+    updateRouteIfChanged(map, originalSources, newSources, newIndices) {
+        if (newSources.length !== originalSources.length) {
+            const lengthNormalized = RouteUtils.computeRouteLengthNormalized(newSources, map.constructor.MAP_SIZE || 8192);
+            if (map.setRoute) {
+                map.setRoute(newIndices, lengthNormalized, newSources);
+            }
+            console.debug(`Removed ${originalSources.length - newSources.length} waypoints referencing deleted marker`);
+            return true;
+        }
+        return false;
+    },
+
     cleanupRouteReferences(map, deletedMarkerUid) {
         try {
             if (!map || !Array.isArray(map.currentRoute) || !Array.isArray(map._routeSources)) return;
             if (!deletedMarkerUid) return;
 
-            // Find and remove any route sources that reference the deleted marker
-            const newSources = [];
-            const newIndices = [];
-
-            for (let i = 0; i < map._routeSources.length; i++) {
-                const src = map._routeSources[i];
-                if (!src || !src.marker) continue;
-
-                // Skip sources that reference the deleted marker
-                if (src.marker.uid === deletedMarkerUid) {
-                    continue; // Remove this waypoint from the route
-                }
-
-                // Keep sources that don't reference the deleted marker
-                newSources.push(src);
-                newIndices.push(newSources.length - 1);
-            }
-
-            // Only update the route if waypoints were actually removed
-            if (newSources.length !== map._routeSources.length) {
-                const lengthNormalized = RouteUtils.computeRouteLengthNormalized(newSources, map.constructor.MAP_SIZE || 8192);
-                if (map.setRoute) {
-                    map.setRoute(newIndices, lengthNormalized, newSources);
-                }
-                console.debug(`Removed ${map._routeSources.length - newSources.length} waypoints referencing deleted marker ${deletedMarkerUid}`);
-            }
+            const newSources = RouteUtils.filterRouteSources(map._routeSources, deletedMarkerUid);
+            const newIndices = RouteUtils.reindexRouteSources(newSources);
+            RouteUtils.updateRouteIfChanged(map, map._routeSources, newSources, newIndices);
         } catch (e) {
             console.debug('RouteUtils.cleanupRouteReferences failed:', e);
         }
@@ -255,53 +270,82 @@ const RouteUtils = {
         } catch (e) { return 0; }
     },
 
+    // Helper: check if pointer is over a route node
+    isPointerOverRouteNode(routeData, screenX, screenY, zoom, panX, panY, mapSize, nodeSize) {
+        const { currentRoute, routeSources } = routeData;
+        if (!currentRoute || !Array.isArray(routeSources)) return false;
+
+        const nodeRadius = (typeof nodeSize === 'number') ? (nodeSize + 4) : 8;
+        for (let i = 0; i < currentRoute.length; i++) {
+            const idxN = currentRoute[i];
+            const srcN = routeSources && routeSources[idxN];
+            if (!srcN || !srcN.marker) continue;
+            const nx = srcN.marker.x * mapSize * zoom + panX;
+            const ny = srcN.marker.y * mapSize * zoom + panY;
+            if (Math.hypot(screenX - nx, screenY - ny) <= nodeRadius) {
+                return true;
+            }
+        }
+        return false;
+    },
+
+    // Helper: project point onto line segment and return distance
+    projectPointOntoSegment(ax, ay, bx, by, px, py) {
+        const vx = bx - ax, vy = by - ay;
+        const wx = px - ax, wy = py - ay;
+        const vlen2 = vx * vx + vy * vy;
+        if (vlen2 <= 0) return null;
+
+        const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
+        const projX = ax + vx * t;
+        const projY = ay + vy * t;
+        const dist = Math.hypot(px - projX, py - projY);
+        return { dist, t, projX, projY };
+    },
+
+    // Helper: find the closest route segment within threshold
+    findClosestRouteSegment(routeData, screenX, screenY, zoom, panX, panY, mapSize, threshold) {
+        const { currentRoute, routeSources, routeLooping } = routeData;
+        if (!currentRoute || !Array.isArray(routeSources) || currentRoute.length < 2) return null;
+
+        let best = null;
+        const len = currentRoute.length;
+        const segCount = routeLooping ? len : (len - 1);
+
+        for (let i = 0; i < segCount; i++) {
+            const idxA = currentRoute[i];
+            const idxB = currentRoute[(i + 1) % len];
+            const srcA = routeSources && routeSources[idxA];
+            const srcB = routeSources && routeSources[idxB];
+            if (!srcA || !srcB || !srcA.marker || !srcB.marker) continue;
+
+            const ax = srcA.marker.x * mapSize * zoom + panX;
+            const ay = srcA.marker.y * mapSize * zoom + panY;
+            const bx = srcB.marker.x * mapSize * zoom + panX;
+            const by = srcB.marker.y * mapSize * zoom + panY;
+
+            const projection = RouteUtils.projectPointOntoSegment(ax, ay, bx, by, screenX, screenY);
+            if (!projection) continue;
+
+            if (projection.dist <= threshold && (!best || projection.dist < best.dist)) {
+                best = { index: i, dist: projection.dist, t: projection.t };
+            }
+        }
+        return best;
+    },
+
     // Find the route segment at the given screen coordinates
     findRouteSegmentAt(routeData, screenX, screenY, zoom, panX, panY, mapSize, nodeSize, threshold = 10) {
         try {
-            const { currentRoute, routeSources, routeLooping } = routeData;
-            if (!currentRoute || !Array.isArray(routeSources) || currentRoute.length < 2) return null;
-
-            // If the pointer is within any route node's hit radius, treat as node interaction (do not select a segment)
-            try {
-                const nodeRadius = (typeof nodeSize === 'number') ? (nodeSize + 4) : 8;
-                for (let i = 0; i < currentRoute.length; i++) {
-                    const idxN = currentRoute[i];
-                    const srcN = routeSources && routeSources[idxN];
-                    if (!srcN || !srcN.marker) continue;
-                    const nx = srcN.marker.x * mapSize * zoom + panX;
-                    const ny = srcN.marker.y * mapSize * zoom + panY;
-                    if (Math.hypot(screenX - nx, screenY - ny) <= nodeRadius) return null;
-                }
-            } catch (e) {}
-
-            let best = null;
-            const len = currentRoute.length;
-            const segCount = routeLooping ? len : (len - 1);
-            for (let i = 0; i < segCount; i++) {
-                const idxA = currentRoute[i];
-                const idxB = currentRoute[(i + 1) % len];
-                const srcA = routeSources && routeSources[idxA];
-                const srcB = routeSources && routeSources[idxB];
-                if (!srcA || !srcB || !srcA.marker || !srcB.marker) continue;
-                const ax = srcA.marker.x * mapSize * zoom + panX;
-                const ay = srcA.marker.y * mapSize * zoom + panY;
-                const bx = srcB.marker.x * mapSize * zoom + panX;
-                const by = srcB.marker.y * mapSize * zoom + panY;
-                // Project point P onto segment AB
-                const vx = bx - ax, vy = by - ay;
-                const wx = screenX - ax, wy = screenY - ay;
-                const vlen2 = vx * vx + vy * vy;
-                if (vlen2 <= 0) continue;
-                const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vlen2));
-                const px = ax + vx * t;
-                const py = ay + vy * t;
-                const dist = Math.hypot(screenX - px, screenY - py);
-                if (dist <= threshold) {
-                    if (!best || dist < best.dist) best = { index: i, dist, t };
-                }
+            // If the pointer is within any route node's hit radius, treat as node interaction
+            if (RouteUtils.isPointerOverRouteNode(routeData, screenX, screenY, zoom, panX, panY, mapSize, nodeSize)) {
+                return null;
             }
-            return best;
-        } catch (e) { return null; }
+
+            return RouteUtils.findClosestRouteSegment(routeData, screenX, screenY, zoom, panX, panY, mapSize, threshold);
+        } catch (e) {
+            return null;
+        }
     },
 
     // Calculate the visual size of route nodes based on zoom and styling
@@ -641,11 +685,16 @@ const RouteUtils = {
     // Save route to storage with fallback hierarchy
     saveRoute(payload) {
         try {
-            if (!payload) return false;
+            console.log('RouteUtils.saveRoute called with payload:', payload);
+            if (!payload) {
+                console.log('No payload to save');
+                return false;
+            }
 
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveSetting === 'function') {
-                const result = StorageUtils.saveSetting('mp4_saved_route', payload);
+                const result = StorageUtils.saveSetting(MP4Config.STORAGE_KEYS.ROUTE, payload);
+                console.log('StorageUtils.saveSetting result:', result);
                 if (result) return true;
                 // If StorageUtils failed, don't try fallbacks - respect consent
                 return false;
@@ -653,15 +702,18 @@ const RouteUtils = {
 
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                const result = window._mp4Storage.saveSetting('mp4_saved_route', payload);
+                const result = window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE, payload);
+                console.log('_mp4Storage.saveSetting result:', result);
                 if (result) return true;
                 // If _mp4Storage failed, don't try direct localStorage - respect consent
                 return false;
             }
 
             // No consent-gated storage available - do not save
+            console.log('No consent-gated storage available');
             return false;
         } catch (e) {
+            console.error('RouteUtils.saveRoute failed:', e);
             return false;
         }
     },
@@ -669,19 +721,27 @@ const RouteUtils = {
     // Load route from storage with fallback hierarchy
     loadRoute() {
         try {
+            console.log('RouteUtils.loadRoute called');
+
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadSetting === 'function') {
-                return StorageUtils.loadSetting('mp4_saved_route');
+                const result = StorageUtils.loadSetting(MP4Config.STORAGE_KEYS.ROUTE);
+                console.log('StorageUtils.loadSetting result:', result);
+                return result;
             }
 
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                return window._mp4Storage.loadSetting('mp4_saved_route');
+                const result = window._mp4Storage.loadSetting(MP4Config.STORAGE_KEYS.ROUTE);
+                console.log('_mp4Storage.loadSetting result:', result);
+                return result;
             }
 
             // No direct localStorage fallback - respect consent like other data
+            console.log('No consent-gated storage available, returning null');
             return null;
         } catch (e) {
+            console.warn('Failed to load route from storage:', e);
             return null;
         }
     },
@@ -693,7 +753,7 @@ const RouteUtils = {
 
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveSetting === 'function') {
-                const result = StorageUtils.saveSetting('mp4_route_looping_flag', value);
+                const result = StorageUtils.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, value);
                 if (result) return true;
                 // If StorageUtils failed, don't try fallbacks - respect consent
                 return false;
@@ -701,7 +761,7 @@ const RouteUtils = {
 
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                const result = window._mp4Storage.saveSetting('mp4_route_looping_flag', value);
+                const result = window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, value);
                 if (result) return true;
                 // If _mp4Storage failed, don't try direct localStorage - respect consent
                 return false;
@@ -719,12 +779,12 @@ const RouteUtils = {
         try {
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadSetting === 'function') {
-                return StorageUtils.loadSetting('mp4_route_looping_flag');
+                return StorageUtils.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
             }
 
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                return window._mp4Storage.loadSetting('mp4_route_looping_flag');
+                return window._mp4Storage.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
             }
 
             // No direct localStorage fallback - respect consent like other data

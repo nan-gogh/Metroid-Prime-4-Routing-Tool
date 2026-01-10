@@ -330,11 +330,11 @@ const MarkerUtils = {
         // Persist removal via consent-aware helper when available
         try {
             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_customMarkers', []);
+                window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS, []);
             }
         } catch (e) {}
         // Ensure persisted key is removed unconditionally so Clear Markers always clears saved data
-        try { localStorage.removeItem('mp4_customMarkers'); } catch (e) {}
+        try { localStorage.removeItem(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS); } catch (e) {}
         
         // Clean up route references for all removed markers
         for (let i = 0; i < uidsToRemove.length; i++) {
@@ -358,8 +358,7 @@ const MarkerUtils = {
 
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveSetting === 'function') {
-                console.log('Trying StorageUtils.saveSetting');
-                const result = StorageUtils.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+                const result = StorageUtils.saveSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS, LAYERS.customMarkers.markers);
                 console.log('StorageUtils.saveSetting result:', result);
                 if (result) return true;
                 // If StorageUtils failed, don't try fallbacks - respect consent
@@ -372,7 +371,7 @@ const MarkerUtils = {
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                 console.log('Trying _mp4Storage.saveSetting');
-                const result = window._mp4Storage.saveSetting('mp4_customMarkers', LAYERS.customMarkers.markers);
+                const result = window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS, LAYERS.customMarkers.markers);
                 console.log('_mp4Storage.saveSetting result:', result);
                 if (result) return true;
                 // If _mp4Storage failed, don't try direct localStorage - respect consent
@@ -398,12 +397,12 @@ const MarkerUtils = {
 
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadSetting === 'function') {
-                data = StorageUtils.loadSetting('mp4_customMarkers');
+                data = StorageUtils.loadSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
             }
 
             // Fallback to _mp4Storage - this also handles consent properly
-            if (data === null && window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                data = window._mp4Storage.loadSetting('mp4_customMarkers');
+            if (!data && window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                data = window._mp4Storage.loadSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
             }
 
             // No direct localStorage fallback - respect consent like other data

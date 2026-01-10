@@ -33,7 +33,30 @@ const MP4Config = {
     STORAGE_KEYS: {
         CUSTOM_MARKERS: 'mp4_customMarkers',
         ROUTE: 'mp4_route',
+        ROUTE_LOOPING_FLAG: 'mp4_route_looping_flag',
         SETTINGS: 'mp4_settings'
+    },
+
+    ROUTE: {
+        // Animation
+        ANIMATION_SPEED: 100, // pixels per second
+        DASH_OFFSET_WRAP: 1000000, // prevent floating point precision issues
+
+        // Rendering
+        LINE_WIDTH: 20, // default base stroke width
+        NODE_SIZE_MULTIPLIER: 1.0, // route node size scaling
+        NODE_MIN_SIZE: 2, // minimum route node size
+        NODE_MAX_SIZE: 80, // maximum route node size
+
+        // Interaction
+        SEGMENT_DETECTION_THRESHOLD: 10, // pixels for route segment hover detection
+        MOVE_THRESHOLD: 8, // pixels for drag detection
+
+        // Computation
+        EXPAND_PROXIMITY_THRESHOLD: 160, // pixels for nearby marker inclusion
+        DP_MAX_INTERMEDIATES: 14, // 2^14 = 16k states for TSP solver
+        MAX_INTERMEDIATES_PER_BUCKET: 14, // limit intermediates per segment bucket
+        TSP_GREEDY_LIMIT: 14 // switch to greedy solver above this count
     }
 };
 

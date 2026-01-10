@@ -188,7 +188,7 @@
         } else {
           // Handle route segment insertion in edit mode
           if (this.map.editRouteMode) {
-            const seg = this.map.findRouteSegmentAt ? this.map.findRouteSegmentAt(localX, localY, 10) : null;
+            const seg = this.map.findRouteSegmentAt ? this.map.findRouteSegmentAt(localX, localY, MP4Config.ROUTE.SEGMENT_DETECTION_THRESHOLD) : null;
             if (seg && typeof seg.index === 'number') {
               // Route insertion logic would go here
               if (typeof this.map._handleRouteInsertStart === 'function') {
@@ -320,7 +320,7 @@
       if (this.map._routeNodeCandidate && ev.pointerId === this.map._routeNodeCandidate.pointerId) {
         const dxn = ev.clientX - this.map._routeNodeCandidate.startClientX;
         const dyn = ev.clientY - this.map._routeNodeCandidate.startClientY;
-        if (Math.hypot(dxn, dyn) > 8) { // MOVE_THRESHOLD
+        if (Math.hypot(dxn, dyn) > MP4Config.ROUTE.MOVE_THRESHOLD) { // MOVE_THRESHOLD
           this._promoteRouteNodeDrag(ev, localX, localY);
         }
       }
@@ -331,7 +331,7 @@
       if (this.map._draggingCandidate && ev.pointerId === this.map._draggingCandidate.pointerId) {
         const dx = ev.clientX - this.map._draggingCandidate.startClientX;
         const dy = ev.clientY - this.map._draggingCandidate.startClientY;
-        if (Math.hypot(dx, dy) > 8) { // MOVE_THRESHOLD
+        if (Math.hypot(dx, dy) > MP4Config.ROUTE.MOVE_THRESHOLD) { // MOVE_THRESHOLD
           this._promoteMarkerDrag(ev);
         }
       }
@@ -416,7 +416,7 @@
         const canPreview = !this.isDragging && !this._draggingMarker && !this.map._draggingCandidate && 
                           !this._routeInsert && !this.map._routeNodeCandidate && this.editRouteMode;
         if (canPreview) {
-          const seg = this._findRouteSegmentAt ? this._findRouteSegmentAt(localX, localY, 10) : null;
+          const seg = this._findRouteSegmentAt ? this._findRouteSegmentAt(localX, localY, MP4Config.ROUTE.SEGMENT_DETECTION_THRESHOLD) : null;
           if (seg && typeof seg.index === 'number') {
             const len = Array.isArray(this.currentRoute) ? this.currentRoute.length : 0;
             if (len > 1) {

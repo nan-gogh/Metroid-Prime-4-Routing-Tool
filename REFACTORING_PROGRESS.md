@@ -296,3 +296,51 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
 - ✅ All renderers properly access configuration
 
 **Ready to proceed to Phase 2 polish and Phase 3 implementation.**
+
+---
+
+## Additional Refactoring Priorities (Completed)
+
+### Priority 2: Add Constants ✅ Complete
+**Status:** ✅ Complete  
+**File:** [data/config.js](data/config.js)  
+**Evidence:** Added comprehensive `MP4Config.ROUTE` section with 12+ constants:
+- `ANIMATION_SPEED: 100`
+- `LINE_WIDTH: 8`
+- `EXPAND_PROXIMITY_THRESHOLD: 160`
+- `SEGMENT_DETECTION_THRESHOLD: 20`
+- `DP_MAX_INTERMEDIATES: 14`
+- `MAX_INTERMEDIATES_PER_BUCKET: 8`
+- `TSP_GREEDY_LIMIT: 20`
+- `MOVE_THRESHOLD_PX: 10`
+
+**Updated Files:**
+- [map.js](map.js) - Route animation and computation settings
+- [input/PointerHandler.js](input/PointerHandler.js) - Interaction thresholds  
+- [data/routeUtils.js](data/routeUtils.js) - Storage keys
+- [data/markerUtils.js](data/markerUtils.js) - Storage keys
+
+### Priority 1: Extract Route Computation Module ✅ Complete
+**Status:** ✅ Complete  
+**File:** [data/RouteComputation.js](data/RouteComputation.js) (~425 lines)  
+**Evidence:** Successfully extracted complex route computation algorithms from `map.js`:
+
+**Extracted Functions:**
+- `expandRouteNearby()` - Main route expansion algorithm
+- `solveFixedPathForSegment()` - TSP solver with DP and greedy fallbacks
+- `_collectNearbyMarkers()` - Proximity-based marker collection
+- `_assignMarkersToSegments()` - Segment assignment with projection
+- `_solveSegmentsAndBuildRoute()` - Per-segment route optimization
+- `_pointToSegmentDistance()` - Geometric distance calculations
+
+**Key Improvements:**
+- ✅ Modularized 200+ lines of complex TSP integration
+- ✅ Improved testability of route algorithms
+- ✅ Better separation of concerns
+- ✅ Preserved all existing functionality
+- ✅ Added comprehensive JSDoc documentation
+
+**Integration:**
+- Updated [map.js](map.js) to use `RouteComputation.expandRouteNearby()`
+- Added script tag to [index.html](index.html)
+- No syntax errors, maintains backward compatibility
