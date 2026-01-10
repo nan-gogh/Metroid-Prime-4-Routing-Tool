@@ -28,7 +28,7 @@ The codebase currently suffers from a **6,012-line "god class"** (`InteractiveMa
 | `map.js` | 6,012 | **God class** - everything | Critical |
 | `markerUtils.js` | 443 | Custom marker CRUD | Moderate |
 | `routeUtils.js` | ~200 | Route persistence | Moderate |
-| `storageHelper.js` | ~75 | LocalStorage wrapper | Low |
+| `storageUtils.js` | ~150 | LocalStorage wrapper (consolidated) | Low |
 | `init.js` | 5 | Global LAYERS init | Low |
 | `tsp_euclid.js` | 238 | TSP solver | Isolated |
 | `styles.css` | 1,556 | All styling | N/A |
@@ -161,10 +161,11 @@ data/
 ├── init.js
 ├── markerUtils.js
 ├── routeUtils.js
-├── storageHelper.js
+├── storageUtils.js
 └── layers/
     └── ... (unchanged)
 ```
+
 
 **config.js contents:**
 ```javascript

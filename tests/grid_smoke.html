@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Grid Smoke Test</title>
+  <style>body{font-family:system-ui; padding:20px;} .pass{color:green;} .fail{color:red}</style>
+</head>
+<body>
+  <h1>Grid Smoke Test</h1>
+  <div id="out"></div>
+  <script>
+    function log(msg, ok) {
+      const el = document.createElement('div'); el.textContent = msg; el.className = ok ? 'pass' : 'fail'; document.getElementById('out').appendChild(el);
+      if (!ok) console.error(msg);
+    }
+
+    (async function run() {
+      // Wait for map to be initialized
+      for (let i=0;i<200;i++) { if (window.map) break; await new Promise(r=>setTimeout(r,50)); }
+      if (!window.map) { log('map not initialized', false); return; }
+      const map = window.map;
+
+      // Ensure GridRenderer exists
+      if (!map.gridRenderer) { log('gridRenderer missing', false); return; }
+      log('gridRenderer present', true);
+
+      // Ensure labels exist after init
+      try { map.gridRenderer.init(); } catch (e) {}
+      const parent = map.canvas.parentElement;
+      const container = parent.querySelector('#gridQuadLabels');
+      await new Promise(r=>setTimeout(r,100));
+      if (container && container.querySelectorAll('.grid-quad-label').length === (MP4Config.GRID.COLS * MP4Config.GRID.ROWS)) {
+        log('grid labels created', true);
+      } else {
+        log('grid labels missing or wrong count', false);
+      }
+
+      // Ensure visibility toggles with highlight
+      try { map.highlightedLayers = map.highlightedLayers || new Set(); } catch (e) {}
+      try { map.highlightedLayers.add('grid'); } catch (e) {}
+      try { map.gridRenderer.updateQuadLabels(); } catch (e) {}
+      await new Promise(r=>setTimeout(r,100));
+      if (container && getComputedStyle(container).display !== 'none') log('grid labels visible when highlighted', true); else log('grid labels not visible when highlighted', false);
+
+      // Remove highlight -> should hide
+      try { map.highlightedLayers.delete('grid'); } catch (e) {}
+      try { map.gridRenderer.updateQuadLabels(); } catch (e) {}
+      await new Promise(r=>setTimeout(r,100));
+      if (container && getComputedStyle(container).display === 'none') log('grid labels hidden when un-highlighted', true); else log('grid labels still visible when un-highlighted', false);
+
+      log('Grid smoke test complete', true);
+    })();
+  </script>
+</body>
+</html>

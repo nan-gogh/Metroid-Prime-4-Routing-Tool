@@ -13,6 +13,18 @@ const MarkerUtils = {
         return markerArray.findIndex(m => m.uid === uid);
     },
 
+    // Compute screen position of a marker: returns { x, y } in CSS pixels
+    // Pure helper for UI code to convert normalized marker coords to screen coords
+    getMarkerScreenPosition(marker, map) {
+        if (!marker || !map) return null;
+        try {
+            const x = Number(marker.x) * MAP_SIZE * map.zoom + map.panX;
+            const y = Number(marker.y) * MAP_SIZE * map.zoom + map.panY;
+            return { x: Number(x), y: Number(y) };
+        } catch (e) { return null; }
+    },
+
+
     // Determine whether a UID looks like the new position-hash format
     // Expected format: <prefix>_<8-hex-chars>, e.g. 'cm_4b4f2ee3'
     isHashedUID(uid) {
@@ -184,6 +196,74 @@ const MarkerUtils = {
         // Convert to 8-character hex, always positive
         const hex = Math.abs(hash).toString(16).padStart(8, '0').slice(-8);
         return `${prefix}_${hex}`;
+    },
+
+    // ---------- Marker sizing helpers (pure functions) ----------
+    // computeBaseMarkerRadius(zoom, routeNodeSize) -> number
+    computeBaseMarkerRadius(zoom, routeNodeSize) {
+        try {
+            const z = (typeof zoom === 'number') ? zoom : 1;
+            const base = Math.max(2, Math.min(16, 10 * z));
+            if (typeof routeNodeSize === 'number') return Math.max(base, routeNodeSize + 10 * z);
+            return base;
+        } catch (e) { return 8; }
+    },
+
+    // computeDetailScale(zoom) -> number
+    computeDetailScale(zoom) {
+        try {
+            const z = (typeof zoom === 'number' && zoom > 0) ? zoom : 1;
+            const min = 0.1;
+            const exp = 0.7;
+            const val = Math.pow(z, -exp);
+            return Math.max(min, Math.min(1, val));
+        } catch (e) { return 1; }
+    },
+
+    // computeMarkerScale(detailScale, markerShrinkFactor) -> number
+    computeMarkerScale(detailScale, markerShrinkFactor) {
+        try {
+            const ds = (typeof detailScale === 'number') ? detailScale : 1;
+            const mf = (typeof markerShrinkFactor === 'number') ? markerShrinkFactor : 0.6;
+            return 1 - (1 - ds) * mf;
+        } catch (e) { return 1; }
+    },
+
+    // computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding) -> number
+    computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding) {
+        try {
+            const b = (typeof base === 'number') ? base : 8;
+            const ds = (typeof detailScale === 'number') ? detailScale : 1;
+            const mf = (typeof markerShrinkFactor === 'number') ? markerShrinkFactor : 0.6;
+            const scaled = Math.max(1, b * (1 - (1 - ds) * mf));
+            return scaled + (touchPadding || 0);
+        } catch (e) { return (base || 8) + (touchPadding || 0); }
+    },
+
+    // computeMarkerRenderSize({ baseSize, detailScale, markerShrinkFactor, highlighted, highlightScale, highlightScaleMultiplier, isSelected }) -> number
+    computeMarkerRenderSize(opts) {
+        try {
+            const baseSize = (typeof opts.baseSize === 'number') ? opts.baseSize : 8;
+            const detailScale = (typeof opts.detailScale === 'number') ? opts.detailScale : 1;
+            const markerShrinkFactor = (typeof opts.markerShrinkFactor === 'number') ? opts.markerShrinkFactor : 0.6;
+            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
+
+            let highlightMult = 1;
+            if (opts.highlighted) {
+                const cfgScale = (typeof opts.highlightScale === 'number') ? opts.highlightScale : 2.0;
+                highlightMult = cfgScale;
+                try {
+                    const gm = (typeof opts.highlightScaleMultiplier === 'number') ? opts.highlightScaleMultiplier : 1.0;
+                    highlightMult = highlightMult * gm;
+                    highlightMult = Math.max(highlightMult, 0.6);
+                } catch (e) {}
+            }
+
+            const isSelected = !!opts.isSelected;
+            const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
+            const size = Math.max(1, rawSize * markerScale);
+            return size;
+        } catch (e) { return Math.max(1, opts.baseSize || 8); }
     },
     
     // Add a new custom marker
@@ -427,6 +507,14 @@ const MarkerUtils = {
                 }
                 map.currentRouteLengthNormalized = totalLength;
                 map.currentRouteLength = totalLength * 8192; // MAP_SIZE
+                // Invalidate route renderer cache since route structure changed
+                try {
+                    if (map.routeRenderer && typeof map.routeRenderer.invalidateCache === 'function') {
+                        map.routeRenderer.invalidateCache();
+                    }
+                } catch (e) {
+                    console.debug('Failed to invalidate route renderer cache after marker deletion', e);
+                }
                 try { map.saveRouteToStorage(); } catch (e) {}
                 map.render();
                 // log removed

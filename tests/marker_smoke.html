@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Marker Hit Smoke Test</title>
+  <style>body{font-family:system-ui; padding:20px;} .pass{color:green;} .fail{color:red}</style>
+</head>
+<body>
+  <h1>Marker Hit Smoke Test</h1>
+  <div id="out"></div>
+  <script>
+    function log(msg, ok) {
+      const el = document.createElement('div'); el.textContent = msg; el.className = ok ? 'pass' : 'fail'; document.getElementById('out').appendChild(el);
+      if (!ok) console.error(msg);
+    }
+
+    (async function run() {
+      for (let i=0;i<200;i++) { if (window.map && window.map.markerRenderer) break; await new Promise(r=>setTimeout(r,50)); }
+      if (!window.map) { log('map not initialized', false); return; }
+      const map = window.map;
+      if (!map.markerRenderer) { log('markerRenderer missing', false); return; }
+      log('markerRenderer present', true);
+
+      // Create a test layer and marker at the center
+      try {
+        if (!window.LAYERS) window.LAYERS = {};
+        window.LAYERS._smoke_test = { markers: [ { uid: 'smoke-1', x: 0.5, y: 0.5 } ], color: '#f00', deletable: false };
+        map.layerVisibility = map.layerVisibility || {};
+        map.layerVisibility._smoke_test = true;
+      } catch (e) { log('failed to setup test layer: ' + e, false); return; }
+
+      // Render and allow layout to settle
+      try { map.render(); } catch (e) {}
+      await new Promise(r=>setTimeout(r,100));
+
+      const marker = window.LAYERS._smoke_test.markers[0];
+      const sx = marker.x * MAP_SIZE * map.zoom + map.panX;
+      const sy = marker.y * MAP_SIZE * map.zoom + map.panY;
+
+      const hit = (map.markerRenderer && typeof map.markerRenderer.findMarkerAt === 'function') ? map.markerRenderer.findMarkerAt(sx, sy) : (map.findMarkerAt ? map.findMarkerAt(sx, sy) : null);
+      if (hit && hit.marker && hit.marker.uid === 'smoke-1') log('marker hit at center detected', true); else log('marker hit at center NOT detected', false);
+
+      const miss = (map.markerRenderer && typeof map.markerRenderer.findMarkerAt === 'function') ? map.markerRenderer.findMarkerAt(sx + 200, sy + 200) : (map.findMarkerAt ? map.findMarkerAt(sx + 200, sy + 200) : null);
+      if (!miss) log('no hit at far away point (correct)', true); else log('unexpected hit at far away point', false);
+
+      log('Marker smoke test complete', true);
+    })();
+  </script>
+</body>
+</html>

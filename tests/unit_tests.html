@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Unit Tests - Utilities</title>
+  <style>body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:20px;} .pass{color:green;} .fail{color:red;}</style>
+</head>
+<body>
+  <h1>Unit tests (utils)</h1>
+  <div id="results"></div>
+  <script src="../rendering/utils/colorUtils.js"></script>
+  <script src="../data/markerUtils.js"></script>
+  <script src="../data/routeUtils.js"></script>
+  <script>
+    const results = document.getElementById('results');
+    function assert(cond, msg) {
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.className = cond ? 'pass' : 'fail';
+      results.appendChild(el);
+      if (!cond) console.error('FAILED:', msg);
+    }
+
+    // color utils
+    try {
+      const rgba = ColorUtils.hexToRgba('#22d3ee', 0.5);
+      assert(typeof rgba === 'string' && rgba.startsWith('rgba('), 'ColorUtils.hexToRgba returns rgba string');
+    } catch (e) { assert(false, 'ColorUtils.hexToRgba threw'); }
+
+    // marker position
+    try {
+      const fakeMap = { zoom: 0.1, panX: 5, panY: 10 };
+      const m = { x: 0.5, y: 0.25 };
+      const pos = MarkerUtils.getMarkerScreenPosition(m, fakeMap);
+      assert(pos && typeof pos.x === 'number' && typeof pos.y === 'number', 'MarkerUtils.getMarkerScreenPosition returns coordinates');
+    } catch (e) { assert(false, 'MarkerUtils.getMarkerScreenPosition threw'); }
+
+    // marker sizing helpers
+    try {
+      const base = MarkerUtils.computeBaseMarkerRadius(0.1, 6);
+      assert(typeof base === 'number' && base > 0, 'MarkerUtils.computeBaseMarkerRadius returns positive number');
+      const ds = MarkerUtils.computeDetailScale(1.2);
+      assert(typeof ds === 'number' && ds > 0, 'MarkerUtils.computeDetailScale returns positive number');
+      const ms = MarkerUtils.computeMarkerScale(ds, 0.6);
+      assert(typeof ms === 'number' && ms > 0, 'MarkerUtils.computeMarkerScale returns positive number');
+      const hr = MarkerUtils.computeHitRadius(base, ds, 0.6, 2);
+      assert(typeof hr === 'number' && hr >= base, 'MarkerUtils.computeHitRadius is >= base');
+      const rsize = MarkerUtils.computeMarkerRenderSize({ baseSize: base, detailScale: ds, markerShrinkFactor: 0.6, highlighted: true, highlightScale: 2.0, highlightScaleMultiplier: 1.0, isSelected: false });
+      assert(typeof rsize === 'number' && rsize >= 1, 'MarkerUtils.computeMarkerRenderSize returns >=1');
+    } catch (e) { assert(false, 'MarkerUtils sizing helpers threw'); }
+
+    // route preview position
+    try {
+      const fakeMap = { zoom: 0.1, panX: 5, panY: 10 };
+      const rp = { x: 0.2, y:0.4 };
+      const pos = RouteUtils.getRoutePreviewScreenPosition(rp, fakeMap);
+      assert(pos && typeof pos.x === 'number' && typeof pos.y === 'number', 'RouteUtils.getRoutePreviewScreenPosition returns coordinates');
+    } catch (e) { assert(false, 'RouteUtils.getRoutePreviewScreenPosition threw'); }
+  </script>
+</body>
+</html>

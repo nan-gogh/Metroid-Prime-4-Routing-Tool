@@ -311,7 +311,7 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 │   ├── init.js             # LAYERS bootstrap
 │   ├── markerUtils.js      # Marker persistence, import/export, UID generation
 │   ├── routeUtils.js       # Route utilities (export, import, clearing)
-│   ├── storageHelper.js    # LocalStorage consent gating
+│   ├── storageUtils.js    # LocalStorage consent gating (consolidated)
 │   └── layers/
 │       ├── geCrystallization1.js   # GE Crystal Phase 1 (84 markers, gc1_ UIDs)
 │       ├── geCrystallization2.js   # GE Crystal Phase 2 (135 markers, gc2_ UIDs)

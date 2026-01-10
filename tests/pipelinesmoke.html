@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RenderPipeline Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        canvas { border: 1px solid #ccc; margin: 10px 0; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ddd; }
+        .stats { background: #f5f5f5; padding: 10px; font-family: monospace; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 8px 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>RenderPipeline Staged Control & Profiling Test</h1>
+
+    <div class="test-section">
+        <h2>Test Canvas</h2>
+        <canvas id="testCanvas" width="800" height="600"></canvas>
+    </div>
+
+    <div class="test-section">
+        <h2>Stage Controls</h2>
+        <div class="controls">
+            <button id="enableAll">Enable All Stages</button>
+            <button id="disableAll">Disable All Stages</button>
+            <button id="toggleTile">Toggle TileRenderer</button>
+            <button id="toggleMarker">Toggle MarkerRenderer</button>
+            <button id="toggleRoute">Toggle RouteRenderer</button>
+            <button id="toggleHeatmap">Toggle HeatmapRenderer</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Profiling Controls</h2>
+        <div class="controls">
+            <button id="enableProfiling">Enable Profiling</button>
+            <button id="disableProfiling">Disable Profiling</button>
+            <button id="runRenderTest">Run Render Test (10x)</button>
+            <button id="showStats">Show Performance Stats</button>
+            <button id="resetStats">Reset Stats</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Pipeline Status</h2>
+        <div id="status">Pipeline initialized</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Performance Stats</h2>
+        <div id="stats" class="stats">No stats available</div>
+    </div>
+
+    <script src="rendering/RenderPipeline.js"></script>
+    <script>
+        // Mock renderers
+        const mockRenderers = {
+            tileRenderer: {
+                constructor: { name: 'TileRenderer' },
+                render: function() {
+                    console.log('TileRenderer.render() called');
+                    // Simulate some work
+                    const start = performance.now();
+                    while (performance.now() - start < 1) {} // 1ms delay
+                }
+            },
+            markerRenderer: {
+                constructor: { name: 'MarkerRenderer' },
+                render: function() {
+                    console.log('MarkerRenderer.render() called');
+                    // Simulate some work
+                    const start = performance.now();
+                    while (performance.now() - start < 0.5) {} // 0.5ms delay
+                }
+            },
+            routeRenderer: {
+                constructor: { name: 'RouteRenderer' },
+                render: function() {
+                    console.log('RouteRenderer.render() called');
+                    // Simulate some work
+                    const start = performance.now();
+                    while (performance.now() - start < 2) {} // 2ms delay
+                }
+            },
+            heatmapRenderer: {
+                constructor: { name: 'HeatmapRenderer' },
+                render: function() {
+                    console.log('HeatmapRenderer.render() called');
+                    // Simulate some work
+                    const start = performance.now();
+                    while (performance.now() - start < 1.5) {} // 1.5ms delay
+                }
+            }
+        };
+
+        // Create pipeline with mock renderers
+        const pipeline = new RenderPipeline([
+            mockRenderers.tileRenderer,
+            mockRenderers.markerRenderer,
+            mockRenderers.routeRenderer,
+            mockRenderers.heatmapRenderer
+        ]);
+
+        function updateStatus() {
+            const enabled = pipeline.getEnabledStages().map(r => r.constructor.name);
+            const all = pipeline.getAllStages().map(r => r.constructor.name);
+            document.getElementById('status').textContent =
+                `Enabled: [${enabled.join(', ')}] | All: [${all.join(', ')}] | Profiling: ${pipeline.isProfilingEnabled()}`;
+        }
+
+        function showStats() {
+            const stats = pipeline.getPerformanceStats();
+            document.getElementById('stats').textContent = JSON.stringify(stats, null, 2);
+        }
+
+        // Event listeners
+        document.getElementById('enableAll').addEventListener('click', () => {
+            pipeline.enableAllStages();
+            updateStatus();
+        });
+
+        document.getElementById('disableAll').addEventListener('click', () => {
+            pipeline.disableAllStages();
+            updateStatus();
+        });
+
+        document.getElementById('toggleTile').addEventListener('click', () => {
+            if (pipeline.isStageEnabled(mockRenderers.tileRenderer)) {
+                pipeline.disableStage(mockRenderers.tileRenderer);
+            } else {
+                pipeline.enableStage(mockRenderers.tileRenderer);
+            }
+            updateStatus();
+        });
+
+        document.getElementById('toggleMarker').addEventListener('click', () => {
+            if (pipeline.isStageEnabled(mockRenderers.markerRenderer)) {
+                pipeline.disableStage(mockRenderers.markerRenderer);
+            } else {
+                pipeline.enableStage(mockRenderers.markerRenderer);
+            }
+            updateStatus();
+        });
+
+        document.getElementById('toggleRoute').addEventListener('click', () => {
+            if (pipeline.isStageEnabled(mockRenderers.routeRenderer)) {
+                pipeline.disableStage(mockRenderers.routeRenderer);
+            } else {
+                pipeline.enableStage(mockRenderers.routeRenderer);
+            }
+            updateStatus();
+        });
+
+        document.getElementById('toggleHeatmap').addEventListener('click', () => {
+            if (pipeline.isStageEnabled(mockRenderers.heatmapRenderer)) {
+                pipeline.disableStage(mockRenderers.heatmapRenderer);
+            } else {
+                pipeline.enableStage(mockRenderers.heatmapRenderer);
+            }
+            updateStatus();
+        });
+
+        document.getElementById('enableProfiling').addEventListener('click', () => {
+            pipeline.enableProfiling();
+            updateStatus();
+        });
+
+        document.getElementById('disableProfiling').addEventListener('click', () => {
+            pipeline.disableProfiling();
+            updateStatus();
+        });
+
+        document.getElementById('runRenderTest').addEventListener('click', () => {
+            console.log('Running render performance test...');
+            for (let i = 0; i < 10; i++) {
+                pipeline.render();
+            }
+            console.log('Render test complete');
+            showStats();
+        });
+
+        document.getElementById('showStats').addEventListener('click', showStats);
+
+        document.getElementById('resetStats').addEventListener('click', () => {
+            pipeline.resetPerformanceStats();
+            showStats();
+        });
+
+        // Initial setup
+        updateStatus();
+        console.log('RenderPipeline test page loaded');
+    </script>
+</body>
+</html>

@@ -46,13 +46,31 @@ class InteractiveMap {
                 this.routeRenderer = new RouteRenderer(this, MP4Config);
                 try { this.routeRenderer.init(); } catch (e) { console.debug('RouteRenderer.init failed', e); }
             }
+            if (typeof OverlayRenderer !== 'undefined') {
+                this.overlayRenderer = new OverlayRenderer(this, MP4Config);
+                try { this.overlayRenderer.init(); } catch (e) { console.debug('OverlayRenderer.init failed', e); }
+            }
             if (typeof RenderPipeline !== 'undefined') {
+                // Insert an overlay-clear stage so overlay canvas is cleared
+                // exactly once before overlay-rendering stages (grid, markers, route)
+                const overlayClearStage = {
+                    render: () => {
+                        try {
+                            if (!this.ctx || !this.canvas) return;
+                            const cssWidth = this.canvas.clientWidth;
+                            const cssHeight = this.canvas.clientHeight;
+                            this.ctx.clearRect(0, 0, cssWidth, cssHeight);
+                        } catch (e) { console.debug('overlayClearStage failed', e); }
+                    }
+                };
                 this.renderPipeline = new RenderPipeline([
                     this.tileRenderer,
                     this.heatmapRenderer,
+                    overlayClearStage,
                     this.gridRenderer,
                     this.markerRenderer,
-                    this.routeRenderer
+                    this.routeRenderer,
+                    this.overlayRenderer
                 ].filter(Boolean));
             }
 
@@ -130,6 +148,16 @@ class InteractiveMap {
         if (loopBtn) {
             loopBtn.addEventListener('click', () => {
                 map.routeLooping = !map.routeLooping;
+
+                // Invalidate route renderer caches when looping changes
+                try {
+                    if (map.routeRenderer && typeof map.routeRenderer.invalidateCache === 'function') {
+                        map.routeRenderer.invalidateCache();
+                    }
+                } catch (e) {
+                    console.debug('Failed to invalidate route renderer cache on loop toggle', e);
+                }
+
                 try {
                     if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                         window._mp4Storage.saveSetting('mp4_route_looping_flag', map.routeLooping ? '1' : '0');
@@ -215,6 +243,22 @@ class InteractiveMap {
         
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
+
+        // Initialize TooltipManager and attach it to the map container
+        try {
+            if (typeof TooltipManager !== 'undefined') {
+                try { this.tooltipManager = new TooltipManager(); this.tooltipManager.init(this.canvas.parentElement); } catch (e) { console.debug('TooltipManager.init failed', e); }
+            }
+        } catch (e) {}
+        // Move tooltip into the map container and ensure container is positioned so absolute coords align
+        try {
+            const parent = this.canvas && this.canvas.parentElement;
+            if (this.tooltip && parent) {
+                try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) {}
+                try { parent.appendChild(this.tooltip); } catch (e) {}
+                try { this.tooltip.style.position = 'absolute'; this.tooltip.style.zIndex = '999'; this.tooltip.style.pointerEvents = 'none'; } catch (e) {}
+            }
+        } catch (e) {}
         // Tileset selection (sat / holo). Persisted in localStorage as 'mp4_tileset'
         try {
             let t = null;
@@ -271,76 +315,11 @@ class InteractiveMap {
 
     // Preload map images at all resolutions to reduce hiccups during zoom/pan
     preloadAllMapImages() {
-        const initial = this.getNeededResolution();
-        // Only consider the currently-needed resolution and (unless low-spec)
-        // one higher neighbor.
-        const toPreload = [initial];
-        if (!this._lowSpec && (initial + 1 < RESOLUTIONS.length)) toPreload.push(initial + 1);
-        for (let p = 0; p < toPreload.length; p++) {
-            const i = toPreload[p];
-            const size = RESOLUTIONS[i];
-            const folder = this.getTilesetFolder();
-            const href = `tiles/${folder}/${size}.avif`;
-
-            // Stagger fetches to avoid a burst of work on load
-            (function(i, size, folder, href){
-                const gen = this._tilesetGeneration;
-                setTimeout(async () => {
-                    // If tileset changed since scheduling, skip
-                    if (this._tilesetGeneration !== gen) return;
-                    if (this.images[i]) return;
-
-                    // Try fetch + createImageBitmap path first
-                    try {
-                        if (window.fetch && window.createImageBitmap) {
-                            const controller = new AbortController();
-                            try { this._imageControllers[i] = controller; } catch (e) { console.debug('tileLoader: failed to set _imageControllers[' + i + ']', e); }
-                            const resp = await fetch(href, { signal: controller.signal });
-                            try { delete this._imageControllers[i]; } catch (e) { console.debug('tileLoader: failed to delete _imageControllers[' + i + ']', e); }
-                            if (!resp.ok) throw new Error('fetch-failed');
-                            const blob = await resp.blob();
-                            // Generation may have changed while fetching
-                            if (this._tilesetGeneration !== gen) { return; }
-                            const bmp = await createImageBitmap(blob);
-                            try { bmp._tilesetFolder = folder; } catch (e) { console.debug('tileLoader: failed to tag ImageBitmap with tileset folder', e); }
-                            if (this._tilesetGeneration === gen) {
-                                try { this._imageBitmaps[i] = bmp; } catch (e) { console.debug('tileLoader: failed to store ImageBitmap in _imageBitmaps[' + i + ']', e); }
-                                try { this.images[i] = bmp; } catch (e) { console.debug('tileLoader: failed to set images[' + i + ']', e); }
-                            } else {
-                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { console.debug('tileLoader: failed to close stale ImageBitmap', e); }
-                                try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { console.debug('tileLoader: failed to close stale ImageBitmap (2)', e); }
-                            }
-                            return;
-                        }
-                    } catch (err) {
-                        try { delete this._imageControllers[i]; } catch (e) {}
-                        // fall through to image element fallback
-                    }
-
-                    // Fallback to <img> element loading
-                    try {
-                        const img = new Image();
-                        try { img._tilesetFolder = folder; } catch (e) {}
-                        try { this._imageElements[i] = img; } catch (e) { console.debug('tileLoader: failed to set _imageElements[' + i + ']', e); }
-                        img.onload = () => {
-                            try {
-                                if (this._tilesetGeneration !== gen) {
-                                    try { img.onload = null; img.onerror = null; img.src = ''; } catch (e) {}
-                                    return;
-                                }
-                                try { this.images[i] = img; } catch (e) { console.debug('tileLoader: failed to set images[' + i + ']', e); }
-                            } catch (e) {}
-                        };
-                        img.onerror = () => {
-                            try { img.onload = null; img.onerror = null; } catch (e) {}
-                        };
-                        img.src = href;
-                    } catch (e) {
-                        // Give up for this resolution
-                    }
-                }, i * 150);
-            }).call(this, i, size, folder, href);
-        }
+        try {
+            if (this.tileRenderer && typeof this.tileRenderer.preloadAllMapImages === 'function') {
+                return this.tileRenderer.preloadAllMapImages();
+            }
+        } catch (e) {}
     }
     
     resize() {
@@ -447,7 +426,7 @@ class InteractiveMap {
                 if (this.pointers.size === 1) {
                     // Determine whether pointerdown hit a marker — handle route-node-drag
                     // when in route-edit mode, otherwise treat customMarkers specially.
-                    const hit = this.findMarkerAt(localX, localY);
+                    const hit = this.markerRenderer.findMarkerAt(localX, localY);
                     // If in route-edit mode and user pressed on a marker that's part of the current route,
                     // begin an edit-drag of that waypoint (replace with a temporary waypoint in route order).
                     if (hit && this.editRouteMode && hit.marker && hit.marker.uid && Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
@@ -662,7 +641,7 @@ class InteractiveMap {
                         this._routeSources[tempIdx].marker.y = Math.max(0, Math.min(1, Number(worldY)));
                     }
                     // Check for marker under pointer to snap to
-                    const hitMarker = this.findMarkerAt(localX, localY);
+                    const hitMarker = this.markerRenderer.findMarkerAt(localX, localY);
                     if (hitMarker && hitMarker.marker && hitMarker.marker.uid) {
                         // Check if marker already part of route (exclude temp index)
                         let exists = false;
@@ -676,6 +655,14 @@ class InteractiveMap {
                     } else {
                         this._routeInsert.hoverMarker = null;
                         this._routeInsert.hoverOccupied = false;
+                    }
+                    // Invalidate route renderer cache since marker positions changed
+                    try {
+                        if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
+                            this.routeRenderer.invalidateCache();
+                        }
+                    } catch (e) {
+                        console.debug('Failed to invalidate route renderer cache during drag', e);
                     }
                     // Update length and render
                     try { this.currentRouteLengthNormalized = this.computeRouteLengthNormalized(this._routeSources); this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE; } catch (e) {}
@@ -1033,7 +1020,7 @@ class InteractiveMap {
                     this.pointerDownTime = 0;
                 }
                 // update cursor based on whether any marker is under the pointer
-                const under = this.findMarkerAt(localX, localY);
+                const under = this.markerRenderer.findMarkerAt(localX, localY);
                 this.canvas.style.cursor = under ? 'pointer' : 'grab';
                 // clear any transient route preview
                 this._routePreview = null;
@@ -1196,7 +1183,7 @@ class InteractiveMap {
             const rect = this.canvas.getBoundingClientRect();
             const localX = e.clientX - rect.left;
             const localY = e.clientY - rect.top;
-            const hit = this.findMarkerAt(localX, localY);
+            const hit = this.markerRenderer.findMarkerAt(localX, localY);
 
             if (isQuickTap && hit) {
                 const layerKey = hit.layerKey;
@@ -1501,11 +1488,7 @@ class InteractiveMap {
     saveViewToStorage() {
         try {
             const obj = { panX: Number(this.panX || 0), panY: Number(this.panY || 0), zoom: Number(this.zoom || 0) };
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_map_view', obj);
-            } else {
-                try { localStorage.setItem('mp4_map_view', JSON.stringify(obj)); } catch (e) {}
-            }
+            try { StorageUtils.saveMapView(obj); } catch (e) { /* no fallback: StorageUtils manages consent */ }
         } catch (e) {}
     }
 
@@ -1525,133 +1508,14 @@ class InteractiveMap {
     }
 
     loadInitialImage() {
-        const needed = this.getNeededResolution();
-        this.loadImage(needed);
+        try { if (this.tileRenderer && typeof this.tileRenderer.loadInitialImage === 'function') { return this.tileRenderer.loadInitialImage(); } } catch (e) {}
+        try { const needed = this.getNeededResolution(); this.loadImage(needed); } catch (e) {}
     }
     
     loadImage(resolutionIndex) {
-        const size = RESOLUTIONS[resolutionIndex];
-        if (this.images[resolutionIndex]) {
-            this.currentImage = this.images[resolutionIndex];
-            this.currentResolution = resolutionIndex;
-            this.render();
-            return;
-        }
-
-        if (this.loadingResolution === resolutionIndex) return;
-        this.loadingResolution = resolutionIndex;
-
-        const gen = this._tilesetGeneration;
-        const folder = this.getTilesetFolder();
-        const href = `tiles/${folder}/${size}.avif`;
-
-        // Try fetch + createImageBitmap first (abortable)
-        (async () => {
-            let controller = null;
-            try {
-                if (window.fetch && window.createImageBitmap) {
-                    controller = new AbortController();
-                    try { this._imageControllers[resolutionIndex] = controller; } catch (e) {}
-                    // Abort fetch if it takes longer than the bitmap timeout window
-                    let fetchTimer = null;
-                    try {
-                        fetchTimer = setTimeout(() => {
-                            try { controller.abort(); } catch (e) {}
-                        }, this._bitmapTimeoutMs || 15000);
-                    } catch (e) { fetchTimer = null; }
-
-                    const resp = await fetch(href, { signal: controller.signal });
-                    try { if (fetchTimer) clearTimeout(fetchTimer); } catch (e) {}
-                    try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
-                    if (!resp.ok) throw new Error('fetch-failed');
-                    const blob = await resp.blob();
-                    if (this._tilesetGeneration !== gen) { this.loadingResolution = null; return; }
-
-                    // Use the bitmap task queue to limit concurrent decodes. If the
-                    // decode times out, treat it as a graceful failure (bmp === null)
-                    // so we fall back to the <img> path and keep the queue draining.
-                    let bmp = null;
-                    try {
-                        bmp = await this._runBitmapTask(() => createImageBitmap(blob));
-                    } catch (e) {
-                        // decode failed or timed out -> do not retry here, fall back
-                        bmp = null;
-                    }
-
-                        if (bmp) {
-                        try { bmp._tilesetFolder = folder; } catch (e) {}
-                        // Close previous ImageBitmap if we are replacing, but avoid
-                        // closing bitmaps that are currently referenced elsewhere
-                        try {
-                            const prev = this._imageBitmaps[resolutionIndex];
-                            if (prev && typeof prev.close === 'function') {
-                                let safeToClose = true;
-                                if (prev === this.currentImage) safeToClose = false;
-                                try {
-                                    for (const v of Object.values(this.images || {})) {
-                                        if (v === prev) { safeToClose = false; break; }
-                                    }
-                                } catch (e) {}
-                                if (safeToClose) { try { prev.close(); } catch (e) {} }
-                            }
-                        } catch (e) {}
-                        if (this._tilesetGeneration === gen) {
-                            try { this._imageBitmaps[resolutionIndex] = bmp; } catch (e) {}
-                            try { this.images[resolutionIndex] = bmp; } catch (e) {}
-                        } else {
-                            try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) {}
-                            this.loadingResolution = null;
-                            try { /* discarded due to generation change */ } catch (e) {}
-                            return;
-                        }
-                        this.loadingResolution = null;
-                        // Use this image if appropriate
-                        try {
-                            const curFolder = this.getTilesetFolder();
-                            const imgFolder = bmp._tilesetFolder || null;
-                            if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
-                                this.currentImage = bmp;
-                                this.currentResolution = resolutionIndex;
-                                this.render();
-                            }
-                        } catch (e) {}
-                        this.updateResolution();
-                        return;
-                    }
-                    // If bmp is null (timeout or decode error) fall through to <img> fallback
-                }
-            } catch (err) {
-                try { delete this._imageControllers[resolutionIndex]; } catch (e) {}
-            }
-
-            // Fallback to <img>
-            try {
-                const img = new Image();
-                try { img._tilesetFolder = folder; } catch (e) {}
-                try { this._imageElements[resolutionIndex] = img; } catch (e) {}
-                img.onload = () => {
-                    try {
-                        this.images[resolutionIndex] = img;
-                        this.loadingResolution = null;
-                        try { /* img stored for resolution */ } catch (e) {}
-                        const curFolder = this.getTilesetFolder();
-                        const imgFolder = img._tilesetFolder || null;
-                        if ((imgFolder && imgFolder === curFolder) || (!this.currentImage || resolutionIndex === this.getNeededResolution())) {
-                            this.currentImage = img;
-                            this.currentResolution = resolutionIndex;
-                            this.render();
-                        }
-                        this.updateResolution();
-                    } catch (e) { this.loadingResolution = null; }
-                };
-                img.onerror = () => { this.loadingResolution = null; };
-                img.src = href;
-            } catch (e) {
-                this.loadingResolution = null;
-                // error logging removed
-            }
-        })();
+        try { if (this.tileRenderer && typeof this.tileRenderer.loadImage === 'function') { return this.tileRenderer.loadImage(resolutionIndex); } } catch (e) {}
     }
+
 
     setTileset(tileset) {
         try { tileset = String(tileset); } catch (e) { return; }
@@ -1700,7 +1564,7 @@ class InteractiveMap {
             this.loadingResolution = null;
             try { this.preloadAllMapImages(); } catch (e) {}
             try { this.loadInitialImage(); } catch (e) {}
-            try { this.renderTiles(); } catch (e) {}
+            try { if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } else if (this.tileRenderer && typeof this.tileRenderer.render === 'function') { try { this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); } } } catch (e) {}
         } catch (e) {}
     }
 
@@ -1726,7 +1590,8 @@ class InteractiveMap {
     }
 
     getNeededResolution() {
-        // Calculate displayed size of the map on screen in CSS pixels
+        try { if (this.tileRenderer && typeof this.tileRenderer.determineBestResolution === 'function') { return this.tileRenderer.determineBestResolution(); } } catch (e) {}
+        // Fallback: Calculate displayed size of the map on screen in CSS pixels
         const displayedCss = MAP_SIZE * this.zoom;
         const dpr = window.devicePixelRatio || 1;
         const displayedPx = displayedCss * dpr;
@@ -1740,140 +1605,30 @@ class InteractiveMap {
         return RESOLUTIONS.length - 1;
     }
 
-    // Abort and cleanup any in-flight tile loads, image elements, and ImageBitmaps
     _abortAndCleanupTileLoads() {
-        try {
-            // Abort fetches
-            for (const k in this._imageControllers) {
-                try { this._imageControllers[k].abort(); } catch (e) {}
-            }
-        } catch (e) {}
-        this._imageControllers = {};
-
-        try {
-            // Remove and neutralize image elements
-            for (const k in this._imageElements) {
-                try {
-                    const img = this._imageElements[k];
-                    img.onload = null;
-                    img.onerror = null;
-                    try { img.src = ''; } catch (e) {}
-                } catch (e) {}
-            }
-        } catch (e) {}
-        this._imageElements = {};
-
-        try {
-            // Close ImageBitmaps when possible to free GPU memory, but avoid
-            // closing bitmaps that are currently referenced by `this.currentImage`
-            // or present in `this.images` to prevent use-after-close.
-            for (const k in this._imageBitmaps) {
-                try {
-                    const bmp = this._imageBitmaps[k];
-                    if (!bmp || typeof bmp.close !== 'function') continue;
-                    // If this bitmap is the one currently displayed, skip closing
-                    if (bmp === this.currentImage) continue;
-                    // If any entry in this.images references the same bitmap, skip
-                    let inUse = false;
-                    try {
-                        for (const v of Object.values(this.images || {})) {
-                            if (v === bmp) { inUse = true; break; }
-                        }
-                    } catch (e) {}
-                    if (inUse) continue;
-                    try { bmp.close(); } catch (e) {}
-                } catch (e) {}
-            }
-        } catch (e) {}
-        // Rebuild bitmap map: keep a reference to the currently used bitmap if any
-        const preserved = {};
-        try {
-            if (this.currentImage && typeof this.currentImage !== 'string' && typeof this.currentImage !== 'number') {
-                // If currentImage is an ImageBitmap, preserve it under its resolution
-                if (this.currentResolution != null && this._imageBitmaps && this._imageBitmaps[this.currentResolution] === this.currentImage) {
-                    preserved[this.currentResolution] = this.currentImage;
-                }
-            }
-        } catch (e) {}
-        this._imageBitmaps = preserved;
+        try { if (this.tileRenderer && typeof this.tileRenderer._abortAndCleanupTileLoads === 'function') { return this.tileRenderer._abortAndCleanupTileLoads(); } } catch (e) {}
     }
 
-    // Run a bitmap decode task with concurrency limiting. `fn` should return
-    // a Promise that resolves to an ImageBitmap.
     _runBitmapTask(fn) {
-        return new Promise((resolve, reject) => {
-            const task = async () => {
-                this._bitmapActive++;
-                try {
-                    const res = await this._withTimeout(() => fn(), this._bitmapTimeoutMs);
-                    resolve(res);
-                } catch (e) {
-                    reject(e);
-                } finally {
-                    this._bitmapActive--;
-                    // schedule next queued task
-                    const next = this._bitmapQueue.shift();
-                    if (next) setTimeout(next, 0);
-                }
-            };
-
-            if (this._bitmapActive < (this._bitmapLimit || 2)) {
-                task();
-            } else {
-                this._bitmapQueue.push(task);
-            }
-        });
+        try { if (this.tileRenderer && typeof this.tileRenderer._runBitmapTask === 'function') return this.tileRenderer._runBitmapTask(fn); } catch (e) {}
+        return Promise.reject(new Error('bitmap not available'));
     }
 
-    // Helper: run a promise-returning function with a timeout (ms)
     _withTimeout(fn, ms) {
-        return new Promise((resolve, reject) => {
-            let done = false;
-            const timer = setTimeout(() => {
-                if (done) return;
-                done = true;
-                reject(new Error('bitmap-decode-timeout'));
-            }, ms || 0);
-
-            Promise.resolve()
-                .then(() => fn())
-                .then((v) => {
-                    if (done) return;
-                    done = true;
-                    clearTimeout(timer);
-                    resolve(v);
-                })
-                .catch((err) => {
-                    if (done) return;
-                    done = true;
-                    clearTimeout(timer);
-                    reject(err);
-                });
-        });
+        try { if (this.tileRenderer && typeof this.tileRenderer._withTimeout === 'function') return this.tileRenderer._withTimeout(fn, ms); } catch (e) {}
+        return Promise.reject(new Error('timeout-helper not available'));
     }
 
     // Expose simple runtime stats for diagnostics
     getTileLoadStats() {
-        return {
-            bitmapActive: this._bitmapActive || 0,
-            bitmapQueue: (this._bitmapQueue && this._bitmapQueue.length) || 0,
-            imageControllers: Object.keys(this._imageControllers || {}).length,
-            imageBitmaps: Object.keys(this._imageBitmaps || {}).length
-        };
+        try { if (this.tileRenderer && typeof this.tileRenderer.getTileLoadStats === 'function') return this.tileRenderer.getTileLoadStats(); } catch (e) {}
+        return { bitmapActive: 0, bitmapQueue: 0, imageControllers: 0, imageBitmaps: 0 };
     }
     
 
     // Draw tiles into the dedicated tile canvas. If `ctxTiles` is not
     // available, fall back to drawing into the overlay context.
-    renderTiles() {
-        // Delegate to TileRenderer when available
-        if (this.tileRenderer && typeof this.tileRenderer.render === 'function') {
-            try { this.tileRenderer.render(); } catch (e) { console.debug('map.renderTiles: tileRenderer.render failed', e); }
-            return;
-        }
 
-        // Fallback: no-op (or leave legacy behavior)
-    }
 
     // Create a reusable honeycomb pattern on an offscreen canvas.
     // `size` is the hex radius in CSS pixels. This function respects DPR
@@ -2084,7 +1839,7 @@ class InteractiveMap {
                 const marker = layer.markers[i];
                 const screenX = marker.x * MAP_SIZE * this.zoom + this.panX;
                 const screenY = marker.y * MAP_SIZE * this.zoom + this.panY;
-                const r = this.getMarkerHitRadius(marker, layerKey);
+                const r = this.markerRenderer.getMarkerHitRadius(marker, layerKey);
                 if (Math.hypot(mouseX - screenX, mouseY - screenY) < r) {
                     foundCursor = true;
                     break;
@@ -2098,27 +1853,10 @@ class InteractiveMap {
         this.render();
     }
 
-    // Find marker at screen coordinates; returns { marker, index, layerKey } or null
+    // findMarkerAt fully delegated to MarkerRenderer (removed legacy fallback)
     findMarkerAt(screenX, screenY) {
-        const entries = Object.entries(LAYERS || {});
-        // Iterate in reverse so later layers (higher in DOM) get priority
-        for (let li = entries.length - 1; li >= 0; li--) {
-            const layerKey = entries[li][0];
-            const layer = entries[li][1];
-            if (!this.layerVisibility[layerKey]) continue;
-            if (!Array.isArray(layer.markers)) continue;
-            for (let i = layer.markers.length - 1; i >= 0; i--) {
-                const marker = layer.markers[i];
-                const mx = marker.x * MAP_SIZE * this.zoom + this.panX;
-                const my = marker.y * MAP_SIZE * this.zoom + this.panY;
-                const r = this.getMarkerHitRadius(marker, layerKey);
-                if (Math.hypot(screenX - mx, screenY - my) < r) {
-                    return { marker: marker, index: i, layerKey };
-                }
-            }
-        }
-
-        return null;
+        if (!this.markerRenderer || typeof this.markerRenderer.findMarkerAt !== 'function') throw new Error('findMarkerAt removed from map; use markerRenderer.findMarkerAt instead');
+        return this.markerRenderer.findMarkerAt(screenX, screenY);
     }
 
     // Find a route segment near screen coordinates. Returns { index } where
@@ -2207,8 +1945,33 @@ class InteractiveMap {
         // Display layer name, optional index, then marker UID
         const idxPart = (displayIndex !== null) ? ` ${displayIndex}` : '';
         this.tooltip.textContent = `${layerName}${idxPart} - ${marker.uid}`;
-        this.tooltip.style.left = `${x + 15}px`;
-        this.tooltip.style.top = `${y - 10}px`;
+        // Compute desired position (relative to map container since tooltip has been moved into it)
+        const margin = 6;
+        try {
+            const parent = this.tooltip.parentElement;
+            let canvasOffsetLeft = 0, canvasOffsetTop = 0;
+            try {
+                if (this.canvas && parent) {
+                    const canvasRect = this.canvas.getBoundingClientRect();
+                    const parentRect = parent.getBoundingClientRect();
+                    canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
+                    canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
+                }
+            } catch (e) {}
+
+            let desiredLeft = Math.round(canvasOffsetLeft + x + 15);
+            let desiredTop = Math.round(canvasOffsetTop + y - 10);
+
+            // Clamp to container bounds so tooltip doesn't overflow
+            if (parent) {
+                const maxLeft = Math.max(0, parent.clientWidth - (this.tooltip.offsetWidth || 120) - margin);
+                const maxTop = Math.max(0, parent.clientHeight - (this.tooltip.offsetHeight || 28) - margin);
+                desiredLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
+                desiredTop = Math.min(Math.max(desiredTop, margin), maxTop);
+            }
+            this.tooltip.style.left = `${desiredLeft}px`;
+            this.tooltip.style.top = `${desiredTop}px`;
+        } catch (e) { try { this.tooltip.style.left = `${x + 15}px`; this.tooltip.style.top = `${y - 10}px`; } catch (e) {} }
         // Style tooltip using the layer's color when available
         try {
             const layerCol = (key && LAYERS && LAYERS[key] && LAYERS[key].color) ? LAYERS[key].color : null;
@@ -2228,10 +1991,66 @@ class InteractiveMap {
             this.tooltip.style.display = 'none';
         }
     }
+
+    // Update tooltip position to follow the selected marker (idempotent)
+    _updateTooltipPosition() {
+        try {
+            if (!this.tooltip) return;
+            if (!this.selectedMarker || !this.selectedMarkerLayer) return;
+            // Compute marker screen position
+            const pos = (typeof MarkerUtils !== 'undefined' && MarkerUtils.getMarkerScreenPosition) ? MarkerUtils.getMarkerScreenPosition(this.selectedMarker, this) : null;
+            const mx = (pos && typeof pos.x === 'number') ? pos.x : (this.selectedMarker && typeof this.selectedMarker.x === 'number' ? this.selectedMarker.x * MAP_SIZE * this.zoom + this.panX : null);
+            const my = (pos && typeof pos.y === 'number') ? pos.y : (this.selectedMarker && typeof this.selectedMarker.y === 'number' ? this.selectedMarker.y * MAP_SIZE * this.zoom + this.panY : null);
+            if (mx === null || my === null) return;
+            // Compute offsets of canvas inside parent container so absolute positioning aligns
+            const parent = this.tooltip.parentElement;
+            let canvasOffsetLeft = 0, canvasOffsetTop = 0;
+            try {
+                if (this.canvas && parent) {
+                    const canvasRect = this.canvas.getBoundingClientRect();
+                    const parentRect = parent.getBoundingClientRect();
+                    canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
+                    canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
+                }
+            } catch (e) {}
+
+            const margin = 6;
+            let desiredLeft = Math.round(canvasOffsetLeft + mx + 15);
+            let desiredTop = Math.round(canvasOffsetTop + my - 10);
+            if (parent) {
+                const maxLeft = Math.max(0, parent.clientWidth - (this.tooltip.offsetWidth || 120) - margin);
+                const maxTop = Math.max(0, parent.clientHeight - (this.tooltip.offsetHeight || 28) - margin);
+                desiredLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
+                desiredTop = Math.min(Math.max(desiredTop, margin), maxTop);
+            }
+            this.tooltip.style.left = `${desiredLeft}px`;
+            this.tooltip.style.top = `${desiredTop}px`;
+            // Ensure visible when following
+            if (this.tooltip.style.display !== 'block') this.tooltip.style.display = 'block';
+        } catch (e) {}
+    }
     
     render() {
-        // Full redraw: tiles + overlay
-        try { this.renderTiles(); } catch (e) {}
+        // Full redraw: prefer RenderPipeline when available
+        if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
+            try {
+                this.renderPipeline.render();
+            } catch (e) {
+                console.debug('map.render: renderPipeline.render failed', e);
+                // Fall back to legacy path
+                try { if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } else if (this.tileRenderer && typeof this.tileRenderer.render === 'function') { try { this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); } } } catch (err) {}
+                try { this.renderOverlay(); } catch (err) {}
+                return;
+            }
+            // Ensure DOM quadrant labels are updated
+            try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) {}
+            // Update tooltip position (keeps selected marker tooltip anchored during pan/zoom)
+            try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
+            return;
+        }
+
+        // Fallback: tiles + overlay (legacy path)
+        try { if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } else if (this.tileRenderer && typeof this.tileRenderer.render === 'function') { try { this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); } } } catch (e) {}
         try { this.renderOverlay(); } catch (e) {}
     }
 
@@ -2252,27 +2071,37 @@ class InteractiveMap {
         // Always update the DOM quadrant labels if the helper exists.
         // The helper decides visibility based on both layer visibility
         // and highlight state so labels stay in sync with interactions.
-        try {
-            if (typeof this._updateGridQuadLabels === 'function') this._updateGridQuadLabels();
-        } catch (e) { /* _updateGridQuadLabels failed (suppressed) */ }
+        try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { /* gridRenderer.updateQuadLabels failed (suppressed) */ }
 
         // Render heatmap independently of the grid layer visibility so it adapts to zoom/pan even when grid is off
         try {
-            if (this._showGridHeatmap) this.renderHeatmap();
+            if (this._showGridHeatmap) { try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') { this.heatmapRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { /* pipeline will update heatmap stage */ this.renderPipeline.render(); } } catch (e) {} }
         } catch (e) {}
 
         // Draw markers from all visible layers onto the overlay canvas
-        this.renderMarkers();
+        try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') { this.markerRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } } catch (e) {}
 
         // Draw computed route on top of the map but beneath markers (so markers remain visible)
-        this.renderRoute();
+        try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') { this.routeRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } } catch (e) {}
 
         // Draw transient route-insert preview (when hovering near a segment in edit mode)
+        // (Handled by OverlayRenderer when present)
+        try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') { this.overlayRenderer.render(); } else { this._renderOverlayExtras(); } } catch (e) {}
+
+    }
+
+    // Overlay extras: backward-compatible wrapper. Delegates to OverlayRenderer when available,
+    // otherwise falls back to previous inline behavior.
+    _renderOverlayExtras() {
+        if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') {
+            try { this.overlayRenderer.render(); return; } catch (e) { console.debug('map._renderOverlayExtras delegate failed', e); }
+        }
+
+        const ctx = this.ctx;
         try {
             if (this.editRouteMode && this._routePreview && this._routePreview.screenX && this._routePreview.screenY) {
                 const px = this._routePreview.screenX;
                 const py = this._routePreview.screenY;
-                // Derive route color like renderRoute() uses
                 const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
                 const hexToRgba = (h, a) => {
                     if (!h || typeof h !== 'string') return null;
@@ -2306,298 +2135,32 @@ class InteractiveMap {
             }
         } catch (e) {}
 
-        // If a marker is selected, ensure tooltip is positioned at its current screen coords
-        if (this.selectedMarker && this.selectedMarkerLayer) {
-            const m = this.selectedMarker;
-            const screenX = m.x * MAP_SIZE * this.zoom + this.panX;
-            const screenY = m.y * MAP_SIZE * this.zoom + this.panY;
-            this.showTooltip(m, screenX, screenY, this.selectedMarkerLayer);
-        }
+        try {
+            if (this.selectedMarker && this.selectedMarkerLayer) {
+                // Use centralized updater that respects offsets/clamping to avoid duplication
+                try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
+            }
+        } catch (e) {}
     }
 
     // Draw the quadrant grid separating the map into 4 equal sections
     renderQuadrantGrid() {
-        const ctx = this.ctx;
-        const cssWidth = this.canvas.clientWidth;
-        const cssHeight = this.canvas.clientHeight;
-        
-        // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.zoom + this.panX;
-        const mapScreenTop = 0 * this.zoom + this.panY;
-        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
-        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
-        
-        // Map center is at (MAP_SIZE/2, MAP_SIZE/2) in normalized coords
-        // Calculate screen position of center
-        const mapCenterX = (MAP_SIZE / 2) * this.zoom + this.panX;
-        const mapCenterY = (MAP_SIZE / 2) * this.zoom + this.panY;
-        
-        // Only draw grid lines if they're visible on screen
-        if (mapCenterX > mapScreenLeft && mapCenterX < mapScreenRight &&
-            mapCenterY > mapScreenTop && mapCenterY < mapScreenBottom) {
-            
-            ctx.save();
-            // Scale opacity with zoom for visibility at all levels
-            const opacity = Math.min(0.6, 0.15 + this.zoom * 0.5);
-            // Cyan gridlines for both satellite and holo views
-            ctx.strokeStyle = 'rgba(34, 211, 238, ' + opacity + ')';
-            ctx.lineWidth = 2;
-            
-            // Vertical center line (clipped to map area)
-            ctx.beginPath();
-            ctx.moveTo(mapCenterX, Math.max(mapScreenTop, 0));
-            ctx.lineTo(mapCenterX, Math.min(mapScreenBottom, cssHeight));
-            ctx.stroke();
-            
-            // Horizontal center line (clipped to map area)
-            ctx.beginPath();
-            ctx.moveTo(Math.max(mapScreenLeft, 0), mapCenterY);
-            ctx.lineTo(Math.min(mapScreenRight, cssWidth), mapCenterY);
-            ctx.stroke();
-            
-            ctx.restore();
-        }
+        try { this.gridRenderer.renderQuadrantGrid(); } catch (e) { console.debug('map.renderQuadrantGrid delegate failed', e); }
     }
+
 
     // Draw fine detail grid covering the map area (8x8 subdivision)
     renderDetailGrid() {
-        const ctx = this.ctx;
-        const cssWidth = this.canvas.clientWidth;
-        const cssHeight = this.canvas.clientHeight;
-        
-        // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.zoom + this.panX;
-        const mapScreenTop = 0 * this.zoom + this.panY;
-        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
-        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
-        
-        // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
-        const gridSpacing = MAP_SIZE / 8;
-        
-        // Clear heatmap backing canvas so it doesn't accumulate between draws
-        try {
-            if (this.ctxHeatmap && this.canvasHeatmap) {
-                this.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight);
-            }
-        } catch (e) {}
-        
-        ctx.save();
-        // Scale opacity with zoom for visibility at all levels
-        const opacity = Math.min(0.4, 0.05 + this.zoom * 0.3);
-
-        // Optional green-crystal heatmap (draw into heatmap canvas, above tiles)
-        if (this._showGridHeatmap && this.ctxHeatmap) {
-            try {
-                const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-                const counts = new Array(cols * rows).fill(0);
-                const greenKeys = ['geCrystallization1','geCrystallization2','geCrystallization3','gibardaumRock','geCrystalStorage'];
-                if (typeof LAYERS !== 'undefined') {
-                    greenKeys.forEach(k => {
-                        const layer = LAYERS[k];
-                        if (layer && Array.isArray(layer.markers)) {
-                            layer.markers.forEach(m => {
-                                const mx = Number(m.x); const my = Number(m.y);
-                                if (!isFinite(mx) || !isFinite(my)) return;
-                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                                counts[rr * cols + cc]++;
-                            });
-                        }
-                    });
-                }
-                const maxCount = Math.max(1, ...counts);
-                const hmCtx = this.ctxHeatmap;
-                hmCtx.save();
-                // draw heatmap cells into the dedicated canvas; CSS `mix-blend-mode: screen` is used to composite with tiles beneath
-                hmCtx.globalCompositeOperation = 'source-over';
-                // Map counts (1..16) into a more visible green ramp using HSL and a gamma curve
-                const rangeMin = 1;
-                const rangeMax = Math.max(16, maxCount || 16);
-                // Build buckets of markers per 8x8 cell so we can draw a soft radial blob per marker (lighter and more organic)
-                const buckets = new Array(cols * rows);
-                for (let i = 0; i < buckets.length; i++) buckets[i] = [];
-                try {
-                    const greenKeys = GREEN_CRYSTAL_LAYERS;
-                    greenKeys.forEach(k => {
-                        const layer = LAYERS[k];
-                        if (layer && Array.isArray(layer.markers)) {
-                            layer.markers.forEach(m => {
-                                const mx = Number(m.x); const my = Number(m.y);
-                                if (!isFinite(mx) || !isFinite(my)) return;
-                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                                buckets[rr * cols + cc].push({mx, my});
-                            });
-                        }
-                    });
-                } catch (e) { console.debug('renderDetailGrid: failed to build heatmap buckets', e); }
-
-                // For each cell with markers, compute the target total alpha and split it across markers
-                for (let idx = 0; idx < buckets.length; idx++) {
-                    const markers = buckets[idx];
-                    const cnt = markers.length;
-                    if (!cnt) continue;
-                    // Normalize in [0..1] relative to expected range (1..16)
-                    const tRaw = Math.min(1, Math.max(0, (cnt - rangeMin) / (rangeMax - rangeMin)));
-                    const gamma = 0.6;
-                    const t = Math.pow(tRaw, gamma);
-
-                    // HSL hue shifts with t (yellow-green -> green)
-                    const hue = Math.round(MP4Config.HEATMAP.HUE_RANGE.MIN + (MP4Config.HEATMAP.HUE_RANGE.MAX - MP4Config.HEATMAP.HUE_RANGE.MIN) * t);
-                    const sat = 100; // max saturation
-                    const light = 55; // fixed lightness
-
-                    // Target alpha for the whole cell (raised to improve visibility)
-                    const alphaMin = 0.01; const alphaMax = 0.75; const steps = 15;
-                    const ratioForAlpha = Math.min(1, Math.max(0, (cnt - 1) / steps));
-                    const targetAlpha = Math.max(alphaMin, Math.min(alphaMax, alphaMin + ratioForAlpha * (alphaMax - alphaMin)));
-                    // Split alpha among markers and apply a slight boost so individual blobs are more visible
-                    const alphaBoost = 1.4;
-                    const perMarkerAlpha = Math.min(alphaMax, Math.max(0.01, (targetAlpha * alphaBoost) / cnt));
-
-                    // Draw a radial gradient for each marker (smaller radius for less blur)
-                    for (let m of markers) {
-                        try {
-                            const screenX = m.mx * MAP_SIZE * this.zoom + this.panX;
-                            const screenY = m.my * MAP_SIZE * this.zoom + this.panY;
-                            // Skip off-screen markers early
-                            if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
-                            const radius = Math.max(8, Math.round((MAP_SIZE / 8) * this.zoom * 0.45));
-                            const cx = Math.round(screenX);
-                            const cy = Math.round(screenY);
-                            const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-                            g.addColorStop(0.0, `hsla(${hue}, ${sat}%, ${light}%, ${perMarkerAlpha})`);
-                            g.addColorStop(0.5, `hsla(${hue}, ${sat}%, ${light}%, ${Math.max(0.02, perMarkerAlpha * 0.6)})`);
-                            g.addColorStop(1.0, `hsla(${hue}, ${sat}%, ${light}%, 0)`);
-                            hmCtx.globalCompositeOperation = 'lighter';
-                            hmCtx.fillStyle = g;
-                            hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-                            hmCtx.globalCompositeOperation = 'source-over';
-                        } catch (e) {}
-                    }
-                }
-                hmCtx.restore();
-            } catch (e) { /* non-fatal */ }
-        }
-
-        // Cyan gridlines for both satellite and holo views
-        ctx.strokeStyle = 'rgba(34, 211, 238, 1.0)';
-        ctx.lineWidth = 1;
-        
-        // Draw vertical grid lines
-        for (let i = 1; i < 8; i++) {
-            const mapX = gridSpacing * i;
-            const screenX = mapX * this.zoom + this.panX;
-            
-            // Only draw if visible on screen and within map area
-            if (screenX > mapScreenLeft && screenX < mapScreenRight) {
-                ctx.beginPath();
-                ctx.moveTo(screenX, Math.max(mapScreenTop, 0));
-                ctx.lineTo(screenX, Math.min(mapScreenBottom, cssHeight));
-                ctx.stroke();
-            }
-        }
-        
-        // Draw horizontal grid lines
-        for (let i = 1; i < 8; i++) {
-            const mapY = gridSpacing * i;
-            const screenY = mapY * this.zoom + this.panY;
-            
-            // Only draw if visible on screen and within map area
-            if (screenY > mapScreenTop && screenY < mapScreenBottom) {
-                ctx.beginPath();
-                ctx.moveTo(Math.max(mapScreenLeft, 0), screenY);
-                ctx.lineTo(Math.min(mapScreenRight, cssWidth), screenY);
-                ctx.stroke();
-            }
-        }
-        
-        this.renderAxisLabels();
+        try { this.gridRenderer.renderDetailGrid(); } catch (e) { console.debug('map.renderDetailGrid delegate failed', e); }
     }
+            
 
-    // Draw standalone heatmap into the dedicated heatmap canvas (independent of grid layer visibility)
-    renderHeatmap() {
-        // Delegate to HeatmapRenderer when available (Phase 2 migration)
-        if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') {
-            try { this.heatmapRenderer.render(); } catch (e) { console.debug('map.renderHeatmap: heatmapRenderer.render failed', e); }
-            return;
-        }
-        // Fallback: no-op
-    }
+
+
     
     // Draw axis index labels for the 8x8 grid
     renderAxisLabels() {
-        const ctx = this.ctx;
-        const cssWidth = this.canvas.clientWidth;
-        const cssHeight = this.canvas.clientHeight;
-        
-        // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.zoom + this.panX;
-        const mapScreenTop = 0 * this.zoom + this.panY;
-        const mapScreenRight = MAP_SIZE * this.zoom + this.panX;
-        const mapScreenBottom = MAP_SIZE * this.zoom + this.panY;
-        
-        // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
-        const gridSpacing = MAP_SIZE / 8;
-        
-        ctx.save();
-        // Compute a readable font size based on zoom but clamp it
-        const fontMin = 12;
-        const fontMax = 48; // avoid excessively large labels when zooming in
-        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.zoom * 80)));
-        // Use Orbitron (with Space Grotesk fallback) for canvas axis labels to match DOM quadrant labels
-        ctx.font = `700 ${fontSize}px "Orbitron", "Space Grotesk", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif`;
-        ctx.textBaseline = 'middle';
-        
-        // Always use cyan for labels
-        ctx.fillStyle = 'rgba(34, 211, 238, 0.85)';
-
-        // padding from map edge (pixels) and half-dimensions to keep label fully outside
-        const padding = 8;
-        const halfH = fontSize / 2;
-        const halfW = fontSize * 0.6; // approximate half-width for centered digits
-
-        // Draw X-axis labels (A-H) — centered on each column, placed fully outside
-        ctx.textAlign = 'center';
-        for (let i = 0; i < 8; i++) {
-            const mapX = gridSpacing * (i + 0.5); // Center of each cell
-            const screenX = mapX * this.zoom + this.panX;
-
-            // Only draw if centered column is within the horizontal viewport
-            if (screenX + halfW < 0 || screenX - halfW > cssWidth) continue;
-
-            // Draw above the map (y placed so label bottom is at map top - padding)
-            const yAbove = mapScreenTop - padding - halfH;
-            if (yAbove >= 0) ctx.fillText(String.fromCharCode(65 + i), screenX, yAbove);
-
-            // Draw below the map (y placed so label top is at map bottom + padding)
-            const yBelow = mapScreenBottom + padding + halfH;
-            if (yBelow <= cssHeight) ctx.fillText(String.fromCharCode(65 + i), screenX, yBelow);
-        }
-
-        // Draw Y-axis labels (1-8) — centered on each row, placed fully outside
-        ctx.textAlign = 'right';
-        for (let i = 0; i < 8; i++) {
-            const mapY = gridSpacing * (i + 0.5); // Center of each cell
-            const screenY = mapY * this.zoom + this.panY;
-
-            // Only draw if centered row is within vertical viewport
-            if (screenY + halfH < 0 || screenY - halfH > cssHeight) continue;
-
-            // Draw left of the map (x placed so label right edge is at map left - padding)
-            const xLeft = mapScreenLeft - padding - halfW;
-            if (xLeft >= 0) ctx.fillText(String(i + 1), xLeft, screenY);
-
-            // Draw right of the map (x placed so label left edge is at map right + padding)
-            const xRight = mapScreenRight + padding + halfW;
-            if (xRight <= cssWidth) {
-                ctx.textAlign = 'left';
-                ctx.fillText(String(i + 1), xRight, screenY);
-                ctx.textAlign = 'right';
-            }
-        }
-
-        ctx.restore();
+        try { this.gridRenderer.renderAxisLabels(); } catch (e) { console.debug('map.renderAxisLabels delegate failed', e); }
     }
     
     // Helper: lighten a hex color by a given percentage
@@ -2622,17 +2185,10 @@ class InteractiveMap {
     
     // Base marker radius in CSS pixels (used for rendering and hit-testing)
     getBaseMarkerRadius() {
-        // Default marker sizing behavior
-        // Lower the base minimum so markers can shrink more when zoomed out
-        const base = Math.max(2, Math.min(16, 10 * this.zoom));
-        // Ensure markers are always a bit larger than route node dots so
-        // markers (and hitboxes) remain easier to interact with at high zoom.
         try {
-            const nodeSize = this.getRouteNodeSize();
-            return Math.max(base, nodeSize + 10 * this.zoom);
-        } catch (e) {
-            return base;
-        }
+            const routeNodeSize = (typeof this.getRouteNodeSize === 'function') ? this.getRouteNodeSize() : undefined;
+            return (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeBaseMarkerRadius === 'function') ? MarkerUtils.computeBaseMarkerRadius(this.zoom, routeNodeSize) : Math.max(2, Math.min(16, 10 * this.zoom));
+        } catch (e) { return Math.max(2, Math.min(16, 10 * this.zoom)); }
     }
 
     // Compute route node dot size in a single place so markers can reference it
@@ -2659,113 +2215,31 @@ class InteractiveMap {
     // shrink visuals progressively for higher zoom levels.
     getDetailScale() {
         try {
-            const z = (typeof this.zoom === 'number' && this.zoom > 0) ? this.zoom : 1;
-                // Increase shrink intensity: allow smaller minimum and faster falloff
-                const min = 0.1; // don't shrink beyond this
-                const exp = 0.7; // exponent controls how quickly it shrinks
-            const val = Math.pow(z, -exp);
-            // Clamp to [min, 1]
-            return Math.max(min, Math.min(1, val));
+            return (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeDetailScale === 'function') ? MarkerUtils.computeDetailScale(this.zoom) : 1;
         } catch (e) { return 1; }
     }
 
-    // Hit radius used for interaction (render radius + touch padding)
+    // Delegated to MarkerRenderer
     getHitRadius() {
-        try {
-            const base = this.getBaseMarkerRadius();
-            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
-            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
-            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-            const scaled = Math.max(1, base * markerScale);
-            return scaled + (this.touchPadding || 0);
-        } catch (e) {
-            return this.getBaseMarkerRadius() + (this.touchPadding || 0);
-        }
+        if (!this.markerRenderer || typeof this.markerRenderer.getHitRadius !== 'function') throw new Error('getHitRadius removed from map; use markerRenderer.getHitRadius instead');
+        return this.markerRenderer.getHitRadius();
     }
 
-    // Compute per-marker hit radius that accounts for highlight scaling and selection
+    // Delegated to MarkerRenderer
     getMarkerHitRadius(marker, layerKey) {
-        try {
-            // Prefer per-frame rendered size cache when available to guarantee hitbox == visual
-            try {
-                if (this._markerSizeFrame && marker && marker.uid) {
-                    const key = (layerKey || '') + '|' + String(marker.uid);
-                    const last = this._markerSizeFrame[key];
-                    if (typeof last === 'number' && last > 0) return last + (this.touchPadding || 0);
-                }
-            } catch (e) {}
-            const base = this.getBaseMarkerRadius();
-            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
-            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
-            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-
-            // Highlight multiplier (per-layer) if applicable
-            let highlightMult = 1;
-            try {
-                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
-                    const cfg = (this._highlightConfig && this._highlightConfig[layerKey]) ? this._highlightConfig[layerKey] : null;
-                    highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
-                }
-            } catch (e) {}
-
-            // Selected marker gets an additional visual emphasis
-            const isSelected = this.selectedMarker && marker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
-            const rawSize = isSelected ? base * 1.3 * highlightMult : base * highlightMult;
-            const sized = Math.max(1, rawSize * markerScale);
-            return sized + (this.touchPadding || 0);
-        } catch (e) {
-            return this.getHitRadius();
-        }
+        if (!this.markerRenderer || typeof this.markerRenderer.getMarkerHitRadius !== 'function') throw new Error('getMarkerHitRadius removed from map; use markerRenderer.getMarkerHitRadius instead');
+        return this.markerRenderer.getMarkerHitRadius(marker, layerKey);
     }
 
-    // Compute the render size for a marker — extracted so draw and hit-testing share exact logic
+    // Delegated to MarkerRenderer
     getMarkerRenderSize(marker, layerKey) {
-        try {
-            const baseSize = this.getBaseMarkerRadius();
-            const detailScale = (typeof this.getDetailScale === 'function') ? this.getDetailScale() : 1;
-            const markerShrinkFactor = (typeof this.markerShrinkFactor === 'number') ? this.markerShrinkFactor : 0.6;
-            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-
-            // Highlight multiplier (per-layer) if applicable
-            let highlightMult = 1;
-            try {
-                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
-                    const cfg = (this._highlightConfig && this._highlightConfig[layerKey]) ? this._highlightConfig[layerKey] : null;
-                    highlightMult = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
-                    try {
-                        const gm = (typeof this.highlightScaleMultiplier === 'number') ? this.highlightScaleMultiplier : 1.0;
-                        highlightMult = highlightMult * gm;
-                        // Allow highlighted markers to shrink down to the slider minimum
-                        // (slider min is 0.6). Previously a 1.15 floor prevented reductions.
-                        highlightMult = Math.max(highlightMult, 0.6);
-                    } catch (e) {}
-                }
-            } catch (e) {}
-
-            const isSelected = this.selectedMarker && marker && this.selectedMarker.uid === marker.uid && this.selectedMarkerLayer === layerKey;
-            const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
-            const size = Math.max(1, rawSize * markerScale);
-            return size;
-        } catch (e) { return Math.max(1, this.getBaseMarkerRadius()); }
+        if (!this.markerRenderer || typeof this.markerRenderer.getMarkerRenderSize !== 'function') throw new Error('getMarkerRenderSize removed from map; use markerRenderer.getMarkerRenderSize instead');
+        return this.markerRenderer.getMarkerRenderSize(marker, layerKey);
     }
     
-    renderMarkers() {
-        // Delegate to MarkerRenderer when available
-        if (this.markerRenderer && typeof this.markerRenderer.render === 'function') {
-            try { this.markerRenderer.render(); } catch (e) { console.debug('map.renderMarkers: markerRenderer.render failed', e); }
-            return;
-        }
-        // Fallback: no-op
-    }
 
-    renderRoute() {
-        // Delegate to RouteRenderer when available
-        if (this.routeRenderer && typeof this.routeRenderer.render === 'function') {
-            try { this.routeRenderer.render(); } catch (e) { console.debug('map.renderRoute: routeRenderer.render failed', e); }
-            return;
-        }
-        // Fallback: no-op
-    }
+
+
 
     setRoute(routeIndices, lengthNormalized, routeSources) {
         this.currentRoute = routeIndices ? routeIndices.slice() : null;
@@ -2776,6 +2250,16 @@ class InteractiveMap {
         this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
         // Reset the start-point flag when a new route is set (will be overridden by generation if applicable)
         // Do not change `routeLooping` here — looping is controlled explicitly by user preference.
+
+        // Invalidate route renderer caches when route changes
+        try {
+            if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
+                this.routeRenderer.invalidateCache();
+            }
+        } catch (e) {
+            console.debug('Failed to invalidate route renderer cache', e);
+        }
+
         // Update route length display in sidebar
         try {
             const el = document.getElementById('routeLength');
@@ -2805,6 +2289,16 @@ class InteractiveMap {
         this.currentRoute = null;
         this.currentRouteLength = 0;
         this.currentRouteLengthNormalized = 0;
+
+        // Invalidate route renderer caches when route is cleared
+        try {
+            if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
+                this.routeRenderer.invalidateCache();
+            }
+        } catch (e) {
+            console.debug('Failed to invalidate route renderer cache', e);
+        }
+
         // Update UI counts via the central updater so it shows '0'
         try { this.updateLayerCounts(); } catch (e) {}
         this.render();
@@ -2992,14 +2486,10 @@ let map;
 // LocalStorage helpers for layer visibility persistence
 function loadLayerVisibilityFromStorage() {
     try {
-        let s = null;
         if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-            s = window._mp4Storage.loadSetting('mp4_layerVisibility');
-        } else {
-            try { s = localStorage.getItem('mp4_layerVisibility'); } catch (e) { s = null; }
+            return window._mp4Storage.loadSetting('mp4_layerVisibility');
         }
-        if (!s) return null;
-        return (typeof s === 'string') ? JSON.parse(s) : s;
+        return null;
     } catch (e) {
         return null;
     }
@@ -3009,8 +2499,6 @@ function saveLayerVisibilityToStorage(obj) {
     try {
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_layerVisibility', obj || {});
-        } else {
-            try { localStorage.setItem('mp4_layerVisibility', JSON.stringify(obj || {})); } catch (e) {}
         }
     } catch (e) {}
 }
@@ -3018,15 +2506,8 @@ function saveLayerVisibilityToStorage(obj) {
 // Highlight multiplier persistence
 function loadHighlightMultiplierFromStorage() {
     try {
-        // Only load saved multiplier when storage consent is granted
-        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-        if (!consent) return null;
-        let v = null;
-        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-            v = window._mp4Storage.loadSetting('mp4_highlightMultiplier');
-        } else {
-            try { v = localStorage.getItem('mp4_highlightMultiplier'); } catch (e) { v = null; }
-        }
+        if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return null;
+        const v = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlightMultiplier') : null;
         if (v === null || typeof v === 'undefined') return null;
         return (typeof v === 'string') ? parseFloat(v) : Number(v);
     } catch (e) { return null; }
@@ -3034,13 +2515,9 @@ function loadHighlightMultiplierFromStorage() {
 
 function saveHighlightMultiplierToStorage(v) {
     try {
-        // Only save when user has consented to local storage
-        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-        if (!consent) return;
+        if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return;
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_highlightMultiplier', v);
-        } else {
-            try { localStorage.setItem('mp4_highlightMultiplier', String(v)); } catch (e) {}
         }
     } catch (e) {}
 }
@@ -3048,27 +2525,18 @@ function saveHighlightMultiplierToStorage(v) {
 // Highlighted layers persistence (consent-gated)
 function loadHighlightedLayersFromStorage() {
     try {
-        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-        if (!consent) return null;
-        let s = null;
-        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-            s = window._mp4Storage.loadSetting('mp4_highlighted_layers');
-        } else {
-            try { s = localStorage.getItem('mp4_highlighted_layers'); } catch (e) { s = null; }
-        }
+        if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return null;
+        const s = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlighted_layers') : null;
         if (!s) return null;
-        return (typeof s === 'string') ? JSON.parse(s) : s;
+        return s;
     } catch (e) { return null; }
 }
 
 function saveHighlightedLayersToStorage(obj) {
     try {
-        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-        if (!consent) return;
+        if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return;
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_highlighted_layers', obj || {});
-        } else {
-            try { localStorage.setItem('mp4_highlighted_layers', JSON.stringify(obj || {})); } catch (e) {}
         }
     } catch (e) {}
 }
@@ -3076,14 +2544,11 @@ function saveHighlightedLayersToStorage(obj) {
 // Map view persistence (consent-gated). Stores an object {panX, panY, zoom}
 function loadMapViewFromStorage() {
     try {
-        let s = null;
-        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-            s = window._mp4Storage.loadSetting('mp4_map_view');
-        } else {
-            try { s = localStorage.getItem('mp4_map_view'); } catch (e) { s = null; }
+        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadMapView === 'function') {
+            return StorageUtils.loadMapView();
         }
-        if (!s) return null;
-        return (typeof s === 'string') ? JSON.parse(s) : s;
+        // If StorageUtils is not present, avoid writing/reading directly—return null as a conservative default.
+        return null;
     } catch (e) {
         return null;
     }
@@ -3091,11 +2556,11 @@ function loadMapViewFromStorage() {
 
 function saveMapViewToStorage(obj) {
     try {
-        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-            window._mp4Storage.saveSetting('mp4_map_view', obj || null);
-        } else {
-            try { localStorage.setItem('mp4_map_view', JSON.stringify(obj || null)); } catch (e) {}
+        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveMapView === 'function') {
+            try { StorageUtils.saveMapView(obj); } catch (e) {}
+            return;
         }
+        // If StorageUtils not available, do nothing (conservative: do not write without consent helper)
     } catch (e) {}
 }
 
@@ -3704,70 +3169,12 @@ async function init() {
                     }
                 }
             } catch (e) {}
-            // Prepare grid quadrant labels (8x8 A1..H8) so they can be toggled
-            // on/off quickly when the `grid` layer is highlighted. Labels are
-            // DOM elements positioned over the map and updated each render.
-            map._createGridQuadLabels = function() {
-                try {
-                    const parent = this.canvas && this.canvas.parentElement;
-                    if (!parent) return;
-                    // (debug logs removed)
-                    // Ensure parent is positioned so absolute children align
-                    try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) { console.debug('grid labels init: failed to set parent position', e); }
-                    // Container for labels
-                    let container = parent.querySelector('#gridQuadLabels');
-                    if (!container) {
-                        container = document.createElement('div');
-                        container.id = 'gridQuadLabels';
-                        container.className = 'grid-quad-labels';
-                        container.setAttribute('aria-hidden', 'true');
-                        // pointer-events none so labels don't interfere with map interaction
-                        container.style.pointerEvents = 'none';
-                        parent.appendChild(container);
-                        // (debug logs removed)
-                    }
-                    container.innerHTML = '';
-                    // Create label grid using configured columns/rows
-                    const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-                    for (let r = 0; r < rows; r++) {
-                        for (let c = 0; c < cols; c++) {
-                            const colLetter = String.fromCharCode(65 + c); // A..H
-                            const rowNumber = (r + 1).toString();
-                            const span = document.createElement('div');
-                            span.className = 'grid-quad-label';
-                            span.dataset.col = c;
-                            span.dataset.row = r;
-                            // Main label (A1..H8)
-                            const labelText = document.createElement('span');
-                            labelText.className = 'grid-quad-index';
-                            labelText.textContent = `${colLetter}${rowNumber}`;
-                            // Count badge for green crystal markers (populated in _updateGridQuadLabels)
-                            const countBadge = document.createElement('span');
-                            countBadge.className = 'grid-quad-count';
-                            countBadge.setAttribute('aria-hidden', 'true');
-                            countBadge.textContent = '';
-                            span.appendChild(labelText);
-                            span.appendChild(countBadge);
-                            container.appendChild(span);
-                        }
-                    }
-                    // In-map heatmap toggle removed. Use the sidebar Mapping Heatmap toggle instead.
-                    // initialize hidden
-                    container.style.display = 'none';
-                    // (debug logs removed)
-                } catch (e) {}
-            };
+            // Grid DOM label creation is handled by GridRenderer.init()
+            // Ensure GridRenderer performed its init (idempotent)
+            try { if (map && map.gridRenderer && typeof map.gridRenderer.init === 'function') { map.gridRenderer.init(); } } catch (e) { /* deferred createGridQuadLabels failed (suppressed) */ }
 
-            map._updateGridQuadLabels = function() {
-                try {
-                    if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') {
-                        try { this.gridRenderer.updateQuadLabels(); } catch (e) { console.debug('map._updateGridQuadLabels delegate failed', e); }
-                    }
-                } catch (e) { console.debug('map._updateGridQuadLabels failed', e); }
-            };
+
         } catch (e) {}
-        // Now that label creation function exists, prepare DOM labels
-        try { if (typeof map._createGridQuadLabels === 'function') { map._createGridQuadLabels(); } } catch (e) { /* deferred createGridQuadLabels failed (suppressed) */ }
     // Load persisted custom markers (if any) via MarkerUtils so data-layer stays pure
     if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.loadFromLocalStorage === 'function') {
         try { MarkerUtils.loadFromLocalStorage(); } catch (e) { console.warn('Failed to load custom markers:', e); }
@@ -5563,6 +4970,11 @@ async function init() {
                     if (dev_imageControllers) dev_imageControllers.textContent = s.imageControllers;
                     if (dev_imageBitmaps) dev_imageBitmaps.textContent = s.imageBitmaps;
                     if (!devStatsPanel && devStats) devStats.textContent = `dec:${s.bitmapActive} q:${s.bitmapQueue} ctrl:${s.imageControllers} bmp:${s.imageBitmaps}`;
+                    // Detailed panel values
+                    const dev_loadingResolution = document.getElementById('dev_loadingResolution');
+                    const dev_imagesCached = document.getElementById('dev_imagesCached');
+                    try { if (dev_loadingResolution) dev_loadingResolution.textContent = (map.loadingResolution != null) ? (RESOLUTIONS[map.loadingResolution] + 'px') : '—'; } catch (e) {}
+                    try { if (dev_imagesCached) dev_imagesCached.textContent = Object.keys(map.images || {}).length; } catch (e) {}
                 } catch (e) {
                     if (devStatsPanel) {
                         try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) {}

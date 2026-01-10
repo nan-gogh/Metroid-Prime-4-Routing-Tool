@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RouteRenderer Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        canvas { border: 1px solid #ccc; margin: 10px 0; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ddd; }
+        .stats { background: #f5f5f5; padding: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>RouteRenderer Edge-Case Testing</h1>
+
+    <div class="test-section">
+        <h2>Test Canvas</h2>
+        <canvas id="testCanvas" width="800" height="600"></canvas>
+    </div>
+
+    <div class="test-section">
+        <h2>Controls</h2>
+        <button id="testEmptyRoute">Test Empty Route</button>
+        <button id="testSinglePoint">Test Single Point</button>
+        <button id="testInvalidMarkers">Test Invalid Markers</button>
+        <button id="testValidRoute">Test Valid Route</button>
+        <button id="testLoopToggle">Toggle Loop</button>
+        <button id="testPerformance">Show Performance Stats</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Performance Stats</h2>
+        <div id="stats" class="stats">No stats available</div>
+    </div>
+
+    <script src="rendering/RouteRenderer.js"></script>
+    <script>
+        // Mock LAYERS for testing
+        window.LAYERS = {
+            route: { color: '#22d3ee' }
+        };
+
+        // Mock map object
+        const mockMap = {
+            currentRoute: null,
+            _routeSources: null,
+            layerVisibility: { route: true },
+            routeLooping: false,
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            routeLineWidth: 3,
+            _routeDashOffset: 0,
+            highlightedLayers: new Set(),
+            getDetailScale: () => 1,
+            getRouteNodeSize: () => 6,
+            ctx: null
+        };
+
+        const canvas = document.getElementById('testCanvas');
+        const ctx = canvas.getContext('2d');
+        mockMap.ctx = ctx;
+
+        // Create RouteRenderer instance
+        const routeRenderer = new RouteRenderer(mockMap);
+
+        // Test functions
+        function testEmptyRoute() {
+            mockMap.currentRoute = null;
+            mockMap._routeSources = null;
+            routeRenderer.invalidateCache();
+            routeRenderer.render();
+            console.log('Tested empty route');
+        }
+
+        function testSinglePoint() {
+            mockMap.currentRoute = [0];
+            mockMap._routeSources = [{
+                marker: { x: 0.5, y: 0.5, uid: 'test1' },
+                layerKey: 'test'
+            }];
+            routeRenderer.invalidateCache();
+            routeRenderer.render();
+            console.log('Tested single point route');
+        }
+
+        function testInvalidMarkers() {
+            mockMap.currentRoute = [0, 1];
+            mockMap._routeSources = [
+                { marker: { x: 0.2, y: 0.2, uid: 'test1' }, layerKey: 'test' },
+                { marker: null, layerKey: 'test' }, // Invalid marker
+                { marker: { x: 0.8, y: 0.8, uid: 'test3' }, layerKey: 'test' }
+            ];
+            routeRenderer.invalidateCache();
+            routeRenderer.render();
+            console.log('Tested route with invalid markers');
+        }
+
+        function testValidRoute() {
+            mockMap.currentRoute = [0, 1, 2];
+            mockMap._routeSources = [
+                { marker: { x: 0.1, y: 0.1, uid: 'test1' }, layerKey: 'test' },
+                { marker: { x: 0.5, y: 0.2, uid: 'test2' }, layerKey: 'test' },
+                { marker: { x: 0.9, y: 0.9, uid: 'test3' }, layerKey: 'test' }
+            ];
+            routeRenderer.invalidateCache();
+            routeRenderer.render();
+            console.log('Tested valid route');
+        }
+
+        function testLoopToggle() {
+            mockMap.routeLooping = !mockMap.routeLooping;
+            routeRenderer.invalidateCache();
+            routeRenderer.render();
+            console.log('Toggled loop:', mockMap.routeLooping);
+        }
+
+        function showPerformanceStats() {
+            const stats = routeRenderer.getPerformanceStats();
+            document.getElementById('stats').textContent = JSON.stringify(stats, null, 2);
+        }
+
+        // Event listeners
+        document.getElementById('testEmptyRoute').addEventListener('click', testEmptyRoute);
+        document.getElementById('testSinglePoint').addEventListener('click', testSinglePoint);
+        document.getElementById('testInvalidMarkers').addEventListener('click', testInvalidMarkers);
+        document.getElementById('testValidRoute').addEventListener('click', testValidRoute);
+        document.getElementById('testLoopToggle').addEventListener('click', testLoopToggle);
+        document.getElementById('testPerformance').addEventListener('click', showPerformanceStats);
+
+        // Initial render
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        console.log('RouteRenderer test page loaded');
+    </script>
+</body>
+</html>

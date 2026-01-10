@@ -75,6 +75,23 @@ const RouteUtils = {
         return hex;
     },
 
+    // Compute a screen position for a route preview object or normalized coords
+    getRoutePreviewScreenPosition(routePreview, map) {
+        if (!routePreview || !map) return null;
+        try {
+            if (typeof routePreview.screenX === 'number' && typeof routePreview.screenY === 'number') {
+                return { x: Number(routePreview.screenX), y: Number(routePreview.screenY) };
+            }
+            if (typeof routePreview.x === 'number' && typeof routePreview.y === 'number') {
+                const x = routePreview.x * MAP_SIZE * map.zoom + map.panX;
+                const y = routePreview.y * MAP_SIZE * map.zoom + map.panY;
+                return { x: Number(x), y: Number(y) };
+            }
+            return null;
+        } catch (e) { return null; }
+    },
+
+
     // Helper: find layer key by matching coordinate hash (ignoring UID prefix)
     findLayerKeyByCoordinateHash(x, y, LAYERS) {
         const targetHash = RouteUtils.getCoordinateHash(x, y);
