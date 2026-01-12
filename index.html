@@ -80,8 +80,12 @@
                 <div class="control-group section-glow" id="settingsSection">
                     <h3>S e t t i n g s \ \ \</h3>
                     <div class="settings-row">
-                        <label for="highlightScaleSlider">Highlight Size: <span id="highlightScaleValue">1.0x</span></label>
-                        <input id="highlightScaleSlider" type="range" min="0.6" max="4.0" step="0.05" value="1.0" />
+                        <label for="markerSizeSlider">Marker Scale<span id="markerSizeValue">100%</span></label>
+                        <input id="markerSizeSlider" type="range" min="0.5" max="1.5" step="0.05" value="1.0" />
+                    </div>
+                    <div class="settings-row">
+                        <label for="highlightScaleSlider">Highlight Size<span id="highlightScaleValue">2.0x</span></label>
+                        <input id="highlightScaleSlider" type="range" min="1.5" max="2.5" step="0.05" value="2.0" />
                     </div>
                 </div>
 
@@ -111,8 +115,8 @@
                     <div class="dataminers-list">
                         <div class="dataminer-row"><div class="dataminer-label">Cryptic Jacknife</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Meta_X</div></div>
-                        <div class="dataminer-row"><div class="dataminer-label">Supreme Dirt</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">rekameohs</div></div>
+                        <div class="dataminer-row"><div class="dataminer-label">Supreme Dirt</div></div>
                         <div class="dataminer-row"><div class="dataminer-label">Tal</div></div>
                     </div>
                 </div>
@@ -212,6 +216,7 @@
     <script src="data/layers/geCrystallization1.js"></script>
     <script src="data/layers/customMarkers.js"></script>
     <script src="data/layers/route.js"></script>
+
     <script src="data/storageUtils.js"></script>
     <script src="data/StorageInterface.js"></script>
     <script src="data/NotificationInterface.js"></script>
@@ -220,7 +225,7 @@
     <script src="data/markerUtilsCore.js"></script>
     <script src="data/markerUtils.js"></script>
     <script src="data/notificationUtils.js"></script>
-
+    <script src="data/routeUtilsCore.js"></script>
     <script src="data/routeUtils.js"></script>
     <script src="data/RouteComputation.js"></script>
     <script src="data/RouteAnimation.js"></script>

@@ -82,15 +82,16 @@
      */
     getHitRadius() {
       try {
-        const base = (typeof this.map.getBaseMarkerRadius === 'function') ? this.map.getBaseMarkerRadius() : 6;
-        const detailScale = (typeof this.map.getDetailScale === 'function') ? this.map.getDetailScale() : 1;
-        const markerShrinkFactor = (typeof this.map.markerShrinkFactor === 'number') ? this.map.markerShrinkFactor : 0.6;
-        const touchPadding = this.map.touchPadding || 0;
-        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeHitRadius === 'function') {
-          return MarkerUtils.computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding);
-        }
-        return Math.max(1, base * (1 - (1 - detailScale) * markerShrinkFactor)) + touchPadding;
-      } catch (e) { return 6 + (this.map.touchPadding || 0); }
+        // Use same size calculation as render size but add touch padding
+        const renderSize = MarkerUtils.computeMarkerSize({ 
+          zoom: this.map.zoom || 1,
+          baseSize: this.map.getMarkerBaseSize()
+        });
+        const touchPadding = this.map.touchPadding || 4;
+        return renderSize + touchPadding;
+      } catch (e) { 
+        return MP4Config.MARKER_SCALING.baseSize + 4; 
+      }
     }
 
     /**
@@ -141,29 +142,32 @@
      */
     getMarkerRenderSize(marker, layerKey) {
       try {
-        const baseSize = (typeof this.map.getBaseMarkerRadius === 'function') ? this.map.getBaseMarkerRadius() : 6;
-        const detailScale = (typeof this.map.getDetailScale === 'function') ? this.map.getDetailScale() : 1;
-        const markerShrinkFactor = (typeof this.map.markerShrinkFactor === 'number') ? this.map.markerShrinkFactor : 0.6;
-
-        let highlighted = false;
-        let highlightScale = undefined;
+        // Get current zoom
+        const zoom = this.map.zoom || 1;
+        
+        // Check highlight state
+        let isHighlighted = false;
         try {
           if (this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey)) {
-            highlighted = true;
-            const cfg = (this.map._highlightConfig && this.map._highlightConfig[layerKey]) ? this.map._highlightConfig[layerKey] : null;
-            highlightScale = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
+            isHighlighted = true;
           }
         } catch (e) {}
-
+        
+        // Check selection state
         const isSelected = this.map.selectedMarker && marker && this.map.selectedMarker.uid === marker.uid && this.map.selectedMarkerLayer === layerKey;
-        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeMarkerRenderSize === 'function') {
-          return MarkerUtils.computeMarkerRenderSize({ baseSize, detailScale, markerShrinkFactor, highlighted, highlightScale, highlightScaleMultiplier: this.map.highlightScaleMultiplier, isSelected });
-        }
-        // Fallback
-        const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-        const rawSize = isSelected ? baseSize * 1.3 : baseSize;
-        return Math.max(1, rawSize * markerScale);
-      } catch (e) { return Math.max(1, (this.map.getBaseMarkerRadius && this.map.getBaseMarkerRadius()) || 6); }
+        
+        // Use unified calculator
+        return MarkerUtils.computeMarkerSize({
+          zoom,
+          isHighlighted,
+          isSelected,
+          baseSize: this.map.getMarkerBaseSize(),
+          userScaleMultiplier: this.map.getMarkerUserScaleMultiplier(),
+          highlightMultiplier: this.map.getMarkerHighlightMultiplier()
+        });
+      } catch (e) { 
+        return MP4Config.MARKER_SCALING.baseSize; 
+      }
     }
 
     /**

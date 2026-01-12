@@ -24,7 +24,14 @@ class InteractiveMap {
         this.ctxHeatmap = this.canvasHeatmap ? this.canvasHeatmap.getContext('2d') : null;
         this._showGridHeatmap = false; // runtime state (persisted via storage)
 
-        // Phase 2: optional rendering module scaffolds
+        // Layer visibility state (runtime UI state, separate from data)
+        this.layerVisibility = {};
+        try {
+            const keys = Object.keys(LAYERS || {});
+            for (let k = 0; k < keys.length; k++) this.layerVisibility[keys[k]] = true;
+        } catch (e) {}
+        // Ensure the virtual 'route' layer is present and visible by default
+        this.layerVisibility.route = true;
         try {
             if (typeof TileRenderer !== 'undefined') {
                 this.tileRenderer = new TileRenderer(this, MP4Config);
@@ -99,8 +106,7 @@ class InteractiveMap {
                         }
                     });
                 }
-                // RouteUtils.setOnRouteChanged disabled until Phase 3 route decoupling is complete
-                /*
+                // Set up route callbacks
                 if (typeof RouteUtils !== 'undefined') {
                     RouteUtils.setOnRouteChanged(() => {
                         try {
@@ -110,7 +116,6 @@ class InteractiveMap {
                         }
                     });
                 }
-                */
 
                 // Now create managers after callbacks are set up
                 if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
@@ -120,12 +125,10 @@ class InteractiveMap {
                         NotificationInterface
                     );
                 }
-                // RouteManager creation disabled until Phase 3 route decoupling is complete
-                /*
+                // Create RouteManager
                 try {
-                    if (typeof RouteManager !== 'undefined' && this.markerManager) {
+                    if (typeof RouteManager !== 'undefined') {
                         this.routeManager = RouteUtils.createManager(
-                            this.markerManager,
                             StorageInterface,
                             NotificationInterface
                         );
@@ -134,12 +137,64 @@ class InteractiveMap {
                     console.error('RouteManager creation failed:', e);
                     // Continue without route manager - markers still work
                 }
-                */
             } catch (e) { 
                 console.error('InteractiveMap: Manager initialization failed:', e);
                 // Don't suppress the error - rethrow so we know it failed
                 throw e;
             }
+
+            // Loop Route toggle: explicit control for closing/opening computed/manual routes
+            try {
+                const loopBtn = document.getElementById('loopRouteBtn');
+                const updateLoopUI = () => {
+                    if (!loopBtn) return;
+                    try { 
+                        loopBtn.classList.toggle('active', this.routeLooping);
+                        loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
+                    } catch (e) { console.debug('updateLoopUI: failed to update button state', e); }
+                };
+                if (loopBtn) {
+                    loopBtn.addEventListener('click', () => {
+                        this.routeLooping = !this.routeLooping;
+
+                        // Recalculate route length to account for added/removed closing segment
+                        if (this.currentRoute && this._routeSources && this.currentRoute.length >= 3) {
+                            let lengthNormalized = RouteUtils.computeRouteLengthNormalized(this._routeSources, MAP_SIZE);
+                            // Add closing segment length if looping is enabled
+                            if (this.routeLooping) {
+                                const firstSrc = this._routeSources[this.currentRoute[0]];
+                                const lastSrc = this._routeSources[this.currentRoute[this.currentRoute.length - 1]];
+                                if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+                                    const dx = (firstSrc.marker.x - lastSrc.marker.x) * MAP_SIZE;
+                                    const dy = (firstSrc.marker.y - lastSrc.marker.y) * MAP_SIZE;
+                                    const closingSegmentLength = Math.hypot(dx, dy) / MAP_SIZE;
+                                    lengthNormalized += closingSegmentLength;
+                                }
+                            }
+                            // Update route length via manager
+                            if (this.routeManager) {
+                                this.routeManager.currentRouteLengthNormalized = lengthNormalized;
+                            }
+                        }
+
+                        // Invalidate route renderer caches when looping changes
+                        try {
+                            if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
+                                this.routeRenderer.invalidateCache();
+                            }
+                        } catch (e) {
+                            console.debug('Failed to invalidate route renderer cache on loop toggle', e);
+                        }
+
+                        try {
+                            RouteUtils.saveRouteLoopingFlag(this.routeLooping);
+                        } catch (e) { console.debug('loopRoute: failed to persist loop flag', e); }
+                        try { this.render(); } catch (e) { console.debug('loopRoute: failed to request render', e); }
+                        updateLoopUI();
+                    });
+                }
+                updateLoopUI();
+            } catch (e) { console.debug('InteractiveMap: loop controls initialization failed', e); }
 
             // Phase 2: input and state scaffolds
             try {
@@ -205,59 +260,6 @@ class InteractiveMap {
             }
         } catch (e) { console.debug('InteractiveMap: device detection failed', e); }
 
-    // Loop Route toggle: explicit control for closing/opening computed/manual routes
-    try {
-        const loopBtn = document.getElementById('loopRouteBtn');
-        const updateLoopUI = () => {
-            if (!loopBtn) return;
-            try { 
-                loopBtn.classList.toggle('active', map.routeLooping);
-                loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false');
-            } catch (e) { console.debug('updateLoopUI: failed to update button state', e); }
-        };
-        if (loopBtn) {
-            loopBtn.addEventListener('click', () => {
-                map.routeLooping = !map.routeLooping;
-
-                // Recalculate route length to account for added/removed closing segment
-                if (map.currentRoute && map._routeSources && map.currentRoute.length >= 3) {
-                    let lengthNormalized = RouteUtils.computeRouteLengthNormalized(map._routeSources, MAP_SIZE);
-                    // Add closing segment length if looping is enabled
-                    if (map.routeLooping) {
-                        const firstSrc = map._routeSources[map.currentRoute[0]];
-                        const lastSrc = map._routeSources[map.currentRoute[map.currentRoute.length - 1]];
-                        if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
-                            const dx = (firstSrc.marker.x - lastSrc.marker.x) * MAP_SIZE;
-                            const dy = (firstSrc.marker.y - lastSrc.marker.y) * MAP_SIZE;
-                            const closingSegmentLength = Math.hypot(dx, dy) / MAP_SIZE;
-                            lengthNormalized += closingSegmentLength;
-                        }
-                    }
-                    map.currentRouteLengthNormalized = lengthNormalized;
-                    map.currentRouteLength = lengthNormalized * MAP_SIZE;
-                    // Update the route length display
-                    try { map.updateLayerCounts(); } catch (e) {}
-                }
-
-                // Invalidate route renderer caches when looping changes
-                try {
-                    if (map.routeRenderer && typeof map.routeRenderer.invalidateCache === 'function') {
-                        map.routeRenderer.invalidateCache();
-                    }
-                } catch (e) {
-                    console.debug('Failed to invalidate route renderer cache on loop toggle', e);
-                }
-
-                try {
-                    RouteUtils.saveRouteLoopingFlag(map.routeLooping);
-                } catch (e) { console.debug('loopRoute: failed to persist loop flag', e); }
-                try { map.render(); } catch (e) { console.debug('loopRoute: failed to request render', e); }
-                updateLoopUI();
-            });
-        }
-        updateLoopUI();
-    } catch (e) { console.debug('InteractiveMap: loop controls initialization failed', e); }
-
     // Method to update loop UI (called when route changes)
     this.updateLoopUI = () => {
         try {
@@ -271,9 +273,6 @@ class InteractiveMap {
         // Markers
         this.markers = [];
         this.customMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) ? LAYERS.customMarkers.markers : [];
-        // Current route: array of marker indices in `this.markers` order (or null)
-        this.currentRoute = null;
-        this.currentRouteLength = 0;
         // Route animation state
         this._routeDashOffset = 0; // px offset used for animated dashes
         this._routeRaf = null; // requestAnimationFrame id
@@ -330,7 +329,6 @@ class InteractiveMap {
         this.editRouteMode = false;
         // Whether the current route should be rendered as a closed loop.
         // Default: do not loop routes unless user explicitly enables looping via the UI.
-        this.routeLooping = false;
         // Wheel save timer used to delay saving until wheel stops
         this._wheelSaveTimer = null;
         // Marker shrink tuning: value in [0..1]. 0 = no marker shrink (markers stay at full size),
@@ -386,6 +384,19 @@ class InteractiveMap {
             this._showGridHeatmap = (gh === '1' || gh === 1 || gh === true);
         } catch (e) { this._showGridHeatmap = false; }
         
+        // Load marker scaling configuration (consent-gated)
+        try {
+            if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
+                const savedScaling = StorageInterface.loadMarkerScaling();
+                if (savedScaling) {
+                    MP4Config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || MP4Config.MARKER_SCALING.userScaleMultiplier;
+                    MP4Config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || MP4Config.MARKER_SCALING.highlightMultiplier;
+                }
+            }
+        } catch (e) {
+            console.debug('Failed to load marker scaling config:', e);
+        }
+        
         // Setup
         this.resize();
         this.bindEvents();
@@ -417,6 +428,33 @@ class InteractiveMap {
         }
 
         this.render();
+    }
+
+    // Getters for route data - delegate to routeManager
+    get currentRoute() {
+        return this.routeManager ? this.routeManager.currentRoute : null;
+    }
+
+    get currentRouteLengthNormalized() {
+        return this.routeManager ? this.routeManager.currentRouteLengthNormalized : 0;
+    }
+
+    get currentRouteLength() {
+        return this.currentRouteLengthNormalized * MAP_SIZE;
+    }
+
+    get _routeSources() {
+        return this.routeManager ? this.routeManager.routeSources : null;
+    }
+
+    get routeLooping() {
+        return this.routeManager ? this.routeManager.routeLooping : false;
+    }
+
+    set routeLooping(value) {
+        if (this.routeManager) {
+            this.routeManager.setRouteLooping(value);
+        }
     }
 
     // Preload map images at all resolutions to reduce hiccups during zoom/pan
@@ -473,7 +511,7 @@ class InteractiveMap {
         // Recreate honeycomb pattern when the canvas size or DPR changes
         try { this._createHoneycombPattern && this._createHoneycombPattern(); } catch (e) {}
         this.render();
-    }
+    }  
     
     centerMap() {
         const cssWidth = this.canvas.clientWidth;
@@ -495,7 +533,7 @@ class InteractiveMap {
             exportRouteBtn.addEventListener('click', () => {
                 try {
                     if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.exportRoute === 'function') {
-                        RouteUtils.exportRoute(map, MarkerUtils);
+                        RouteUtils.exportRoute({ zoom: map.zoom, panX: map.panX, panY: map.panY }, MAP_SIZE);
                     } else {
                         NotificationUtils.showRouteError('Route utilities not available.');
                     }
@@ -1054,13 +1092,7 @@ class InteractiveMap {
     // Find a route segment near screen coordinates. Returns { index } where
     // index is the index of the first node of the segment (i.e., segment between i and i+1).
     findRouteSegmentAt(screenX, screenY, threshold = 10) {
-        const routeData = {
-            currentRoute: this.currentRoute,
-            routeSources: this._routeSources,
-            routeLooping: this.routeLooping
-        };
-        const nodeSize = (typeof this.getRouteNodeSize === 'function') ? this.getRouteNodeSize() : 8;
-        return RouteUtils.findRouteSegmentAt(routeData, screenX, screenY, this.zoom, this.panX, this.panY, MAP_SIZE, nodeSize, threshold);
+        return RouteUtils.findRouteSegmentAt(screenX, screenY, {zoom: this.zoom, panX: this.panX, panY: this.panY}, MAP_SIZE, threshold);
     }
 
     // Compute normalized (map width = 1) non-looping length for given sources array
@@ -1331,28 +1363,19 @@ class InteractiveMap {
         return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
     }
     
-    // Base marker radius in CSS pixels (used for rendering and hit-testing)
-    getBaseMarkerRadius() {
-        try {
-            const routeNodeSize = (typeof this.getRouteNodeSize === 'function') ? this.getRouteNodeSize() : undefined;
-            return (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeBaseMarkerRadius === 'function') ? MarkerUtils.computeBaseMarkerRadius(this.zoom, routeNodeSize) : Math.max(2, Math.min(16, 10 * this.zoom));
-        } catch (e) { return Math.max(2, Math.min(16, 10 * this.zoom)); }
+    // Get marker base size from config
+    getMarkerBaseSize() {
+        return MP4Config.MARKER_SCALING.baseSize;
     }
 
-    // Compute route node dot size in a single place so markers can reference it
-    getRouteNodeSize() {
-        const scale = this.getDetailScale ? this.getDetailScale() : 1;
-        return RouteUtils.getRouteNodeSize(this.routeLineWidth, this.zoom, scale);
+    // Get marker user scale multiplier from config
+    getMarkerUserScaleMultiplier() {
+        return MP4Config.MARKER_SCALING.userScaleMultiplier;
     }
 
-    // Compute a small detail scale factor that slightly reduces marker/route
-    // visuals when zoomed in to improve detailed viewing. Returns a value
-    // in (0.6..1], where 1 means no shrink (zoom <= 1) and lower values
-    // shrink visuals progressively for higher zoom levels.
-    getDetailScale() {
-        try {
-            return (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeDetailScale === 'function') ? MarkerUtils.computeDetailScale(this.zoom) : 1;
-        } catch (e) { return 1; }
+    // Get marker highlight multiplier from config
+    getMarkerHighlightMultiplier() {
+        return MP4Config.MARKER_SCALING.highlightMultiplier;
     }
 
     // Delegated to MarkerRenderer
@@ -1372,55 +1395,69 @@ class InteractiveMap {
         if (!this.markerRenderer || typeof this.markerRenderer.getMarkerRenderSize !== 'function') throw new Error('getMarkerRenderSize removed from map; use markerRenderer.getMarkerRenderSize instead');
         return this.markerRenderer.getMarkerRenderSize(marker, layerKey);
     }
+
+    // Update marker base size and save to storage (consent-gated)
+    updateMarkerBaseSize(newSize) {
+        MP4Config.MARKER_SCALING.baseSize = Math.max(2, Math.min(12, newSize));
+        try {
+            if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
+                StorageInterface.saveMarkerScaling({
+                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                });
+            }
+        } catch (e) {
+            console.debug('Failed to save marker scaling config:', e);
+        }
+        // Trigger re-render to show new sizes
+        this.render();
+    }
+
+    // Update marker user scale multiplier and save to storage (consent-gated)
+    updateMarkerUserScaleMultiplier(newMultiplier) {
+        MP4Config.MARKER_SCALING.userScaleMultiplier = Math.max(0.5, Math.min(1.5, newMultiplier));
+        try {
+            if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
+                StorageInterface.saveMarkerScaling({
+                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                });
+            }
+        } catch (e) {
+            console.debug('Failed to save marker scaling config:', e);
+        }
+        // Trigger re-render to show new sizes
+        this.render();
+    }
+
+    // Update marker highlight multiplier and save to storage (consent-gated)
+    updateMarkerHighlightMultiplier(newMultiplier) {
+        MP4Config.MARKER_SCALING.highlightMultiplier = Math.max(1.5, Math.min(2.5, newMultiplier));
+        try {
+            if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
+                StorageInterface.saveMarkerScaling({
+                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                });
+            }
+        } catch (e) {
+            console.debug('Failed to save marker scaling config:', e);
+        }
+        // Trigger re-render to show new sizes
+        this.render();
+    }
     
 
 
 
 
     setRoute(routeIndices, lengthNormalized, routeSources) {
-        this.currentRoute = routeIndices ? routeIndices.slice() : null;
-        this._routeSources = Array.isArray(routeSources) ? routeSources.slice() : null;
-        
-        // Remove duplicate indices and markers at the same position
-        if (this.currentRoute && this._routeSources) {
-            const seenIndices = new Set();
-            const seenPositions = new Set();
-            const filteredIndices = [];
-            for (const idx of this.currentRoute) {
-                if (seenIndices.has(idx)) continue;
-                const src = this._routeSources[idx];
-                if (!src || !src.marker) continue;
-                const posKey = `${src.marker.x},${src.marker.y}`;
-                if (seenPositions.has(posKey)) continue;
-                seenIndices.add(idx);
-                seenPositions.add(posKey);
-                filteredIndices.push(idx);
-            }
-            this.currentRoute = filteredIndices;
+        if (this.routeManager) {
+            this.routeManager.setRoute(routeIndices, lengthNormalized, routeSources);
+        } else {
+            // Fallback for when routeManager is not available
+            console.warn('RouteManager not available, cannot set route');
         }
-        
-        // lengthNormalized is in normalized map units (map width = 1). Store both
-        // normalized length and pixel length for compatibility.
-        this.currentRouteLengthNormalized = typeof lengthNormalized === 'number' ? lengthNormalized : 0;
-        this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
-        
-        // Adjust route length to include closing segment if looping is enabled and route has 3+ waypoints
-        if (this.routeLooping && this.currentRoute && this.currentRoute.length >= 3 && this._routeSources) {
-            const firstIdx = this.currentRoute[0];
-            const lastIdx = this.currentRoute[this.currentRoute.length - 1];
-            const firstSrc = this._routeSources[firstIdx];
-            const lastSrc = this._routeSources[lastIdx];
-            if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
-                const dx = (firstSrc.marker.x - lastSrc.marker.x) * MAP_SIZE;
-                const dy = (firstSrc.marker.y - lastSrc.marker.y) * MAP_SIZE;
-                const closingSegmentLength = Math.hypot(dx, dy) / MAP_SIZE;
-                this.currentRouteLengthNormalized += closingSegmentLength;
-                this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
-            }
-        }
-        
-        // Note: routeLooping is preserved during route mutations. UI and rendering
-        // handle invalid states (<3 waypoints) by disabling toggle and not drawing loop.
         
         // Reset the start-point flag when a new route is set (will be overridden by generation if applicable)
         // Do not change `routeLooping` here — looping is controlled explicitly by user preference.
@@ -1469,9 +1506,9 @@ class InteractiveMap {
             this.pointerHandler._cancelRouteDragOperations('Route clearing');
         }
         
-        this.currentRoute = null;
-        this.currentRouteLength = 0;
-        this.currentRouteLengthNormalized = 0;
+        if (this.routeManager) {
+            this.routeManager.clearRoute();
+        }
 
         // Invalidate route renderer caches when route is cleared
         try {
@@ -3060,13 +3097,105 @@ async function init() {
             
             slider.addEventListener('input', (ev) => {
                 const v = parseFloat(ev.target.value) || 1.0;
-                if (map) map.highlightScaleMultiplier = v;
                 // Map displayed value to (internal + 0.6) so UI range appears to start around 1.2x
                 const display = Number(v) + 0.6;
                 const pct = Math.round(display * 100);
                 label.textContent = `${pct}%`;
-                try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(v); } catch (e) {}
-                try { map.render(); } catch (e) {}
+                if (map && typeof map.updateMarkerHighlightMultiplier === 'function') {
+                    map.updateMarkerHighlightMultiplier(v);
+                }
+            });
+            
+            slider.addEventListener('change', (ev) => {
+                try {
+                    if (map) {
+                        map.render();
+                        if (typeof map.checkMarkerHover === 'function') {
+                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') {
+                                map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
+                            } else {
+                                const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null;
+                                if (rect) map.checkMarkerHover(rect.width / 2, rect.height / 2);
+                            }
+                        }
+                    }
+                } catch (e) {}
+            });
+        }
+    } catch (e) {}
+    
+    // Settings: marker size slider wiring
+    try {
+        const slider = document.getElementById('markerSizeSlider');
+        const label = document.getElementById('markerSizeValue');
+        if (slider && label) {
+            let initial = MP4Config.MARKER_SCALING.userScaleMultiplier;
+            slider.value = initial;
+            label.textContent = `${(initial * 100).toFixed(0)}%`;
+            // Calculate thumb offset for precise fill alignment
+            const thumbOffsetPercent = (7 / slider.offsetWidth) * 100; // Half thumb width (7px) as percentage
+            const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+            slider.style.setProperty('--slider-fill', fillPercent + '%');
+            
+            slider.addEventListener('input', (ev) => {
+                let v = parseFloat(ev.target.value) || 1.0;
+                // Clamp to the intended range (50% to 150%)
+                v = Math.max(0.5, Math.min(1.5, v));
+                ev.target.value = v; // Update the slider position
+                label.textContent = `${(v * 100).toFixed(0)}%`;
+                // Update slider fill visualization
+                const thumbOffsetPercent = (7 / ev.target.offsetWidth) * 100; // Half thumb width (7px) as percentage
+                const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((v - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+                ev.target.style.setProperty('--slider-fill', fillPercent + '%');
+                if (map && typeof map.updateMarkerUserScaleMultiplier === 'function') {
+                    map.updateMarkerUserScaleMultiplier(v);
+                }
+            });
+            
+            slider.addEventListener('change', (ev) => {
+                try {
+                    if (map) {
+                        map.render();
+                        if (typeof map.checkMarkerHover === 'function') {
+                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') {
+                                map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
+                            } else {
+                                const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null;
+                                if (rect) map.checkMarkerHover(rect.width / 2, rect.height / 2);
+                            }
+                        }
+                    }
+                } catch (e) {}
+            });
+        }
+    } catch (e) {}
+    
+    // Settings: highlight scale slider wiring
+    try {
+        const slider = document.getElementById('highlightScaleSlider');
+        const label = document.getElementById('highlightScaleValue');
+        if (slider && label) {
+            let initial = MP4Config.MARKER_SCALING.highlightMultiplier;
+            slider.value = initial;
+            label.textContent = `x${initial.toFixed(1)}`;
+            // Calculate thumb offset for precise fill alignment
+            const thumbOffsetPercent = (7 / slider.offsetWidth) * 100; // Half thumb width (7px) as percentage
+            const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+            slider.style.setProperty('--slider-fill', fillPercent + '%');
+            
+            slider.addEventListener('input', (ev) => {
+                let v = parseFloat(ev.target.value) || 1.2;
+                // Clamp to the intended range (1.5x to 2.5x)
+                v = Math.max(1.5, Math.min(2.5, v));
+                ev.target.value = v; // Update the slider position
+                label.textContent = `x${v.toFixed(1)}`;
+                // Update slider fill visualization
+                const thumbOffsetPercent = (7 / ev.target.offsetWidth) * 100; // Half thumb width (7px) as percentage
+                const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((v - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+                ev.target.style.setProperty('--slider-fill', fillPercent + '%');
+                if (map && typeof map.updateMarkerHighlightMultiplier === 'function') {
+                    map.updateMarkerHighlightMultiplier(v);
+                }
             });
             
             slider.addEventListener('change', (ev) => {

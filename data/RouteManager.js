@@ -2,8 +2,7 @@
 // Handles all route operations without global state dependencies
 
 class RouteManager {
-    constructor(markerManager, storage, notifications) {
-        this.markerManager = markerManager;
+    constructor(storage, notifications) {
         this.storage = storage;
         this.notifications = notifications;
 
@@ -95,98 +94,153 @@ class RouteManager {
         this._notifyRouteChanged();
     }
 
+    // Save route looping flag to storage
+    saveRouteLoopingFlag(looping) {
+        this.routeLooping = Boolean(looping);
+        this.storage.saveRouteLoopingFlag(this.routeLooping);
+    }
+
     // Get route data for export
     getRouteDataForExport() {
-        const pts = [];
-        for (let i = 0; i < this.currentRoute.length; i++) {
-            const idx = this.currentRoute[i];
-            const src = this.routeSources[idx];
-            if (src && src.marker) {
-                pts.push({
-                    uid: src.marker.uid || '',
-                    x: Number(src.marker.x),
-                    y: Number(src.marker.y)
-                });
-            }
-        }
-        return pts;
+        return RouteUtilsCore.extractRoutePoints(this.currentRoute, this.routeSources);
     }
 
     // Compute route length
     computeRouteLength(mapSize) {
-        let length = 0;
-        for (let i = 1; i < this.currentRoute.length; i++) {
-            const prev = this.routeSources[this.currentRoute[i-1]];
-            const curr = this.routeSources[this.currentRoute[i]];
-            if (prev && curr && prev.marker && curr.marker) {
-                const dx = (curr.marker.x - prev.marker.x) * mapSize;
-                const dy = (curr.marker.y - prev.marker.y) * mapSize;
-                length += Math.sqrt(dx*dx + dy*dy);
-            }
-        }
-        return length;
+        return RouteUtilsCore.computeRouteLength(this.currentRoute, this.routeSources, mapSize);
     }
 
     // Find route segment at screen position
     findRouteSegmentAt(screenX, screenY, viewState, mapSize, threshold = 10) {
-        // Convert screen to world coordinates
-        const worldX = (screenX - viewState.panX) / (mapSize * viewState.zoom);
-        const worldY = (screenY - viewState.panY) / (mapSize * viewState.zoom);
+        return RouteUtilsCore.findRouteSegmentAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+    }
 
-        // Find closest segment
-        let closestDist = Infinity;
-        let closestSegment = null;
+    // Export route to file
+    exportRoute(viewState, mapSize) {
+        try {
+            RouteUtilsCore.validateRouteForExport(this.currentRoute, this.routeSources);
+            const points = this.getRouteDataForExport();
+            const timestamp = Date.now();
+            const hash = RouteUtilsCore.generateRouteHash(points);
+            const json = RouteUtilsCore.createRouteJson(points, timestamp, hash, this.currentRouteLengthNormalized);
 
-        for (let i = 1; i < this.currentRoute.length; i++) {
-            const prev = this.routeSources[this.currentRoute[i-1]];
-            const curr = this.routeSources[this.currentRoute[i]];
+            // Download the file
+            this._downloadRouteFile(json, timestamp, hash);
 
-            if (!prev || !curr || !prev.marker || !curr.marker) continue;
+            this.notifications.showSuccess('Route exported successfully');
+            return true;
+        } catch (err) {
+            this.notifications.showError('Export failed: ' + err.message);
+            throw err;
+        }
+    }
 
-            // Check distance to line segment
-            const dist = this._pointToLineDistance(worldX, worldY, prev.marker.x, prev.marker.y, curr.marker.x, curr.marker.y);
-            if (dist < closestDist && dist <= threshold / (mapSize * viewState.zoom)) {
-                closestDist = dist;
-                closestSegment = {
-                    index: i - 1,
-                    t: this._getParameterT(worldX, worldY, prev.marker.x, prev.marker.y, curr.marker.x, curr.marker.y)
-                };
+    // Import route from file
+    importRoute(file, layers) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    this._processImportedRoute(data, layers);
+                    this.notifications.showSuccess('Route imported successfully');
+                    resolve(true);
+                } catch (err) {
+                    this.notifications.showError('Import failed: ' + err.message);
+                    reject(err);
+                }
+            };
+            reader.onerror = () => {
+                this.notifications.showError('Failed to read file');
+                reject(new Error('File read error'));
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    // Import route from content string (for backward compatibility)
+    importRouteFromContent(content, layers) {
+        try {
+            const data = JSON.parse(content);
+            this._processImportedRoute(data, layers);
+            this.notifications.showSuccess('Route imported successfully');
+            return true;
+        } catch (err) {
+            this.notifications.showError('Import failed: ' + err.message);
+            throw err;
+        }
+    }
+
+    // Process imported route data
+    _processImportedRoute(data, layers) {
+        if (!data.points || !Array.isArray(data.points)) {
+            throw new Error('Invalid route file format');
+        }
+
+        const routeIndices = [];
+        const routeSources = [];
+
+        for (let i = 0; i < data.points.length; i++) {
+            const point = data.points[i];
+            const marker = this._findMarkerForPoint(point, layers);
+
+            if (marker) {
+                routeSources.push({ marker });
+                routeIndices.push(i);
+            } else {
+                console.warn(`Could not find marker for route point ${i}:`, point);
             }
         }
 
-        return closestSegment;
+        if (routeIndices.length === 0) {
+            throw new Error('No valid markers found for imported route');
+        }
+
+        this.setRoute(routeIndices, data.length || 0, routeSources);
     }
 
-    // Helper: distance from point to line segment
-    _pointToLineDistance(px, py, x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const length = Math.sqrt(dx*dx + dy*dy);
+    // Find marker for imported route point
+    _findMarkerForPoint(point, layers) {
+        // Try to find by UID first
+        if (point.uid) {
+            for (const layerKey in layers) {
+                const layer = layers[layerKey];
+                if (layer.markers) {
+                    const marker = layer.markers.find(m => m.uid === point.uid);
+                    if (marker) return marker;
+                }
+            }
+        }
 
-        if (length === 0) return Math.sqrt((px - x1)*(px - x1) + (py - y1)*(py - y1));
+        // Fall back to coordinate matching
+        const targetHash = RouteUtilsCore.getCoordinateHash(point.x, point.y);
+        for (const layerKey in layers) {
+            const layer = layers[layerKey];
+            if (layer.markers) {
+                const marker = layer.markers.find(m =>
+                    RouteUtilsCore.markerMatchesCoordinates(m, targetHash)
+                );
+                if (marker) return marker;
+            }
+        }
 
-        const t = Math.max(0, Math.min(1, ((px - x1)*dx + (py - y1)*dy) / (length*length)));
-        const closestX = x1 + t * dx;
-        const closestY = y1 + t * dy;
-
-        return Math.sqrt((px - closestX)*(px - closestX) + (py - closestY)*(py - closestY));
+        return null;
     }
 
-    // Helper: get parameter t along line segment
-    _getParameterT(px, py, x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const length = Math.sqrt(dx*dx + dy*dy);
-
-        if (length === 0) return 0;
-
-        return Math.max(0, Math.min(1, ((px - x1)*dx + (py - y1)*dy) / (length*length)));
+    // Download route file
+    _downloadRouteFile(json, timestamp, hash) {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `route-${timestamp}${hash ? '-' + hash : ''}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     // Get route node size for rendering
     getRouteNodeSize(lineWidth, zoom, scale = 1) {
-        const baseSize = Math.max(2, Math.min(16, 10 * zoom * scale));
-        return Math.max(baseSize, lineWidth * 2);
+        return RouteUtilsCore.getRouteNodeSize(lineWidth, zoom, scale);
     }
 
     // Get route statistics
@@ -197,6 +251,36 @@ class RouteManager {
             looping: this.routeLooping,
             hasValidPoints: this.currentRoute.every(idx => this.routeSources[idx] && this.routeSources[idx].marker)
         };
+    }
+
+    // Cleanup route references when markers are deleted
+    cleanupRouteReferences(deletedMarkerUid) {
+        let changed = false;
+
+        // Remove route sources that reference the deleted marker
+        for (let i = this.routeSources.length - 1; i >= 0; i--) {
+            const source = this.routeSources[i];
+            if (source && source.marker && source.marker.uid === deletedMarkerUid) {
+                this.routeSources.splice(i, 1);
+                changed = true;
+
+                // Adjust indices that come after this removed source
+                for (let j = 0; j < this.currentRoute.length; j++) {
+                    if (this.currentRoute[j] > i) {
+                        this.currentRoute[j]--;
+                    } else if (this.currentRoute[j] === i) {
+                        // Remove this index from the route
+                        this.currentRoute.splice(j, 1);
+                        j--; // Adjust loop counter
+                    }
+                }
+            }
+        }
+
+        if (changed) {
+            this.saveToStorage();
+            this._notifyRouteChanged();
+        }
     }
 }
 

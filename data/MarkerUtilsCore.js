@@ -83,71 +83,69 @@ const MarkerUtilsCore = {
 
     // ---------- Marker sizing helpers (pure functions) ----------
 
-    // computeBaseMarkerRadius(zoom, routeNodeSize) -> number
-    computeBaseMarkerRadius(zoom, routeNodeSize) {
-        try {
-            const z = (typeof zoom === 'number') ? zoom : 1;
-            const base = Math.max(2, Math.min(16, 10 * z));
-            if (typeof routeNodeSize === 'number') return Math.max(base, routeNodeSize + 10 * z);
-            return base;
-        } catch (e) { return 8; }
+    // Unified marker size calculator
+    // Handles zoom compensation, selection bonus, and highlight multiplier
+    computeMarkerSize(opts) {
+        const {
+            baseSize = MP4Config.MARKER_SCALING.baseSize,
+            userScaleMultiplier = MP4Config.MARKER_SCALING.userScaleMultiplier,
+            zoom = 1,
+            isHighlighted = false,
+            highlightMultiplier = MP4Config.MARKER_SCALING.highlightMultiplier,
+            isSelected = false,
+            selectionMultiplier = MP4Config.MARKER_SCALING.selectionMultiplier,
+            zoomShrinkThreshold = MP4Config.MARKER_SCALING.zoomShrinkThreshold,
+            zoomShrinkRate = MP4Config.MARKER_SCALING.zoomShrinkRate
+        } = opts;
+        
+        // Step 1: Apply zoom scaling (markers grow when zooming in up to threshold, then shrink when zooming in further)
+        // Use zoom = 0.1 as reference point where markers show at baseSize
+        const referenceZoom = 0.1;
+        let zoomScaling;
+        if (zoom <= zoomShrinkThreshold) {
+            // Normal growth up to zoom = zoomShrinkThreshold
+            zoomScaling = Math.max(0.01, zoom) / referenceZoom;
+        } else {
+            // Behavior beyond zoomShrinkThreshold depends on zoomShrinkRate
+            const normalGrowth = Math.max(0.01, zoom) / referenceZoom;
+            const maxShrinking = (zoomShrinkThreshold / referenceZoom) * (zoomShrinkThreshold / zoom);
+            
+            // Linear interpolation between normal growth (rate=0) and maximum shrinking (rate=1)
+            zoomScaling = normalGrowth + zoomShrinkRate * (maxShrinking - normalGrowth);
+        }
+        let size = baseSize * zoomScaling;
+        
+        // Step 2: Apply user scale multiplier
+        size *= userScaleMultiplier;
+        
+        // Step 3: Apply selection bonus
+        if (isSelected) {
+            size *= selectionMultiplier;
+        }
+        
+        // Step 4: Apply highlight multiplier (only increases size, never decreases)
+        if (isHighlighted) {
+            size *= highlightMultiplier;
+        }
+        
+        // Step 4: Clamp to reasonable bounds
+        // COMMENTED OUT: Removing size limits for now
+        /*
+        return Math.max(
+            MP4Config.MARKER_SCALING.minSize,
+            Math.min(MP4Config.MARKER_SCALING.maxSize, size)
+        );
+        */
+        
+        // Return unclamped size
+        return size;
     },
 
-    // computeDetailScale(zoom) -> number
-    computeDetailScale(zoom) {
-        try {
-            const z = (typeof zoom === 'number' && zoom > 0) ? zoom : 1;
-            const min = 0.1;
-            const exp = 0.7;
-            const val = Math.pow(z, -exp);
-            return Math.max(min, Math.min(1, val));
-        } catch (e) { return 1; }
-    },
-
-    // computeMarkerScale(detailScale, markerShrinkFactor) -> number
-    computeMarkerScale(detailScale, markerShrinkFactor) {
-        try {
-            const ds = (typeof detailScale === 'number') ? detailScale : 1;
-            const mf = (typeof markerShrinkFactor === 'number') ? markerShrinkFactor : 0.6;
-            return 1 - (1 - ds) * mf;
-        } catch (e) { return 1; }
-    },
-
-    // computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding) -> number
-    computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding) {
-        try {
-            const b = (typeof base === 'number') ? base : 8;
-            const ds = (typeof detailScale === 'number') ? detailScale : 1;
-            const mf = (typeof markerShrinkFactor === 'number') ? markerShrinkFactor : 0.6;
-            const scaled = Math.max(1, b * (1 - (1 - ds) * mf));
-            return scaled + (touchPadding || 0);
-        } catch (e) { return (base || 8) + (touchPadding || 0); }
-    },
-
-    // computeMarkerRenderSize({ baseSize, detailScale, markerShrinkFactor, highlighted, highlightScale, highlightScaleMultiplier, isSelected }) -> number
-    computeMarkerRenderSize(opts) {
-        try {
-            const baseSize = (typeof opts.baseSize === 'number') ? opts.baseSize : 8;
-            const detailScale = (typeof opts.detailScale === 'number') ? opts.detailScale : 1;
-            const markerShrinkFactor = (typeof opts.markerShrinkFactor === 'number') ? opts.markerShrinkFactor : 0.6;
-            const markerScale = 1 - (1 - detailScale) * markerShrinkFactor;
-
-            let highlightMult = 1;
-            if (opts.highlighted) {
-                const cfgScale = (typeof opts.highlightScale === 'number') ? opts.highlightScale : 2.0;
-                highlightMult = cfgScale;
-                try {
-                    const gm = (typeof opts.highlightScaleMultiplier === 'number') ? opts.highlightScaleMultiplier : 1.0;
-                    highlightMult = highlightMult * gm;
-                    highlightMult = Math.max(highlightMult, 0.6);
-                } catch (e) {}
-            }
-
-            const isSelected = !!opts.isSelected;
-            const rawSize = isSelected ? baseSize * 1.3 * highlightMult : baseSize * highlightMult;
-            const size = Math.max(1, rawSize * markerScale);
-            return size;
-        } catch (e) { return Math.max(1, opts.baseSize || 8); }
+    // Legacy function for backward compatibility - delegates to computeMarkerSize
+    computeHitRadius(baseSize, detailScale, markerShrinkFactor, touchPadding) {
+        // For hit radius, use base size with zoom compensation and add padding
+        const size = this.computeMarkerSize({ baseSize, zoom: 1 }); // Assume zoom 1 for hit radius
+        return size + (touchPadding || 4);
     },
 
     // Create export JSON for markers (pure function)

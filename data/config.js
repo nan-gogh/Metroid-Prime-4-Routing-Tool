@@ -57,6 +57,33 @@ const MP4Config = {
         DP_MAX_INTERMEDIATES: 14, // 2^14 = 16k states for TSP solver
         MAX_INTERMEDIATES_PER_BUCKET: 14, // limit intermediates per segment bucket
         TSP_GREEDY_LIMIT: 14 // switch to greedy solver above this count
+    },
+
+    MARKER_SCALING: {
+        // Base size for all markers (fixed default)
+        baseSize: 4,
+        
+        // User scale multiplier (stored locally with consent, default 1.0)
+        userScaleMultiplier: 1.0,
+        
+        // Highlight multiplier (stored locally with consent, ranges from 1.5x to 2.5x)
+        highlightMultiplier: 2.0,
+        
+        // Selection bonus multiplier
+        selectionMultiplier: 1.3,
+        
+        // Zoom level where markers start shrinking instead of growing (default 1.0)
+        zoomShrinkThreshold: 0.5,
+        
+        // How much markers shrink beyond the threshold (0 = no shrinking, 1 = maximum shrinking)
+        zoomShrinkRate: 0.75,
+        
+        // Size bounds (higher max to accommodate highlights)
+        // COMMENTED OUT: Size limits removed for unlimited scaling
+        /*
+        minSize: 2,
+        maxSize: 50
+        */
     }
 };
 

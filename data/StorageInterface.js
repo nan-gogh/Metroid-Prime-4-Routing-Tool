@@ -84,6 +84,27 @@ const StorageInterface = {
             console.warn('Failed to load settings from localStorage:', e);
             return {};
         }
+    },
+
+    // Marker scaling configuration (only saved with consent)
+    saveMarkerScaling: function(config) {
+        try {
+            localStorage.setItem('mp4_markerScaling', JSON.stringify(config));
+            return true;
+        } catch (e) {
+            console.warn('Failed to save marker scaling to localStorage:', e);
+            return false;
+        }
+    },
+
+    loadMarkerScaling: function() {
+        try {
+            const data = localStorage.getItem('mp4_markerScaling');
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            console.warn('Failed to load marker scaling from localStorage:', e);
+            return null;
+        }
     }
 };
 

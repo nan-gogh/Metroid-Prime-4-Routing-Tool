@@ -405,8 +405,7 @@
             }
           }
           
-          this.map.currentRouteLengthNormalized = newLengthNormalized;
-          this.map.currentRouteLength = this.map.currentRouteLengthNormalized * (this.config.MAP_SIZE || 8192); 
+          this.map.routeManager.currentRouteLengthNormalized = newLengthNormalized; 
           
           // Update UI display
           try {

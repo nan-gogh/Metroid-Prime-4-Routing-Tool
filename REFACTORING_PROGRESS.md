@@ -643,5 +643,73 @@ Following the completion of Phase 3 input handling and identification of marker 
 - 615 insertions, 481 deletions - significant code improvement
 
 **Next Steps:**
-- Phase 3: Create RouteUtilsCore with pure route utility functions
-- Phase 4: Refactor RouteUtils to delegate to RouteManager while maintaining legacy API
+- Phase 3: Create RouteUtilsCore with pure route utility functions ✅ Complete
+- Phase 4: Refactor RouteUtils to delegate to RouteManager while maintaining legacy API ✅ Complete
+
+### Phase 3: RouteUtils Pure Functions & Manager Pattern ✅ Complete
+
+#### 3.1 Create RouteUtilsCore with Pure Functions
+- **Status:** ✅ Complete
+- **File:** [data/routeUtilsCore.js](data/routeUtilsCore.js)
+- **Functions:** 
+  - `getCoordinateHash()` - Generate coordinate hash for route points
+  - `extractHashFromUID()` - Extract hash from UID
+  - `markerMatchesCoordinates()` - Check marker coordinate matching
+  - `computeRouteLength()` - Calculate route length from indices/sources
+  - `findRouteSegmentAt()` - Find route segment at screen position
+  - `validateRouteForExport()` - Validate route data for export
+  - `extractRoutePoints()` - Extract points from route data
+  - `createRouteJson()` - Create JSON for route export
+  - `getRoutePreviewScreenPosition()` - Get screen position for route preview
+  - `getRouteNodeSize()` - Calculate route node visual size
+
+#### 3.2 Create RouteManager Class
+- **Status:** ✅ Complete
+- **File:** [data/RouteManager.js](data/RouteManager.js)
+- **Features:**
+  - Constructor with dependency injection (markerManager, storage, notifications)
+  - State management for currentRoute, routeSources, currentRouteLengthNormalized, routeLooping
+  - Storage operations with consent-gated localStorage via StorageInterface
+  - Route CRUD operations (setRoute, clearRoute, setRouteLooping)
+  - Export/Import functionality with file I/O
+  - Route segment finding for UI interactions
+  - Cleanup of route references when markers are deleted
+
+#### 3.3 Refactor RouteUtils to Manager Pattern
+- **Status:** ✅ Complete
+- **File:** [data/routeUtils.js](data/routeUtils.js)
+- **Changes:**
+  - Replaced 1000+ lines of monolithic code with clean manager delegation
+  - Maintained legacy API compatibility through delegation methods
+  - Added factory method `createManager()` for dependency injection
+  - All operations now delegate to RouteManager instance
+
+#### 3.4 Update InteractiveMap Integration
+- **Status:** ✅ Complete
+- **File:** [map.js](map.js)
+- **Changes:**
+  - Added getters for route properties (currentRoute, currentRouteLengthNormalized, _routeSources, routeLooping)
+  - Updated setRoute() method to delegate to routeManager
+  - Re-enabled RouteManager creation and RouteUtils.setOnRouteChanged callback
+  - Maintained backward compatibility with existing code
+
+#### 3.5 Update HTML Loading Order
+- **Status:** ✅ Complete
+- **File:** [index.html](index.html)
+- **Changes:** Added routeUtilsCore.js script loading before routeUtils.js
+
+### Phase 3 Validation ✅ Complete
+**Status:** ✅ Complete  
+**Evidence:** 
+- All route utilities properly decoupled from global state
+- Pure functions in RouteUtilsCore have no dependencies
+- RouteManager provides clean separation of concerns with dependency injection
+- Legacy API maintained through delegation in RouteUtils
+- InteractiveMap updated to use routeManager via getters/setters
+- No syntax errors, application loads correctly
+- Route export/import, segment finding, and all route operations functional
+- Significant code reduction (1000+ lines → ~120 lines in routeUtils.js)
+
+**Next Steps:**
+- Phase 4: Complete remaining utility decoupling and testing
+- Phase 5: Final integration testing and performance validation

@@ -186,25 +186,9 @@ const MarkerUtils = {
         return MarkerUtilsCore.generateUID(x, y, prefix);
     },
 
-    // Marker sizing helpers
-    computeBaseMarkerRadius(zoom, routeNodeSize) {
-        return MarkerUtilsCore.computeBaseMarkerRadius(zoom, routeNodeSize);
-    },
-
-    computeDetailScale(zoom) {
-        return MarkerUtilsCore.computeDetailScale(zoom);
-    },
-
-    computeMarkerScale(detailScale, markerShrinkFactor) {
-        return MarkerUtilsCore.computeMarkerScale(detailScale, markerShrinkFactor);
-    },
-
-    computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding) {
-        return MarkerUtilsCore.computeHitRadius(base, detailScale, markerShrinkFactor, touchPadding);
-    },
-
-    computeMarkerRenderSize(opts) {
-        return MarkerUtilsCore.computeMarkerRenderSize(opts);
+    // Unified marker size calculator
+    computeMarkerSize(opts) {
+        return MarkerUtilsCore.computeMarkerSize(opts);
     },
 
     // ---------- Deprecated methods (kept for compatibility) ----------
