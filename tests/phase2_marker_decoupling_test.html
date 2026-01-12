@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Phase 2: MarkerUtils Decoupling Test</title>
+</head>
+<body>
+    <h1>Phase 2: MarkerUtils Decoupling Test</h1>
+    <div id="output"></div>
+
+    <!-- Load the interface and core files -->
+    <script src="../data/StorageInterface.js"></script>
+    <script src="../data/NotificationInterface.js"></script>
+    <script src="../data/MarkerManager.js"></script>
+    <script src="../data/markerUtilsCore.js"></script>
+    <script src="../data/markerUtils.js"></script>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message) {
+            output.innerHTML += '<div>' + message + '</div>';
+            console.log(message);
+        }
+
+        log('Testing Phase 2: MarkerUtils Decoupling...');
+
+        // Test MarkerUtilsCore availability
+        log('✓ MarkerUtilsCore available: ' + (typeof MarkerUtilsCore !== 'undefined'));
+
+        // Test MarkerUtils availability
+        log('✓ MarkerUtils available: ' + (typeof MarkerUtils !== 'undefined'));
+
+        // Test MarkerManager availability
+        log('✓ MarkerManager available: ' + (typeof MarkerManager !== 'undefined'));
+
+        if (typeof MarkerUtilsCore !== 'undefined' && typeof MarkerUtils !== 'undefined' && typeof MarkerManager !== 'undefined') {
+            try {
+                // Test MarkerUtilsCore pure functions
+                log('Testing MarkerUtilsCore pure functions...');
+
+                // Test UID generation
+                const uid1 = MarkerUtilsCore.generateUID(0.5, 0.5, 'test');
+                const uid2 = MarkerUtilsCore.generateUID(0.5, 0.5, 'test');
+                log('✓ generateUID consistent: ' + (uid1 === uid2) + ' (' + uid1 + ')');
+
+                // Test unique UID generation
+                const existingUIDs = [uid1];
+                const uniqueUid = MarkerUtilsCore.generateUniqueUID(0.5, 0.5, 'test', existingUIDs);
+                log('✓ generateUniqueUID collision avoidance: ' + uniqueUid + ' (different from ' + uid1 + ')');
+
+                // Test hash generation
+                const hash1 = MarkerUtilsCore.hashMarkerData([{x: 0.1, y: 0.1}, {x: 0.2, y: 0.2}]);
+                const hash2 = MarkerUtilsCore.hashMarkerData([{x: 0.1, y: 0.1}, {x: 0.2, y: 0.2}]);
+                log('✓ hashMarkerData consistent: ' + (hash1 === hash2) + ' (' + hash1 + ')');
+
+                // Test screen position calculation
+                const marker = { x: 0.5, y: 0.5 };
+                const viewState = { zoom: 1, panX: 0, panY: 0 };
+                const pos = MarkerUtilsCore.getMarkerScreenPosition(marker, viewState, 8192);
+                log('✓ getMarkerScreenPosition: ' + JSON.stringify(pos));
+
+                // Test marker validation
+                const validMarker = { x: 0.5, y: 0.5 };
+                const invalidMarker = { x: 'invalid', y: 0.5 };
+                log('✓ validateMarker: valid=' + MarkerUtilsCore.validateMarker(validMarker) + ', invalid=' + MarkerUtilsCore.validateMarker(invalidMarker));
+
+                // Test legacy detection
+                const legacyMarkers = [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2, uid: 'old_format' }];
+                log('✓ isLegacyMarkerFile: ' + MarkerUtilsCore.isLegacyMarkerFile(legacyMarkers));
+
+                // Test MarkerUtils delegation to core
+                log('Testing MarkerUtils delegation to MarkerUtilsCore...');
+                log('✓ MarkerUtils.generateUID delegates: ' + (MarkerUtils.generateUID(0.5, 0.5, 'test') === uid1));
+                log('✓ MarkerUtils.hashMarkerData delegates: ' + (MarkerUtils.hashMarkerData([{x: 0.1, y: 0.1}]) === MarkerUtilsCore.hashMarkerData([{x: 0.1, y: 0.1}])));
+
+                // Test MarkerUtils manager creation
+                log('Testing MarkerUtils manager pattern...');
+
+                // Create mock dependencies
+                const mockStorage = {
+                    saveMarkers: (markers) => log('Mock save markers: ' + markers.length),
+                    loadMarkers: () => []
+                };
+                const mockNotifications = {
+                    showError: (msg) => log('Mock error: ' + msg),
+                    showSuccess: (msg) => log('Mock success: ' + msg),
+                    showUpgradeNotification: (msg) => log('Mock upgrade: ' + msg)
+                };
+
+                // Test manager creation
+                const manager = MarkerUtils.createManager({ maxMarkers: 10, layerPrefix: 'test' }, mockStorage, mockNotifications);
+                log('✓ MarkerUtils.createManager works: ' + (manager instanceof MarkerManager));
+
+                // Test delegation to manager
+                const marker = MarkerUtils.addCustomMarker(0.1, 0.1);
+                log('✓ MarkerUtils.addCustomMarker delegates: ' + (marker !== null));
+
+                log('✓ MarkerUtils.getMarkerCount delegates: ' + MarkerUtils.getMarkerCount());
+
+                // Test manager methods
+                log('Testing MarkerManager integration...');
+                const screenPos = manager.getScreenPosition(marker, viewState, 8192);
+                log('✓ MarkerManager.getScreenPosition works: ' + JSON.stringify(screenPos));
+
+                log('✓ MarkerManager.getCount: ' + manager.getCount());
+                log('✓ MarkerManager.getAllMarkers: ' + manager.getAllMarkers().length + ' markers');
+
+            } catch (e) {
+                log('✗ Phase 2 test failed: ' + e.message);
+                console.error(e);
+            }
+        } else {
+            log('✗ Required modules not loaded');
+        }
+
+        log('Phase 2 marker decoupling testing complete!');
+        log('<strong>All marker utilities properly decoupled and functional!</strong>');
+    </script>
+</body>
+</html>

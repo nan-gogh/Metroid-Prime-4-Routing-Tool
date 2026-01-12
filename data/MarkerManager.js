@@ -66,22 +66,14 @@ class MarkerManager {
         return this.markers.findIndex(m => m.uid === uid);
     }
 
-    // Generate UID for marker
+    // Generate UID for marker (using MarkerUtilsCore)
     generateUID(x, y) {
-        const coordHash = this.getCoordinateHash(x, y);
-        return `${this.config.layerPrefix}_${coordHash}`;
+        return MarkerUtilsCore.generateUID(x, y, this.config.layerPrefix);
     }
 
-    // Get coordinate hash (8-char hex)
+    // Get coordinate hash (using MarkerUtilsCore)
     getCoordinateHash(x, y) {
-        const coordStr = `${x.toFixed(10)},${y.toFixed(10)}`;
-        let hash = 5381;
-        for (let j = 0; j < coordStr.length; j++) {
-            hash = ((hash << 5) + hash) + coordStr.charCodeAt(j);
-            hash = hash & hash;
-        }
-        const hex = Math.abs(hash).toString(16).padStart(8, '0').slice(-8);
-        return hex;
+        return MarkerUtilsCore.getCoordinateHash(x, y);
     }
 
     // Add a custom marker
@@ -91,19 +83,7 @@ class MarkerManager {
             return null;
         }
 
-        const uid = this.generateUID(x, y);
-
-        // Check for collision and handle it
-        if (this.markerExists(uid)) {
-            // Find unique UID
-            let counter = 1;
-            let uniqueUid = uid;
-            while (this.markerExists(uniqueUid)) {
-                uniqueUid = `${uid}_${counter}`;
-                counter++;
-            }
-            uid = uniqueUid;
-        }
+        const uid = MarkerUtilsCore.generateUniqueUID(x, y, this.config.layerPrefix, this.markers.map(m => m.uid));
 
         const marker = { uid, x: Number(x), y: Number(y) };
         this.markers.push(marker);
@@ -138,14 +118,7 @@ class MarkerManager {
 
     // Get marker screen position (needs view state)
     getScreenPosition(marker, viewState, mapSize) {
-        if (!marker || !viewState || !mapSize) return null;
-        try {
-            const x = Number(marker.x) * mapSize * viewState.zoom + viewState.panX;
-            const y = Number(marker.y) * mapSize * viewState.zoom + viewState.panY;
-            return { x: Number(x), y: Number(y) };
-        } catch (e) {
-            return null;
-        }
+        return MarkerUtilsCore.getMarkerScreenPosition(marker, viewState, mapSize);
     }
 
     // Clear all markers
@@ -163,6 +136,129 @@ class MarkerManager {
     // Check if at max capacity
     isAtMaxCapacity() {
         return this.markers.length >= this.config.maxMarkers;
+    }
+
+    // Get all markers
+    getAllMarkers() {
+        return [...this.markers]; // Return copy to prevent external modification
+    }
+
+    // Check if marker exists by UID (alias for markerExists)
+    hasMarker(uid) {
+        return this.markerExists(uid);
+    }
+
+    // Export markers to JSON
+    exportMarkers() {
+        if (this.markers.length === 0) {
+            throw new Error('No custom markers to export.');
+        }
+
+        const dataHash = MarkerUtilsCore.hashMarkerData(this.markers);
+        const now = new Date();
+        const timestamp = now.getTime();
+
+        // Create JSON using MarkerUtilsCore
+        const json = MarkerUtilsCore.createExportJson(this.markers, timestamp, dataHash);
+
+        // Create download blob
+        const downloadInfo = MarkerUtilsCore.createDownloadBlob(json, timestamp, dataHash);
+
+        // Trigger download (UI concern - could be moved to a separate UI handler)
+        const a = document.createElement('a');
+        a.href = downloadInfo.url;
+        a.download = downloadInfo.filename;
+        a.click();
+        URL.revokeObjectURL(downloadInfo.url);
+
+        // Save to storage and notify
+        this.saveToStorage();
+        this.notifications.showSuccess('Markers exported successfully');
+
+        return true;
+    }
+
+    // Import markers from JSON file
+    importMarkers(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const imported = [];
+
+                    if (!Array.isArray(data.markers)) {
+                        throw new Error('Invalid format: markers must be an array');
+                    }
+
+                    // Check if imported data is legacy and upgrade if needed
+                    let isLegacy = false;
+                    if (MarkerUtilsCore.isLegacyMarkerFile(data.markers)) {
+                        isLegacy = true;
+                        data.markers = MarkerUtilsCore.upgradeLegacyMarkers(data.markers, this.config.layerPrefix);
+                    }
+
+                    // Validate and add markers
+                    for (const marker of data.markers) {
+                        if (!MarkerUtilsCore.validateMarker(marker)) {
+                            throw new Error('Invalid marker: x and y must be numbers');
+                        }
+
+                        if (this.markers.length >= this.config.maxMarkers) {
+                            break;
+                        }
+
+                        // Generate unique UID
+                        const uid = MarkerUtilsCore.generateUniqueUID(marker.x, marker.y, this.config.layerPrefix, this.markers.map(m => m.uid));
+
+                        const newMarker = { uid, x: marker.x, y: marker.y };
+                        this.markers.push(newMarker);
+                        imported.push(newMarker);
+                    }
+
+                    // If legacy was detected, notify user
+                    if (isLegacy && imported.length > 0) {
+                        this.notifications.showUpgradeNotification(`Upgraded custom markers: ${imported.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                    }
+
+                    // Persist to storage and notify
+                    this.saveToStorage();
+                    this._notifyChanged();
+
+                    resolve(imported);
+                } catch (error) {
+                    this.notifications.showError('Error importing markers: ' + error.message);
+                    reject(error);
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+
+    // Merge markers from an array
+    mergeMarkers(markersArray) {
+        if (!Array.isArray(markersArray)) return [];
+
+        let addedCount = 0;
+        for (const marker of markersArray) {
+            if (MarkerUtilsCore.validateMarker(marker) && !this.markerExists(marker.uid)) {
+                this.markers.push({
+                    uid: marker.uid,
+                    x: Number(marker.x),
+                    y: Number(marker.y)
+                });
+                addedCount++;
+            }
+        }
+
+        // Only save and notify if we actually added markers
+        if (addedCount > 0) {
+            this.saveToStorage();
+            this._notifyChanged();
+        }
+
+        return this.markers;
     }
 }
 
