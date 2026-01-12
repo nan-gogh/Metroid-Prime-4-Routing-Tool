@@ -97,6 +97,24 @@ class InteractiveMap {
                 }
             } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', e); }
             
+            // Initialize decoupled managers
+            try {
+                if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
+                    this.markerManager = MarkerUtils.createManager(
+                        { maxMarkers: 50, layerPrefix: 'cm' },
+                        StorageInterface,
+                        NotificationInterface
+                    );
+                }
+                if (typeof RouteManager !== 'undefined' && this.markerManager) {
+                    this.routeManager = RouteUtils.createManager(
+                        this.markerManager,
+                        StorageInterface,
+                        NotificationInterface
+                    );
+                }
+            } catch (e) { console.debug('InteractiveMap: Manager initialization failed', e); }
+            
             // Set up MarkerUtils callback for decoupled marker change notifications
             try {
                 if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setOnMarkersChanged === 'function') {

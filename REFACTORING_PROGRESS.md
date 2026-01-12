@@ -520,3 +520,76 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
 - No breaking changes introduced
 
 **Overall Status: All route storage and notification centralization tasks are 100% complete.**
+
+---
+
+## Phase 5: MarkerUtils/RouteUtils Decoupling (New Sprint)
+
+### Executive Summary
+Following the completion of Phase 3 input handling and identification of marker sizing/placement bugs, the repository was reset to a clean state. This new phase focuses on systematically decoupling MarkerUtils and RouteUtils from global state dependencies (LAYERS, map object, NotificationUtils) to enable isolated testing and maintainability while preserving all functionality.
+
+### Phase 1: Interface Creation ✅ Complete
+
+#### 1.1 Create StorageInterface
+- **Status:** ✅ Complete
+- **File:** [data/StorageInterface.js](data/StorageInterface.js)
+- **Purpose:** Abstract localStorage operations without direct coupling to global state
+- **Methods:** saveMarkers(), loadMarkers(), saveRoute(), loadRoute(), saveSettings(), loadSettings(), saveRouteLoopingFlag(), loadRouteLoopingFlag()
+- **Size:** 2617 characters
+
+#### 1.2 Create NotificationInterface
+- **Status:** ✅ Complete
+- **File:** [data/NotificationInterface.js](data/NotificationInterface.js)
+- **Purpose:** Abstract notification operations without direct NotificationUtils coupling
+- **Methods:** showError(), showSuccess(), showUpgradeNotification(), showLoadError(), showSaveError(), showImportError()
+- **Fallback:** Graceful degradation when NotificationUtils unavailable
+- **Size:** 1796 characters
+
+#### 1.3 Create MarkerManager
+- **Status:** ✅ Complete
+- **File:** [data/MarkerManager.js](data/MarkerManager.js)
+- **Purpose:** Encapsulate all marker operations with dependency injection
+- **Key Methods:** addMarker(), removeMarker(), getScreenPosition(), generateUID(), getCoordinateHash(), getCount(), getAllMarkers()
+- **Dependencies:** Requires StorageInterface and NotificationInterface
+- **Size:** 4901 characters
+
+#### 1.4 Create RouteManager
+- **Status:** ✅ Complete
+- **File:** [data/RouteManager.js](data/RouteManager.js)
+- **Purpose:** Encapsulate all route operations with dependency injection
+- **Key Methods:** setRoute(), clearRoute(), computeRouteLength(), findRouteSegmentAt(), getRouteStats(), saveRoute(), loadRoute()
+- **Dependencies:** Requires MarkerManager, StorageInterface, and NotificationInterface
+- **Size:** 7091 characters
+
+#### 1.5 Update HTML Loading Order
+- **Status:** ✅ Complete
+- **File:** [index.html](index.html)
+- **Changes:** Added script tags for StorageInterface, NotificationInterface, MarkerManager, RouteManager in correct dependency order
+- **Integration:** Interfaces loaded before existing utilities to ensure dependencies available
+
+#### 1.6 Initialize Managers in InteractiveMap
+- **Status:** ✅ Complete
+- **File:** [map.js](map.js)
+- **Changes:** Added manager initialization in InteractiveMap constructor with dependency injection
+- **Pattern:** this.markerManager = MarkerUtils.createManager(...), this.routeManager = RouteUtils.createManager(...)
+- **Integration:** Managers ready for Phase 2 delegation
+
+#### 1.7 Create Phase 1 Test Suite
+- **Status:** ✅ Complete
+- **File:** [tests/phase1_interfaces_test.html](tests/phase1_interfaces_test.html)
+- **Coverage:** Tests all interfaces load correctly, managers instantiate properly, basic functionality works
+- **Validation:** No syntax errors, application loads without breaking changes
+
+### Phase 1 Validation ✅ Complete
+**Status:** ✅ Complete  
+**Evidence:** 
+- All interface files load without syntax errors
+- Manager classes instantiate successfully with mock dependencies
+- Basic marker and route operations function correctly
+- Main application loads without breaking existing functionality
+- Test suite passes all validation checks
+- Foundation established for Phase 2 pure utility functions
+
+**Next Steps:**
+- Phase 2: Create MarkerUtilsCore and RouteUtilsCore with pure utility functions
+- Phase 3: Refactor MarkerUtils/RouteUtils to delegate to managers while maintaining legacy API

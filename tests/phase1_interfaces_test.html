@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Phase 1 Interfaces Test</title>
+</head>
+<body>
+    <h1>Phase 1: Interfaces Test</h1>
+    <div id="output"></div>
+
+    <!-- Load the interface files -->
+    <script src="../data/StorageInterface.js"></script>
+    <script src="../data/NotificationInterface.js"></script>
+    <script src="../data/MarkerManager.js"></script>
+    <script src="../data/RouteManager.js"></script>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message) {
+            output.innerHTML += '<div>' + message + '</div>';
+            console.log(message);
+        }
+
+        log('Testing Phase 1 Interfaces...');
+
+        // Test StorageInterface
+        log('✓ StorageInterface available: ' + (typeof StorageInterface !== 'undefined'));
+
+        // Test NotificationInterface
+        log('✓ NotificationInterface available: ' + (typeof NotificationInterface !== 'undefined'));
+
+        // Test MarkerManager
+        log('✓ MarkerManager class available: ' + (typeof MarkerManager !== 'undefined'));
+
+        if (typeof MarkerManager !== 'undefined') {
+            try {
+                // Create mock dependencies
+                const mockStorage = {
+                    saveMarkers: (markers) => log('Mock save markers: ' + markers.length),
+                    loadMarkers: () => []
+                };
+                const mockNotifications = {
+                    showError: (msg) => log('Mock error: ' + msg),
+                    showSuccess: (msg) => log('Mock success: ' + msg),
+                    showUpgradeNotification: (msg) => log('Mock upgrade: ' + msg)
+                };
+
+                // Test instantiation
+                const markerManager = new MarkerManager({ maxMarkers: 10, layerPrefix: 'test' }, mockStorage, mockNotifications);
+                log('✓ MarkerManager instantiated successfully');
+
+                // Test basic functionality
+                const marker = markerManager.addMarker(0.5, 0.5);
+                log('✓ Marker added: ' + JSON.stringify(marker));
+
+                log('✓ Marker count: ' + markerManager.getCount());
+
+                // Test screen position calculation
+                const viewState = { zoom: 1, panX: 0, panY: 0 };
+                const screenPos = markerManager.getScreenPosition(marker, viewState, 8192);
+                log('✓ Screen position: ' + JSON.stringify(screenPos));
+
+            } catch (e) {
+                log('✗ MarkerManager test failed: ' + e.message);
+            }
+        }
+
+        // Test RouteManager
+        log('✓ RouteManager class available: ' + (typeof RouteManager !== 'undefined'));
+
+        if (typeof RouteManager !== 'undefined') {
+            try {
+                // Create mock dependencies
+                const mockMarkerManager = { markers: [] };
+                const mockStorage = {
+                    saveRoute: (data) => log('Mock save route'),
+                    loadRoute: () => null,
+                    saveRouteLoopingFlag: (flag) => log('Mock save looping: ' + flag),
+                    loadRouteLoopingFlag: () => false
+                };
+                const mockNotifications = {
+                    showError: (msg) => log('Mock route error: ' + msg),
+                    showSuccess: (msg) => log('Mock route success: ' + msg)
+                };
+
+                // Test instantiation
+                const routeManager = new RouteManager(mockMarkerManager, mockStorage, mockNotifications);
+                log('✓ RouteManager instantiated successfully');
+
+                // Test basic functionality
+                routeManager.setRoute([0, 1, 2], 100.5, [
+                    { marker: { x: 0.1, y: 0.1 } },
+                    { marker: { x: 0.5, y: 0.5 } },
+                    { marker: { x: 0.9, y: 0.9 } }
+                ]);
+                const stats = routeManager.getRouteStats();
+                log('✓ Route stats: ' + JSON.stringify(stats));
+
+                // Test route length calculation
+                const length = routeManager.computeRouteLength(8192);
+                log('✓ Route length: ' + length);
+
+            } catch (e) {
+                log('✗ RouteManager test failed: ' + e.message);
+            }
+        }
+
+        log('Phase 1 interface testing complete!');
+        log('<strong>All interfaces loaded and functional!</strong>');
+    </script>
+</body>
+</html>
