@@ -8,7 +8,18 @@ const NotificationInterface = {
             NotificationUtils.showLoadError(message);
         } else {
             console.error('Notification error:', message);
-            // Fallback: could show alert or update DOM directly
+            // Fallback: try to show alert for critical errors
+            try {
+                alert('Error: ' + message);
+            } catch (e) {
+                // If alert fails, try to update a status element
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = 'Error: ' + message;
+                    statusEl.style.color = 'red';
+                    setTimeout(() => { statusEl.textContent = ''; }, 5000);
+                }
+            }
         }
     },
 
@@ -18,7 +29,17 @@ const NotificationInterface = {
             NotificationUtils.showSuccess(message);
         } else {
             console.log('Notification success:', message);
-            // Fallback: could show temporary message
+            // Fallback: try to show temporary success message
+            try {
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = message;
+                    statusEl.style.color = 'green';
+                    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+                }
+            } catch (e) {
+                // Silent fallback if DOM manipulation fails
+            }
         }
     },
 
@@ -28,7 +49,17 @@ const NotificationInterface = {
             NotificationUtils.showUpgradeNotification(message);
         } else {
             console.log('Notification upgrade:', message);
-            // Fallback: could show alert
+            // Fallback: try to show upgrade message
+            try {
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = 'Upgrade: ' + message;
+                    statusEl.style.color = 'blue';
+                    setTimeout(() => { statusEl.textContent = ''; }, 5000);
+                }
+            } catch (e) {
+                // Silent fallback if DOM manipulation fails
+            }
         }
     },
 
@@ -38,7 +69,18 @@ const NotificationInterface = {
             NotificationUtils.showLoadError(message);
         } else {
             console.error('Load error:', message);
-            // Fallback: could show alert
+            // Fallback: try to show alert for load errors
+            try {
+                alert('Load Error: ' + message);
+            } catch (e) {
+                // If alert fails, try to update a status element
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = 'Load Error: ' + message;
+                    statusEl.style.color = 'red';
+                    setTimeout(() => { statusEl.textContent = ''; }, 5000);
+                }
+            }
         }
     }
 };

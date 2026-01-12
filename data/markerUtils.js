@@ -40,7 +40,40 @@ const MarkerUtils = {
     // Get the current manager instance
     getManager() {
         if (!this._manager) {
-            throw new Error('MarkerManager not initialized. Call createManager() first.');
+            // Try to create manager if dependencies are available
+            if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
+                try {
+                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface);
+                    
+                    // Set up callbacks
+                    this._manager.onChanged = () => {
+                        if (this._onMarkersChanged) {
+                            try {
+                                this._onMarkersChanged();
+                            } catch (e) {
+                                console.debug('MarkerUtils._notifyMarkersChanged failed:', e);
+                            }
+                        }
+                    };
+
+                    this._manager.onCleanupRouteReferences = (uid) => {
+                        if (this._onCleanupRouteReferences) {
+                            try {
+                                this._onCleanupRouteReferences(uid);
+                            } catch (e) {
+                                console.debug('Route cleanup callback failed:', e);
+                            }
+                        }
+                    };
+                    
+                    console.log('On-demand MarkerManager creation succeeded');
+                } catch (e) {
+                    console.error('On-demand MarkerManager creation failed:', e);
+                    throw new Error('MarkerManager creation failed: ' + e.message);
+                }
+            } else {
+                throw new Error('MarkerManager dependencies not available. Required: MarkerManager, StorageInterface, NotificationInterface');
+            }
         }
         return this._manager;
     },
@@ -176,10 +209,10 @@ const MarkerUtils = {
 
     // ---------- Deprecated methods (kept for compatibility) ----------
 
-    // Save to localStorage - DEPRECATED: Use manager's saveMarkers instead
+    // Save to localStorage - DEPRECATED: Use manager's saveToStorage instead
     saveToLocalStorage() {
-        console.warn('MarkerUtils.saveToLocalStorage() is deprecated. Use MarkerManager.saveMarkers() instead.');
-        return this.getManager().saveMarkers();
+        console.warn('MarkerUtils.saveToLocalStorage() is deprecated. Use MarkerManager.saveToStorage() instead.');
+        return this.getManager().saveToStorage();
     },
 
     // Load from localStorage - DEPRECATED: Use manager's loadMarkers instead

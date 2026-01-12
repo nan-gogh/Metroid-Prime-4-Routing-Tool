@@ -1,9 +1,42 @@
 // Route utility functions for export/import/storage
 
 const RouteUtils = {
-    // Export route points to JSON format
-    // Helper: validate route data for export
-    validateRouteForExport(map) {
+    _manager: null,
+
+    // Factory method to create manager with dependencies
+    createManager(markerManager, storage, notifications) {
+        if (this._manager) {
+            console.warn('RouteManager already exists, returning existing instance');
+            return this._manager;
+        }
+
+        this._manager = new RouteManager(markerManager, storage, notifications);
+
+        // Set up legacy callback compatibility
+        this._manager.setOnRouteChanged(() => {
+            if (this._onRouteChanged) {
+                try {
+                    this._onRouteChanged();
+                } catch (e) {
+                    console.debug('RouteUtils._notifyRouteChanged failed:', e);
+                }
+            }
+        });
+
+        return this._manager;
+    },
+
+    // Get the current manager instance
+    getManager() {
+        if (!this._manager) {
+            throw new Error('RouteManager not initialized. Call createManager() first.');
+        }
+        return this._manager;
+    },
+
+    // Legacy callback setters for backward compatibility
+    setOnRouteChanged(callback) {
+        this._onRouteChanged = callback;
         if (!map || !map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
             throw new Error('No route to export.');
         }

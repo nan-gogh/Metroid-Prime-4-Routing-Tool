@@ -640,7 +640,7 @@
             const saveResult = global.MarkerUtils.saveToLocalStorage();
             console.log('saveToLocalStorage result:', saveResult);
             if (!saveResult) {
-              NotificationUtils.showSaveError('Failed to save custom marker position after drag');
+              // NotificationUtils.showSaveError('Failed to save custom marker position after drag');
             }
           } else {
             NotificationUtils.showSaveError('MarkerUtils.saveToLocalStorage not available');

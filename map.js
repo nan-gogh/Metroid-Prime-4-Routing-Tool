@@ -76,48 +76,10 @@ class InteractiveMap {
                     ].filter(Boolean));
             }
 
-            // Phase 2: input and state scaffolds
-            try {
-                if (typeof MapState !== 'undefined') this._state = new MapState();
-                if (typeof SelectionState !== 'undefined') this._selection = new SelectionState();
-                if (typeof RouteState !== 'undefined') this._routeState = new RouteState();
-                if (typeof LayerState !== 'undefined') this._layerState = new LayerState(Object.keys(LAYERS || {}));
-
-                if (typeof PointerHandler !== 'undefined') {
-                    this.pointerHandler = new PointerHandler(this, MP4Config);
-                    try { this.pointerHandler.init(); } catch (e) { console.debug('PointerHandler.init failed', e); }
-                }
-                if (typeof KeyboardHandler !== 'undefined') {
-                    this.keyboardHandler = new KeyboardHandler(this, MP4Config);
-                    try { this.keyboardHandler.init(); } catch (e) { console.debug('KeyboardHandler.init failed', e); }
-                }
-                if (typeof GestureHandler !== 'undefined') {
-                    this.gestureHandler = new GestureHandler(this, MP4Config);
-                    try { this.gestureHandler.init(); } catch (e) { console.debug('GestureHandler.init failed', e); }
-                }
-            } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', e); }
-            
             // Initialize decoupled managers
             try {
-                if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
-                    this.markerManager = MarkerUtils.createManager(
-                        { maxMarkers: 50, layerPrefix: 'cm' },
-                        StorageInterface,
-                        NotificationInterface
-                    );
-                }
-                if (typeof RouteManager !== 'undefined' && this.markerManager) {
-                    this.routeManager = RouteUtils.createManager(
-                        this.markerManager,
-                        StorageInterface,
-                        NotificationInterface
-                    );
-                }
-            } catch (e) { console.debug('InteractiveMap: Manager initialization failed', e); }
-            
-            // Set up MarkerUtils callback for decoupled marker change notifications
-            try {
-                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setOnMarkersChanged === 'function') {
+                // Set up callbacks BEFORE creating managers to avoid race conditions
+                if (typeof MarkerUtils !== 'undefined') {
                     MarkerUtils.setOnMarkersChanged(() => {
                         try {
                             this.customMarkers = LAYERS.customMarkers.markers;
@@ -127,8 +89,6 @@ class InteractiveMap {
                             console.debug('MarkerUtils callback failed:', e);
                         }
                     });
-                }
-                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setOnCleanupRouteReferences === 'function') {
                     MarkerUtils.setOnCleanupRouteReferences((deletedMarkerUid) => {
                         try {
                             if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.cleanupRouteReferences === 'function') {
@@ -139,7 +99,68 @@ class InteractiveMap {
                         }
                     });
                 }
-            } catch (e) { console.debug('InteractiveMap: MarkerUtils callback setup failed', e); }
+                // RouteUtils.setOnRouteChanged disabled until Phase 3 route decoupling is complete
+                /*
+                if (typeof RouteUtils !== 'undefined') {
+                    RouteUtils.setOnRouteChanged(() => {
+                        try {
+                            this.render();
+                        } catch (e) {
+                            console.debug('RouteUtils callback failed:', e);
+                        }
+                    });
+                }
+                */
+
+                // Now create managers after callbacks are set up
+                if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
+                    this.markerManager = MarkerUtils.createManager(
+                        { maxMarkers: 50, layerPrefix: 'cm' },
+                        StorageInterface,
+                        NotificationInterface
+                    );
+                }
+                // RouteManager creation disabled until Phase 3 route decoupling is complete
+                /*
+                try {
+                    if (typeof RouteManager !== 'undefined' && this.markerManager) {
+                        this.routeManager = RouteUtils.createManager(
+                            this.markerManager,
+                            StorageInterface,
+                            NotificationInterface
+                        );
+                    }
+                } catch (e) {
+                    console.error('RouteManager creation failed:', e);
+                    // Continue without route manager - markers still work
+                }
+                */
+            } catch (e) { 
+                console.error('InteractiveMap: Manager initialization failed:', e);
+                // Don't suppress the error - rethrow so we know it failed
+                throw e;
+            }
+
+            // Phase 2: input and state scaffolds
+            try {
+                if (typeof MapState !== 'undefined') this._state = new MapState();
+                if (typeof SelectionState !== 'undefined') this._selection = new SelectionState();
+                if (typeof RouteState !== 'undefined') this._routeState = new RouteState();
+                if (typeof LayerState !== 'undefined') this._layerState = new LayerState(Object.keys(LAYERS || {}));
+
+                if (typeof GestureHandler !== 'undefined') {
+                    this.gestureHandler = new GestureHandler(this, MP4Config);
+                    try { this.gestureHandler.init(); } catch (e) { console.debug('GestureHandler.init failed', e); }
+                }
+                if (typeof PointerHandler !== 'undefined') {
+                    this.pointerHandler = new PointerHandler(this, MP4Config);
+                    try { this.pointerHandler.init(); } catch (e) { console.debug('PointerHandler.init failed', e); }
+                }
+                if (typeof KeyboardHandler !== 'undefined') {
+                    this.keyboardHandler = new KeyboardHandler(this, MP4Config);
+                    try { this.keyboardHandler.init(); } catch (e) { console.debug('KeyboardHandler.init failed', e); }
+                }
+            } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', e); }
         } catch (e) { console.debug('InteractiveMap: renderer scaffolding setup failed', e); }
         // Map state
         this.zoom = DEFAULT_ZOOM;
@@ -2058,6 +2079,18 @@ function attachPressedHandlers(selector) {
 }
 
 async function init() {
+    // Load custom markers from storage if consent is given
+    try {
+        if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+            const markers = window._mp4Storage.loadSetting('mp4_customMarkers');
+            if (markers && Array.isArray(markers)) {
+                LAYERS.customMarkers.markers = markers;
+            }
+        }
+    } catch (e) {
+        console.debug('Failed to load markers on page load:', e);
+    }
+    
     // Create map
     map = new InteractiveMap('mapCanvas');
         // Highlighting runtime state: set of layer keys currently highlighted
@@ -2202,10 +2235,6 @@ async function init() {
 
 
         } catch (e) {}
-    // Load persisted custom markers (if any) via MarkerUtils so data-layer stays pure
-    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.loadFromLocalStorage === 'function') {
-        try { MarkerUtils.loadFromLocalStorage(); } catch (e) { NotificationUtils.showLoadError('Failed to load custom markers: ' + e.message); }
-    }
     // Runtime metadata for the special `customMarkers` layer: deletable, not selectable
     try {
         if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {

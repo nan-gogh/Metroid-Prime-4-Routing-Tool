@@ -40,17 +40,38 @@ class MarkerManager {
     // Load markers from storage
     loadFromStorage() {
         try {
-            this.markers = this.storage.loadMarkers() || [];
+            // Use consent-gated storage if available, fallback to interface
+            let markers = [];
+            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
+                markers = window._mp4Storage.loadSetting('mp4_customMarkers') || [];
+            } else if (this.storage && typeof this.storage.loadMarkers === 'function') {
+                markers = this.storage.loadMarkers() || [];
+            }
+            
+            this.markers = markers;
+            // Synchronize with LAYERS for backward compatibility
+            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+                LAYERS.customMarkers.markers = this.markers;
+            }
         } catch (e) {
             console.warn('Failed to load markers from storage:', e);
             this.markers = [];
+            // Synchronize with LAYERS even on failure
+            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+                LAYERS.customMarkers.markers = this.markers;
+            }
         }
     }
 
     // Save markers to storage
     saveToStorage() {
         try {
-            this.storage.saveMarkers(this.markers);
+            // Use consent-gated storage if available, fallback to interface
+            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+                window._mp4Storage.saveSetting('mp4_customMarkers', this.markers);
+            } else if (this.storage && typeof this.storage.saveMarkers === 'function') {
+                this.storage.saveMarkers(this.markers);
+            }
         } catch (e) {
             console.warn('Failed to save markers to storage:', e);
         }
@@ -89,6 +110,10 @@ class MarkerManager {
         this.markers.push(marker);
 
         this.saveToStorage();
+        // Synchronize with LAYERS for backward compatibility
+        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+            LAYERS.customMarkers.markers = this.markers;
+        }
         this._notifyChanged();
 
         return marker;
@@ -111,6 +136,10 @@ class MarkerManager {
         }
 
         this.saveToStorage();
+        // Synchronize with LAYERS for backward compatibility
+        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+            LAYERS.customMarkers.markers = this.markers;
+        }
         this._notifyChanged();
 
         return true;
@@ -125,6 +154,10 @@ class MarkerManager {
     clearMarkers() {
         this.markers = [];
         this.saveToStorage();
+        // Synchronize with LAYERS for backward compatibility
+        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+            LAYERS.customMarkers.markers = this.markers;
+        }
         this._notifyChanged();
     }
 
@@ -223,6 +256,10 @@ class MarkerManager {
 
                     // Persist to storage and notify
                     this.saveToStorage();
+                    // Synchronize with LAYERS for backward compatibility
+                    if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = this.markers;
+                    }
                     this._notifyChanged();
 
                     resolve(imported);
@@ -255,6 +292,10 @@ class MarkerManager {
         // Only save and notify if we actually added markers
         if (addedCount > 0) {
             this.saveToStorage();
+            // Synchronize with LAYERS for backward compatibility
+            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
+                LAYERS.customMarkers.markers = this.markers;
+            }
             this._notifyChanged();
         }
 

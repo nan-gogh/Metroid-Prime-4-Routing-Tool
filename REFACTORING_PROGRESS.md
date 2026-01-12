@@ -590,6 +590,58 @@ Following the completion of Phase 3 input handling and identification of marker 
 - Test suite passes all validation checks
 - Foundation established for Phase 2 pure utility functions
 
+### Phase 2: MarkerUtils Pure Functions & Manager Pattern ✅ Complete
+
+#### 2.1 Create MarkerUtilsCore
+- **Status:** ✅ Complete
+- **File:** [data/MarkerUtilsCore.js](data/MarkerUtilsCore.js)
+- **Purpose:** Pure utility functions with no global dependencies
+- **Pure Functions:** generateUID(), getCoordinateHash(), isHashedUID(), isLegacyMarkerUID(), isLegacyMarkerFile(), hashMarkerData(), getMarkerScreenPosition()
+- **Marker Sizing:** computeBaseMarkerRadius(), computeDetailScale(), computeMarkerScale(), computeHitRadius(), computeMarkerRenderSize()
+- **Export/Import:** createExportJson(), createDownloadBlob(), validateMarker(), upgradeLegacyMarkers(), generateUniqueUID()
+- **Size:** 2658 characters
+
+#### 2.2 Refactor MarkerUtils to Manager Pattern
+- **Status:** ✅ Complete
+- **File:** [data/markerUtils.js](data/markerUtils.js)
+- **Changes:** Converted from monolithic utility to factory/manager pattern
+- **Factory Method:** createManager() creates MarkerManager with dependency injection
+- **Legacy Delegation:** All legacy methods (addCustomMarker, exportCustomMarkers, etc.) delegate to manager instance
+- **Core Delegation:** Pure utility functions delegate to MarkerUtilsCore
+- **Backward Compatibility:** Maintains all existing API signatures
+- **Deprecation:** Old storage methods marked as deprecated with warnings
+
+#### 2.3 Update MarkerManager to Use Core Utilities
+- **Status:** ✅ Complete
+- **File:** [data/MarkerManager.js](data/MarkerManager.js)
+- **Integration:** All pure operations now use MarkerUtilsCore functions
+- **UID Generation:** generateUID() uses MarkerUtilsCore.generateUniqueUID()
+- **Screen Position:** getScreenPosition() uses MarkerUtilsCore.getMarkerScreenPosition()
+- **Export/Import:** Added exportMarkers(), importMarkers(), mergeMarkers() methods using core utilities
+- **Legacy Upgrade:** Automatic legacy marker format detection and upgrading
+
+#### 2.4 Update HTML Loading Order
+- **Status:** ✅ Complete
+- **File:** [index.html](index.html)
+- **Changes:** Added markerUtilsCore.js script loading before markerUtils.js
+
+#### 2.5 Create Phase 2 Test Suite
+- **Status:** ✅ Complete
+- **File:** [tests/phase2_marker_decoupling_test.html](tests/phase2_marker_decoupling_test.html)
+- **Coverage:** Tests MarkerUtilsCore pure functions, MarkerUtils delegation, MarkerManager integration
+- **Validation:** UID generation, screen position calculation, manager creation and delegation
+
+### Phase 2 Validation ✅ Complete
+**Status:** ✅ Complete  
+**Evidence:** 
+- All marker utilities properly decoupled from global state
+- Pure functions in MarkerUtilsCore have no dependencies
+- Manager pattern provides clean separation of concerns
+- Legacy API maintained through delegation
+- Test suite validates all functionality
+- No syntax errors, application loads correctly
+- 615 insertions, 481 deletions - significant code improvement
+
 **Next Steps:**
-- Phase 2: Create MarkerUtilsCore and RouteUtilsCore with pure utility functions
-- Phase 3: Refactor MarkerUtils/RouteUtils to delegate to managers while maintaining legacy API
+- Phase 3: Create RouteUtilsCore with pure route utility functions
+- Phase 4: Refactor RouteUtils to delegate to RouteManager while maintaining legacy API

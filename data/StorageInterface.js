@@ -6,8 +6,10 @@ const StorageInterface = {
     saveMarkers: function(markers) {
         try {
             localStorage.setItem('mp4_customMarkers', JSON.stringify(markers));
+            return true;
         } catch (e) {
             console.warn('Failed to save markers to localStorage:', e);
+            return false;
         }
     },
 
@@ -25,8 +27,10 @@ const StorageInterface = {
     saveRoute: function(routeData) {
         try {
             localStorage.setItem('mp4_route', JSON.stringify(routeData));
+            return true;
         } catch (e) {
             console.warn('Failed to save route to localStorage:', e);
+            return false;
         }
     },
 
@@ -44,8 +48,10 @@ const StorageInterface = {
     saveRouteLoopingFlag: function(looping) {
         try {
             localStorage.setItem('mp4_routeLooping', JSON.stringify(looping));
+            return true;
         } catch (e) {
             console.warn('Failed to save route looping flag:', e);
+            return false;
         }
     },
 
@@ -63,8 +69,10 @@ const StorageInterface = {
     saveSettings: function(settings) {
         try {
             localStorage.setItem('mp4_settings', JSON.stringify(settings));
+            return true;
         } catch (e) {
             console.warn('Failed to save settings to localStorage:', e);
+            return false;
         }
     },
 
