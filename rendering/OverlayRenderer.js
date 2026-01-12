@@ -27,7 +27,31 @@
               const py = pos.y;
               // Derive route color like RouteRenderer uses
               const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
-              const nodeFill = (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) ? ColorUtils.hexToRgba(routeHex, 0.95) : null;
+              let nodeFill = null;
+              try {
+                  if (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) {
+                      nodeFill = ColorUtils.hexToRgba(routeHex, 0.95);
+                  } else if (routeHex && typeof routeHex === 'string') {
+                      // simple hex -> rgba fallback
+                      const s = routeHex.replace('#', '').trim();
+                      let r = 34, g = 211, b = 238, a = 0.95;
+                      if (s.length === 6) {
+                          r = parseInt(s.slice(0,2),16);
+                          g = parseInt(s.slice(2,4),16);
+                          b = parseInt(s.slice(4,6),16);
+                      } else if (s.length === 8) {
+                          r = parseInt(s.slice(0,2),16);
+                          g = parseInt(s.slice(2,4),16);
+                          b = parseInt(s.slice(4,6),16);
+                          a = parseInt(s.slice(6,8),16) / 255 * 0.95;
+                      } else if (s.length === 3) {
+                          r = parseInt(s[0]+s[0],16);
+                          g = parseInt(s[1]+s[1],16);
+                          b = parseInt(s[2]+s[2],16);
+                      }
+                      nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
+                  }
+              } catch (e) {}
               const dotSize = (map.getRouteNodeSize && typeof map.getRouteNodeSize === 'function') ? map.getRouteNodeSize() : 6;
               ctx.save();
               ctx.beginPath();

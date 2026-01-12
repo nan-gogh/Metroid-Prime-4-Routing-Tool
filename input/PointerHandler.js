@@ -6,6 +6,7 @@
     constructor(map, config) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
+      this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
       this.bound = false;
       
       // Performance optimization: Create fast property accessors
@@ -13,7 +14,6 @@
       
       // Pointer state
       this.pointers = new Map(); // pointerId -> {x, y, clientX, clientY, downTime}
-      this.pinch = null; // {startDistance, startZoom, lastMidX, lastMidY}
       this.isDragging = false;
       this.lastMouseX = 0;
       this.lastMouseY = 0;
@@ -65,11 +65,20 @@
         this._onPointerDown = this._onPointerDown.bind(this);
         this._onPointerMove = this._onPointerMove.bind(this);
         this._onPointerUp = this._onPointerUp.bind(this);
+        this._onMouseLeave = this._onMouseLeave.bind(this);
+        this._onClick = this._onClick.bind(this);
+        this._onPageUnload = this._onPageUnload.bind(this);
         canvas.addEventListener('wheel', this._onWheel, { passive: false });
         canvas.addEventListener('pointerdown', this._onPointerDown);
         canvas.addEventListener('pointermove', this._onPointerMove);
         canvas.addEventListener('pointerup', this._onPointerUp);
         canvas.addEventListener('pointercancel', this._onPointerUp);
+        canvas.addEventListener('mouseleave', this._onMouseLeave);
+        canvas.addEventListener('click', this._onClick);
+        
+        // Add page unload handler to clean up drag state on page refresh/reload
+        window.addEventListener('beforeunload', this._onPageUnload);
+        
         this.bound = true;
       } catch (e) { console.debug('PointerHandler.init failed', e); }
     }
@@ -83,6 +92,12 @@
         canvas.removeEventListener('pointermove', this._onPointerMove);
         canvas.removeEventListener('pointerup', this._onPointerUp);
         canvas.removeEventListener('pointercancel', this._onPointerUp);
+        canvas.removeEventListener('mouseleave', this._onMouseLeave);
+        canvas.removeEventListener('click', this._onClick);
+        
+        // Remove page unload handler
+        window.removeEventListener('beforeunload', this._onPageUnload);
+        
         this.bound = false;
       } catch (e) { console.debug('PointerHandler.destroy failed', e); }
     }
@@ -139,7 +154,9 @@
           this._handleSinglePointerDown(ev, localX, localY, downTime);
         } else if (this.pointers.size === 2) {
           // Two pointers - start pinch
-          this._handlePinchStart();
+          if (this.gestureHandler) {
+            this.gestureHandler.startPinch(Array.from(this.pointers.values()));
+          }
         }
       } catch (e) { console.debug('PointerHandler._onPointerDown failed', e); }
     }
@@ -208,25 +225,6 @@
       } catch (e) { console.debug('PointerHandler._handleSinglePointerDown failed', e); }
     }
 
-    _handlePinchStart() {
-      try {
-        const pts = Array.from(this.pointers.values());
-        const dx = pts[0].clientX - pts[1].clientX;
-        const dy = pts[0].clientY - pts[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
-        const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
-        this.pinch = { 
-          startDistance: dist, 
-          startZoom: this.zoom, 
-          lastMidX: midClientX, 
-          lastMidY: midClientY 
-        };
-        this.isDragging = false;
-        this.pointerDownTime = 0; // Stop click timing
-      } catch (e) { console.debug('PointerHandler._handlePinchStart failed', e); }
-    }
-
     _onPointerMove(ev) {
       try {
         const rect = this.canvas.getBoundingClientRect();
@@ -261,8 +259,24 @@
         this._handleRoutePreview(localX, localY);
 
         // Handle pinch-to-zoom
-        if (this.pointers.size === 2 && this.pinch) {
-          this._handlePinchMove(ev, rect);
+        if (this.pointers.size === 2 && this.gestureHandler && this.gestureHandler.isPinching()) {
+          const updatedView = this.gestureHandler.handlePinchMove(
+            Array.from(this.pointers.values()), 
+            rect, 
+            { panX: this.panX, panY: this.panY, zoom: this.zoom }
+          );
+          this.panX = updatedView.panX;
+          this.panY = updatedView.panY;
+          this.zoom = updatedView.zoom;
+          this._updateResolution();
+          this._render();
+          
+          // Update marker hover during pinch
+          try {
+            const midLocalX = (this.gestureHandler.pinch.lastMidX - rect.left);
+            const midLocalY = (this.gestureHandler.pinch.lastMidY - rect.top);
+            this._checkMarkerHover(midLocalX, midLocalY);
+          } catch (err) {}
           return;
         }
 
@@ -294,7 +308,11 @@
 
         this.pointers.delete(ev.pointerId);
 
-        if (this.pointers.size < 2) this.pinch = null;
+        if (this.pointers.size < 2) {
+          if (this.gestureHandler) {
+            this.gestureHandler.endPinch();
+          }
+        }
 
         if (this.pointers.size === 0) {
           // Finalize drags and interactions
@@ -373,8 +391,37 @@
         } catch (e) {}
         
         try { 
-          this.map.currentRouteLengthNormalized = this._computeRouteLengthNormalized(this._routeSources); 
+          let newLengthNormalized = this._computeRouteLengthNormalized(this._routeSources);
+          
+          // Adjust for looping if enabled and we have 3+ waypoints
+          if (this.map.routeLooping && this._routeSources && this._routeSources.length >= 3) {
+            const firstSrc = this._routeSources[0];
+            const lastSrc = this._routeSources[this._routeSources.length - 1];
+            if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+              const dx = (firstSrc.marker.x - lastSrc.marker.x) * (this.config.MAP_SIZE || 8192);
+              const dy = (firstSrc.marker.y - lastSrc.marker.y) * (this.config.MAP_SIZE || 8192);
+              const closingSegmentLength = Math.hypot(dx, dy) / (this.config.MAP_SIZE || 8192);
+              newLengthNormalized += closingSegmentLength;
+            }
+          }
+          
+          this.map.currentRouteLengthNormalized = newLengthNormalized;
           this.map.currentRouteLength = this.map.currentRouteLengthNormalized * (this.config.MAP_SIZE || 8192); 
+          
+          // Update UI display
+          try {
+            this.map.updateLayerCounts();
+          } catch (e) {
+            console.debug('Failed to update layer counts after route insert drag', e);
+          }
+          
+          // Update route length display immediately
+          try {
+            const dev_routeLength = document.getElementById('dev_routeLength');
+            if (dev_routeLength) {
+              dev_routeLength.textContent = (typeof this.map.currentRouteLengthNormalized === 'number' && !isNaN(this.map.currentRouteLengthNormalized)) ? this.map.currentRouteLengthNormalized.toFixed(3) : '—';
+            }
+          } catch (e) { console.debug('Failed to update route length display on route modification', e); }
         } catch (e) {}
         
         this._render();
@@ -400,6 +447,50 @@
             global.LAYERS.customMarkers.markers[idx].x = nx;
             global.LAYERS.customMarkers.markers[idx].y = ny;
             console.log(`Marker ${this._draggingMarker.uid} moved from (${oldX}, ${oldY}) to (${nx}, ${ny})`);
+            
+            // Check if this marker is part of the current route and update route sources
+            if (this.currentRoute && this._routeSources && typeof RouteUtils !== 'undefined') {
+              const routePos = RouteUtils.findRoutePositionOfMarker(this._draggingMarker.uid, this.currentRoute, this._routeSources);
+              if (routePos >= 0) {
+                const srcIdx = this.currentRoute[routePos];
+                if (this._routeSources[srcIdx] && this._routeSources[srcIdx].marker) {
+                  // Update the marker position in route sources
+                  this._routeSources[srcIdx].marker.x = nx;
+                  this._routeSources[srcIdx].marker.y = ny;
+                  
+                  // Recalculate route length
+                  let newLengthNormalized = RouteUtils.computeRouteLengthNormalized(this._routeSources, this.config.MAP_SIZE || 8192);
+                  
+                  // Adjust for looping if enabled
+                  if (this.map.routeLooping && this.currentRoute.length >= 3) {
+                    const firstIdx = this.currentRoute[0];
+                    const lastIdx = this.currentRoute[this.currentRoute.length - 1];
+                    const firstSrc = this._routeSources[firstIdx];
+                    const lastSrc = this._routeSources[lastIdx];
+                    if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+                      const dx = (firstSrc.marker.x - lastSrc.marker.x) * (this.config.MAP_SIZE || 8192);
+                      const dy = (firstSrc.marker.y - lastSrc.marker.y) * (this.config.MAP_SIZE || 8192);
+                      const closingSegmentLength = Math.hypot(dx, dy) / (this.config.MAP_SIZE || 8192);
+                      newLengthNormalized += closingSegmentLength;
+                    }
+                  }
+                  
+                  // Update route length properties
+                  this.map.currentRouteLengthNormalized = newLengthNormalized;
+                  this.map.currentRouteLength = newLengthNormalized * (this.config.MAP_SIZE || 8192);
+                  
+                  // Update UI display
+                  try {
+                    this.map.updateLayerCounts();
+                  } catch (e) {
+                    console.debug('Failed to update layer counts after marker drag', e);
+                  }
+                  
+                  console.log(`Route length updated to ${newLengthNormalized.toFixed(3)} (normalized) due to marker drag`);
+                }
+              }
+            }
+            
             // Note: Save only happens at drag end to avoid excessive storage writes
             try { this.map.customMarkers = global.LAYERS.customMarkers.markers; } catch (e) {}
             this._render();
@@ -407,7 +498,7 @@
           }
         }
       } catch (err) {
-        console.warn('Error in _handleMarkerDrag:', err);
+        NotificationUtils.showSaveError('Error in marker drag: ' + err.message);
       }
     }
 
@@ -450,40 +541,6 @@
       } catch (e) {}
     }
 
-    _handlePinchMove(ev, rect) {
-      const pts = Array.from(this.pointers.values());
-      const dx = pts[0].clientX - pts[1].clientX;
-      const dy = pts[0].clientY - pts[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const factor = dist / this.pinch.startDistance;
-      const newZoom = Math.max(this.map.minZoom || 0.005, Math.min(100, this.pinch.startZoom * factor));
-
-      const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
-      const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
-      
-      const panDX = midClientX - this.pinch.lastMidX;
-      const panDY = midClientY - this.pinch.lastMidY;
-      
-      const worldX = (midClientX - rect.left - this.panX) / this.zoom;
-      const worldY = (midClientY - rect.top - this.panY) / this.zoom;
-
-      this.zoom = newZoom;
-      this.panX = midClientX - rect.left - worldX * this.zoom + panDX;
-      this.panY = midClientY - rect.top - worldY * this.zoom + panDY;
-      
-      this.pinch.lastMidX = midClientX;
-      this.pinch.lastMidY = midClientY;
-
-      this._updateResolution();
-      this._render();
-      
-      try {
-        const midLocalX = this.pinch.lastMidX - rect.left;
-        const midLocalY = this.pinch.lastMidY - rect.top;
-        this._checkMarkerHover(midLocalX, midLocalY);
-      } catch (err) {}
-    }
-
     _promoteRouteNodeDrag(ev, localX, localY) {
       try {
         const routePos = Number(this.map._routeNodeCandidate.routePos) || 0;
@@ -516,7 +573,11 @@
           prevRouteLooping: !!this.map.routeLooping,
           originalMarker: prevSources[prevIndices[routePos]] ? prevSources[prevIndices[routePos]].marker : null, // Store the original marker being dragged
           hoverMarker: null,
-          hoverOccupied: false
+          hoverOccupied: false,
+          initialDragLocalX: localX,  // Store initial drag position to handle view jump on expansion
+          initialDragLocalY: localY,
+          initialPanX: this.panX,  // Store initial pan position
+          initialPanY: this.panY
         };
         this.map._routeNodeCandidate = null;
         this.map.pointerDownTime = 0;
@@ -525,12 +586,26 @@
     }
 
     _promoteMarkerDrag(ev) {
+      // Find the actual marker object to store original position for cleanup
+      let markerObj = null;
+      try {
+        if (this.map._draggingCandidate && this.map._draggingCandidate.layerKey && LAYERS[this.map._draggingCandidate.layerKey]) {
+          const layer = LAYERS[this.map._draggingCandidate.layerKey];
+          if (Array.isArray(layer.markers)) {
+            markerObj = layer.markers.find(m => m.uid === this.map._draggingCandidate.uid);
+          }
+        }
+      } catch (e) { console.debug('Failed to find marker object for drag:', e); }
+      
       this._draggingMarker = {
         uid: this.map._draggingCandidate.uid,
         layerKey: this.map._draggingCandidate.layerKey,
         pointerId: this.map._draggingCandidate.pointerId,
         offsetX: this.map._draggingCandidate.offsetX,
-        offsetY: this.map._draggingCandidate.offsetY
+        offsetY: this.map._draggingCandidate.offsetY,
+        // Store original position for cleanup on page unload
+        _originalX: markerObj ? markerObj.x : undefined,
+        _originalY: markerObj ? markerObj.y : undefined
       };
       
       // Clear selection if dragging currently selected marker
@@ -565,13 +640,13 @@
             const saveResult = global.MarkerUtils.saveToLocalStorage();
             console.log('saveToLocalStorage result:', saveResult);
             if (!saveResult) {
-              console.warn('Failed to save custom marker position after drag');
+              NotificationUtils.showSaveError('Failed to save custom marker position after drag');
             }
           } else {
-            console.warn('MarkerUtils.saveToLocalStorage not available');
+            NotificationUtils.showSaveError('MarkerUtils.saveToLocalStorage not available');
           }
         } catch (e) {
-          console.warn('Error saving custom marker position:', e);
+          NotificationUtils.showSaveError('Error saving custom marker position: ' + e.message);
         }
         this._draggingMarker = null;
         this.map.pointerDownTime = 0;
@@ -637,6 +712,286 @@
           this._render();
         }
       } catch (err) {}
+    }
+
+    _onMouseLeave(ev) {
+      try {
+        this.map.isDragging = false;
+        this.map.canvas.style.cursor = 'grab';
+        try {
+          const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
+          let enteredUi = false;
+          try {
+            if (related && related.closest) {
+              enteredUi = !!related.closest('.sidebar, .controls, .zoom-controls, #layerList, .header, .sidebar-handle');
+            }
+          } catch (e) { enteredUi = false; }
+          // If pointer left into the UI, keep tooltip visible; otherwise hide it.
+          if (!enteredUi) this.map.hideTooltip();
+        } catch (e) { try { this.map.hideTooltip(); } catch (e) {} }
+        // clear hover preview
+        this._routePreview = null;
+        // If a route-insert was in progress, cancel and restore
+        try {
+          if (this._routeInsert) {
+            const prev = this._routeInsert.prevSources || [];
+            const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+            const len = RouteUtils.computeRouteLengthNormalized(prev, this.config.MAP_SIZE || 8192);
+            this._setRoute(prevIdx, len, prev);
+            try { this.map.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
+            this._routeInsert = null;
+          }
+          // Clear any unpromoted route-node candidate so clicks behave normally after leave
+          if (this.map._routeNodeCandidate) this.map._routeNodeCandidate = null;
+        } catch (e) {}
+      } catch (e) { console.debug('PointerHandler._onMouseLeave failed', e); }
+    }
+
+    _onClick(e) {
+      try {
+        // Check if this was a quick tap (not a held drag)
+        // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
+        const holdDuration = Date.now() - this.map.pointerDownTime;
+        
+        // Only interact on quick taps (less than threshold)
+        const isQuickTap = this.map.pointerDownTime > 0 && holdDuration < this.minClickDuration;
+        
+        // Clear timer after use (important for preventing double-placement)
+        this.map.pointerDownTime = 0;
+        
+        // Determine whether a marker exists at the click location (don't rely on hoveredMarker for custom markers)
+        const rect = this.canvas.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        const hit = this._findMarkerAt ? this._findMarkerAt(localX, localY) : null;
+
+        if (isQuickTap && hit) {
+          const layerKey = hit.layerKey;
+          // Helper determination: deletable layers (custom markers) vs selectable layers
+          const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
+          const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
+
+          // Route edit mode: tapping markers toggles their membership in the current route
+          if (this.editRouteMode) {
+            try {
+              const uid = hit.marker && hit.marker.uid;
+              if (!uid) return;
+
+              // Build ordered list of existing route marker UIDs
+              const existing = [];
+              if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
+                for (let i = 0; i < this.currentRoute.length; i++) {
+                  const src = this._routeSources[this.currentRoute[i]];
+                  if (src && src.marker && src.marker.uid) existing.push(src.marker.uid);
+                }
+              }
+
+              const inIdx = existing.indexOf(uid);
+              const newSources = [];
+              const newIndices = [];
+
+              if (inIdx >= 0) {
+                // Remove the tapped marker from the route
+                for (let i = 0; i < this.currentRoute.length; i++) {
+                  const src = this._routeSources[this.currentRoute[i]];
+                  if (!src || !src.marker) continue;
+                  if (src.marker.uid === uid) continue;
+                  newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
+                  newIndices.push(newSources.length - 1);
+                }
+              } else {
+                // Preserve existing route points (if any)
+                if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
+                  for (let i = 0; i < this.currentRoute.length; i++) {
+                    const src = this._routeSources[this.currentRoute[i]];
+                    if (!src || !src.marker) continue;
+                    newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
+                    newIndices.push(newSources.length - 1);
+                  }
+                }
+                // Append the tapped marker as a new route point
+                newSources.push({ marker: hit.marker, layerKey: layerKey, layerIndex: newSources.length });
+                newIndices.push(newSources.length - 1);
+              }
+
+              // Compute simple path length (pixels) as sum of Euclidean segments
+              let lengthPx = 0;
+              for (let i = 1; i < newSources.length; i++) {
+                const a = newSources[i - 1].marker;
+                const b = newSources[i].marker;
+                if (!a || !b) continue;
+                const dx = (a.x - b.x) * (this.config.MAP_SIZE || 8192);
+                const dy = (a.y - b.y) * (this.config.MAP_SIZE || 8192);
+                lengthPx += Math.hypot(dx, dy);
+              }
+              const lengthNormalized = lengthPx / (this.config.MAP_SIZE || 8192);
+
+              // Apply the new route
+              this._setRoute(newIndices, lengthNormalized, newSources);
+              // Do not change looping preference on manual tap edits; looping is user-controlled
+              this._render();
+            } catch (err) {
+              NotificationUtils.showRouteError('Route edit tap failed: ' + err.message);
+            }
+            return;
+          }
+
+          if (this.editMarkersMode) {
+            // In edit mode: allow deletion (custom markers are editable regardless of flags)
+            const isCustom = (layerKey === 'customMarkers');
+            if (isDeletable || isCustom) {
+              if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
+                MarkerUtils.deleteCustomMarker(hit.marker.uid);
+                this._checkMarkerHover(localX, localY);
+              }
+            }
+          } else {
+            // Normal mode: selection and tooltip behavior
+            if (isSelectable) {
+              const uid = hit.marker.uid;
+              if (this.map.selectedMarker && this.map.selectedMarker.uid === uid && this.map.selectedMarkerLayer === layerKey) {
+                // deselect
+                this.map.selectedMarker = null;
+                this.map.selectedMarkerLayer = null;
+                this.map.hideTooltip();
+                this._render();
+              } else {
+                // select
+                this.map.selectedMarker = hit.marker;
+                this.map.selectedMarkerLayer = layerKey;
+                // compute screen coords for tooltip placement
+                const screenX = hit.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX;
+                const screenY = hit.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY;
+                this.map.showTooltip(hit.marker, screenX, screenY, layerKey);
+                this._render();
+              }
+            }
+          }
+        } else if (e.button === 0 && isQuickTap && !hit) {
+          // If a marker is currently selected, a quick tap anywhere on the
+          // map should deselect it (not start a placement). This avoids
+          // accidental placement while the user intends to dismiss selection.
+          if (this.map.selectedMarker) {
+            this.map.selectedMarker = null;
+            this.map.selectedMarkerLayer = null;
+            try { this.map.hideTooltip(); } catch (e) {}
+            try { this._render(); } catch (e) {}
+            return;
+          }
+          // Quick tap on empty space - place custom marker
+          // Reuse previously computed localX/localY to avoid redundant layout read
+          const clientX = localX;
+          const clientY = localY;
+
+          // Convert to world coordinates (0-1 normalized)
+          const worldX = (clientX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
+          const worldY = (clientY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
+          
+          // Only place if within map bounds
+          if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
+            // Do not allow placement when the custom markers layer is hidden
+            if (!this.map.layerVisibility || !this.map.layerVisibility.customMarkers) {
+              return;
+            }
+            // Only place markers when edit mode is active
+            if (this.editMarkersMode) {
+              // Check marker limit before adding
+              const maxMarkers = this.map.layerConfig && this.map.layerConfig.customMarkers && this.map.layerConfig.customMarkers.maxMarkers || 50;
+              if (LAYERS.customMarkers.markers.length >= maxMarkers) {
+                return; // Silently ignore - could show a message but click handler shouldn't alert
+              }
+              if (typeof MarkerUtils !== 'undefined') {
+                MarkerUtils.addCustomMarker(worldX, worldY);
+                // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
+                this._checkMarkerHover(localX, localY);
+              }
+            }
+          }
+        }
+      } catch (e) { console.debug('PointerHandler._onClick failed', e); }
+    }
+
+    // ===== PAGE UNLOAD CLEANUP =====
+
+    _cancelRouteDragOperations(reason = 'Route modification during drag') {
+      try {
+        console.log(`PointerHandler: ${reason}`);
+        
+        // Cancel any active route insert operation
+        if (this._routeInsert) {
+          console.log('Cancelling active route insert operation');
+          
+          // Restore original route state if available
+          if (this._routeInsert.prevSources && this._routeInsert.prevIndices) {
+            const prev = this._routeInsert.prevSources || [];
+            const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
+            const len = RouteUtils.computeRouteLengthNormalized(prev, this.config.MAP_SIZE || 8192);
+            this._setRoute(prevIdx, len, prev);
+            
+            if (this._routeInsert.prevRouteLooping !== undefined) {
+              this.map.routeLooping = !!this._routeInsert.prevRouteLooping;
+            }
+          }
+          
+          this._routeInsert = null;
+        }
+        
+        // Clear any route drag candidates
+        if (this.map._routeNodeCandidate) {
+          this.map._routeNodeCandidate = null;
+        }
+        
+        // Clear transient route states
+        this._routePreview = null;
+        this.isDragging = false;
+        
+        // Notify user about the cancellation
+        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showRouteComputationInfo) {
+          NotificationUtils.showRouteComputationInfo(`Drag operation cancelled: ${reason}`);
+        }
+        
+        console.log('PointerHandler: Route drag cleanup complete');
+        
+      } catch (e) {
+        console.warn('PointerHandler._cancelRouteDragOperations failed:', e);
+      }
+    }
+
+    _onPageUnload(ev) {
+      try {
+        console.log('PointerHandler: Cleaning up drag state on page unload');
+        
+        // Cancel any active marker drag - restore original position if possible
+        if (this._draggingMarker) {
+          console.log('Cancelling active marker drag for:', this._draggingMarker.uid);
+          
+          // If we have a backup position, restore it
+          if (this._draggingMarker._originalX !== undefined && this._draggingMarker._originalY !== undefined) {
+            this._draggingMarker.x = this._draggingMarker._originalX;
+            this._draggingMarker.y = this._draggingMarker._originalY;
+            console.log('Restored marker to original position');
+          }
+          
+          // Clear drag state
+          this._draggingMarker = null;
+        }
+        
+        // Cancel any active route drag operations
+        this._cancelRouteDragOperations('Page unload');
+        
+        // Clear any marker drag candidates
+        if (this.map._draggingCandidate) {
+          this.map._draggingCandidate = null;
+        }
+        
+        // Clear remaining transient states
+        this.pointers.clear();
+        
+        console.log('PointerHandler: Drag state cleanup complete');
+        
+      } catch (e) {
+        console.warn('PointerHandler._onPageUnload failed:', e);
+      }
     }
   }
 

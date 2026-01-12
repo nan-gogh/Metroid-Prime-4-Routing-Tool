@@ -111,8 +111,9 @@
         pathData.points.push({ x, y });
       }
 
-      // Handle route looping
-      if (map.routeLooping && pathData.points.length > 0) {
+      // Handle route looping: close the route by connecting the last waypoint back to the first
+      // Only when BOTH conditions are met: route looping is enabled AND route has at least 3 waypoints
+      if (map.routeLooping && pathData.points.length >= 3) {
         pathData.points.push({ ...pathData.points[0] });
       }
 
@@ -298,8 +299,8 @@
 
       const dotSize = map.getRouteNodeSize ? map.getRouteNodeSize() : 6;
 
-      // Skip the closing loop point for node rendering
-      const nodeCount = map.routeLooping ? pathData.points.length - 1 : pathData.points.length;
+      // Skip the closing loop point for node rendering (only when a loop was actually added)
+      const nodeCount = (map.routeLooping && pathData.points.length >= 4) ? pathData.points.length - 1 : pathData.points.length;
 
       for (let i = 0; i < nodeCount; i++) {
         const point = pathData.points[i];

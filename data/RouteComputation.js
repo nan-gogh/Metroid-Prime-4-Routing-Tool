@@ -23,8 +23,15 @@ const RouteComputation = {
     expandRouteNearby(map, beginRouteCompute, endRouteCompute, LAYERS, MAP_SIZE) {
         beginRouteCompute();
         try {
+            // Prevent route expansion if route has fewer than 2 waypoints (need at least 1 segment)
             if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length < 2) {
                 return;
+            }
+
+            // Check for active drag operations and cancel them before expanding
+            const hasActiveDrags = map._routeInsert || map._draggingCandidate || map._routeNodeCandidate;
+            if (hasActiveDrags && map.pointerHandler && typeof map.pointerHandler._cancelRouteDragOperations === 'function') {
+                map.pointerHandler._cancelRouteDragOperations('Route expansion');
             }
 
             // Build route waypoints in normalized coordinates
@@ -57,7 +64,7 @@ const RouteComputation = {
                 map.setRoute(result.indices, result.length, result.sources);
             }
         } catch (e) {
-            console.error('RouteComputation.expandRouteNearby failed:', e);
+            NotificationUtils.showRouteComputationError('Route expansion failed: ' + e.message);
         } finally {
             endRouteCompute();
         }

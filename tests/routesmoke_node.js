@@ -20,12 +20,29 @@ global.document = {
             globalAlpha: 1,
             save: () => {},
             restore: () => {},
-            clearRect: () => {}
+            clearRect: () => {},
+            arc: () => {},
+            fill: () => {},
+            closePath: () => {},
+            fillStyle: '#000',
+            lineCap: 'butt',
+            lineJoin: 'miter',
+            miterLimit: 10
         })
     })
 };
 
 global.window = global;
+
+// Mock MP4Config
+global.MP4Config = {
+    ROUTE: {
+        LINE_WIDTH: 20,
+        NODE_SIZE_MULTIPLIER: 1.0,
+        NODE_MIN_SIZE: 2,
+        NODE_MAX_SIZE: 80
+    }
+};
 
 // Mock LAYERS
 global.LAYERS = {
@@ -50,11 +67,12 @@ const mockMap = {
     zoom: 1,
     panX: 0,
     panY: 0,
-    canvas: { clientWidth: 800, clientHeight: 600 }
+    canvas: { clientWidth: 800, clientHeight: 600 },
+    ctx: document.createElement('canvas').getContext('2d')
 };
 
 const canvas = document.createElement('canvas');
-const routeRenderer = new RouteRenderer(mockMap, canvas);
+const routeRenderer = new RouteRenderer(mockMap, MP4Config);
 
 console.log('RouteRenderer instance created');
 

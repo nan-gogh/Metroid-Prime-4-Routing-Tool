@@ -96,6 +96,7 @@
                             <div class="dev-row"><div class="dev-label">Resolution</div><div class="dev-value" id="resolutionStatus">256px</div></div>
                             <div class="dev-row"><div class="dev-label">Loading</div><div class="dev-value" id="dev_loadingResolution">—</div></div>
                             <div class="dev-row"><div class="dev-label">Cached images</div><div class="dev-value" id="dev_imagesCached">0</div></div>
+                            <div class="dev-row"><div class="dev-label">Route length</div><div class="dev-value" id="dev_routeLength">—</div></div>
                     </div>
                 </div>
 
@@ -213,9 +214,11 @@
     <script src="data/layers/route.js"></script>
     <script src="data/storageUtils.js"></script>
     <script src="data/markerUtils.js"></script>
+    <script src="data/notificationUtils.js"></script>
 
     <script src="data/routeUtils.js"></script>
     <script src="data/RouteComputation.js"></script>
+    <script src="data/RouteAnimation.js"></script>
     <script src="tools/tsp_euclid.js"></script>
     <script src="data/config.js"></script>
 
@@ -225,6 +228,7 @@
     <script src="rendering/GridRenderer.js"></script>
     <script src="rendering/MarkerRenderer.js"></script>
     <script src="rendering/RouteRenderer.js"></script>
+    <script src="rendering/OverlayRenderer.js"></script>
     <script src="rendering/RenderPipeline.js"></script>
 
     <!-- Input and state modules (phase 2 scaffolding) -->

@@ -310,7 +310,8 @@ const RouteUtils = {
 
         let best = null;
         const len = currentRoute.length;
-        const segCount = routeLooping ? len : (len - 1);
+        // Only include closing segment for routes with 3+ waypoints
+        const segCount = (routeLooping && len >= 3) ? len : (len - 1);
 
         for (let i = 0; i < segCount; i++) {
             const idxA = currentRoute[i];
@@ -447,14 +448,21 @@ const RouteUtils = {
     },
 
     // Calculate insertion position along a route segment
-    calculateSegmentInsertionPosition(segmentIndex, t, orderedSources) {
+    calculateSegmentInsertionPosition(segmentIndex, t, orderedSources, routeLooping = false) {
         try {
-            if (!Array.isArray(orderedSources) || segmentIndex < 0 || segmentIndex >= orderedSources.length - 1) {
+            if (!Array.isArray(orderedSources) || segmentIndex < 0) {
+                return null;
+            }
+
+            const maxSegmentIndex = routeLooping ? orderedSources.length - 1 : orderedSources.length - 2;
+            if (segmentIndex > maxSegmentIndex) {
                 return null;
             }
 
             const segStart = orderedSources[segmentIndex];
-            const segEnd = orderedSources[segmentIndex + 1];
+            const segEnd = (segmentIndex < orderedSources.length - 1) ? 
+                          orderedSources[segmentIndex + 1] : 
+                          (routeLooping ? orderedSources[0] : null);
 
             if (!segStart || !segEnd || !segStart.marker || !segEnd.marker) {
                 return null;
@@ -713,7 +721,7 @@ const RouteUtils = {
             console.log('No consent-gated storage available');
             return false;
         } catch (e) {
-            console.error('RouteUtils.saveRoute failed:', e);
+            NotificationUtils.showSaveError('Route save failed: ' + e.message);
             return false;
         }
     },
@@ -741,7 +749,7 @@ const RouteUtils = {
             console.log('No consent-gated storage available, returning null');
             return null;
         } catch (e) {
-            console.warn('Failed to load route from storage:', e);
+            NotificationUtils.showLoadError('Failed to load route from storage: ' + e.message);
             return null;
         }
     },
@@ -749,12 +757,13 @@ const RouteUtils = {
     // Save route looping flag to storage
     saveRouteLoopingFlag(flag) {
         try {
-            const value = flag ? '1' : '0';
+            // Save 'enabled' when true, null when false to avoid default value conflicts
+            const value = flag ? 'enabled' : null;
 
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveSetting === 'function') {
                 const result = StorageUtils.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, value);
-                if (result) return true;
+                if (result !== false) return true; // StorageUtils returns true on success, false on failure
                 // If StorageUtils failed, don't try fallbacks - respect consent
                 return false;
             }
@@ -762,7 +771,7 @@ const RouteUtils = {
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
                 const result = window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, value);
-                if (result) return true;
+                if (result !== false) return true;
                 // If _mp4Storage failed, don't try direct localStorage - respect consent
                 return false;
             }
@@ -779,18 +788,371 @@ const RouteUtils = {
         try {
             // Try StorageUtils first (if available) - this handles consent properly
             if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadSetting === 'function') {
-                return StorageUtils.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
+                const result = StorageUtils.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
+                if (result !== null) return result;
             }
 
             // Fallback to _mp4Storage - this also handles consent properly
             if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                return window._mp4Storage.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
+                const result = window._mp4Storage.loadSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG);
+                if (result !== null) return result;
             }
 
-            // No direct localStorage fallback - respect consent like other data
+            // No consent-gated storage available - return null
             return null;
         } catch (e) {
             return null;
+        }
+    },
+
+    // Save route to storage for a given map instance
+    saveRouteToStorage(map) {
+        try {
+            console.log('RouteUtils.saveRouteToStorage called');
+            if (!map.currentRoute || !Array.isArray(map._routeSources) || !map.currentRoute.length) {
+                console.log('No route to save');
+                return;
+            }
+
+            const payload = RouteUtils.convertRouteToStorageFormat(map.currentRoute, map._routeSources);
+            console.log('Converted payload:', payload);
+            if (!payload) {
+                console.log('convertRouteToStorageFormat returned null');
+                return; // conversion failed
+            }
+
+            payload.length = map.currentRouteLengthNormalized;
+            console.log('Final payload to save:', payload);
+
+            const saveResult = RouteUtils.saveRoute(payload);
+            console.log('saveRoute result:', saveResult);
+        } catch (e) {
+            NotificationUtils.showSaveError('Route save to storage failed: ' + e.message);
+        }
+    },
+
+    // Load route from storage and apply it to a given map instance
+    loadRouteFromStorage(map, LAYERS, MarkerUtils) {
+        try {
+            console.log('RouteUtils.loadRouteFromStorage called');
+            
+            // Check for active drag operations and cancel them before loading
+            if (map && map.pointerHandler && 
+                (map._routeInsert || map._routeNodeCandidate || map._draggingMarker)) {
+                map.pointerHandler._cancelRouteDragOperations('Route loading from storage');
+            }
+            
+            const obj = RouteUtils.loadRoute();
+            console.log('Loaded route data:', obj);
+            if (!obj) {
+                console.log('No route data to load');
+                return false;
+            }
+
+            // Upgrade legacy route points if needed
+            if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
+                const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
+                if (upgrade.upgraded) {
+                    NotificationUtils.showUpgradeNotification(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                    // log removed
+                    // Save the upgraded route back to localStorage
+                    RouteUtils.saveRoute(obj);
+                }
+            }
+
+            // Convert storage format to internal route format
+            const routeData = RouteUtils.convertStorageToRouteFormat(obj.points, LAYERS);
+            if (!routeData) {
+                NotificationUtils.showLoadError('Failed to convert saved route from storage format');
+                return false;
+            }
+
+            const { sources, indices: routeIndices } = routeData;
+
+            // Extract custom markers from saved route (those with 'cm' prefix)
+            const customMarkersFromRoute = RouteUtils.extractCustomMarkersFromRoute(obj.points);
+
+            // Merge custom markers if present
+            if (customMarkersFromRoute.length > 0) {
+                try {
+                    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
+                        MarkerUtils.mergeCustomMarkers(customMarkersFromRoute);
+                    }
+                } catch (e) {
+                    NotificationUtils.showLoadError('Failed to merge custom markers from saved route: ' + e.message);
+                }
+            }
+
+            const length = typeof obj.length === 'number' ? obj.length : 0;
+
+            // Canonicalize source marker objects to reference the markers stored
+            // in `LAYERS` (especially `customMarkers`) so moving markers after
+            // reload keeps associated waypoints in sync.
+            RouteUtils.canonicalizeRouteMarkers(sources, LAYERS);
+
+            map.setRoute(routeIndices, length, sources);
+            // log removed
+            return true;
+        } catch (e) {
+            NotificationUtils.showLoadError('Failed to load saved route: ' + e.message);
+            return false;
+        }
+    },
+
+    // ===== ROUTE IMPORT EXTRACTIONS =====
+
+    // Validate route import data structure
+    validateRouteImportData(data) {
+        try {
+            if (!data || typeof data !== 'object') {
+                return { valid: false, error: 'Invalid data format' };
+            }
+            
+            if (!Array.isArray(data.points) || data.points.length === 0) {
+                return { valid: false, error: 'Missing or empty points array' };
+            }
+            
+            // Validate each point has required coordinates
+            for (let i = 0; i < data.points.length; i++) {
+                const point = data.points[i];
+                if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
+                    return { valid: false, error: `Invalid point at index ${i}: missing or invalid coordinates` };
+                }
+                // Basic bounds checking (normalized coordinates should be 0-1)
+                if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
+                    return { valid: false, error: `Point at index ${i} has coordinates outside valid range (0-1)` };
+                }
+            }
+            
+            return { valid: true };
+        } catch (e) {
+            return { valid: false, error: `Validation failed: ${e.message}` };
+        }
+    },
+
+    // Validate custom marker capacity before import
+    validateCustomMarkerCapacity(currentMarkers, newMarkers, maxMarkers = 50) {
+        try {
+            if (!Array.isArray(currentMarkers)) currentMarkers = [];
+            if (!Array.isArray(newMarkers)) newMarkers = [];
+            
+            // Count only NEW markers (those without matching UIDs)
+            const newMarkersCount = newMarkers.filter(imported => {
+                return !currentMarkers.some(current => current.uid === imported.uid);
+            }).length;
+            
+            const totalAfterImport = currentMarkers.length + newMarkersCount;
+            
+            if (totalAfterImport > maxMarkers) {
+                const needToDelete = totalAfterImport - maxMarkers;
+                return {
+                    valid: false,
+                    error: `Cannot import custom markers`,
+                    details: {
+                        currentCount: currentMarkers.length,
+                        newCount: newMarkersCount,
+                        totalAfterImport,
+                        maxMarkers,
+                        needToDelete
+                    }
+                };
+            }
+            
+            return {
+                valid: true,
+                details: {
+                    currentCount: currentMarkers.length,
+                    newCount: newMarkersCount,
+                    totalAfterImport
+                }
+            };
+        } catch (e) {
+            return { valid: false, error: `Capacity validation failed: ${e.message}` };
+        }
+    },
+
+    // Process imported custom markers with legacy UID handling
+    processImportedCustomMarkers(routePoints, MarkerUtils) {
+        try {
+            if (!Array.isArray(routePoints)) {
+                return { markers: [], legacyDetected: false, regeneratedCount: 0 };
+            }
+            
+            // Extract custom markers from the route points (those with 'cm' prefix)
+            let customMarkersFromRoute = routePoints
+                .filter(p => p.uid && p.uid.startsWith('cm_'))
+                .map(p => ({ uid: p.uid, x: Number(p.x), y: Number(p.y) }));
+            
+            if (customMarkersFromRoute.length === 0) {
+                return { markers: [], legacyDetected: false, regeneratedCount: 0 };
+            }
+            
+            // Detect if route's custom markers use legacy incremental UIDs
+            const routeMarkersAreLegacy = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.isLegacyMarkerFile === 'function')
+                ? MarkerUtils.isLegacyMarkerFile(customMarkersFromRoute)
+                : customMarkersFromRoute.some(m => typeof m.uid === 'undefined' || !(/^[A-Za-z]+_[0-9a-fA-F]{8}$/.test(String(m.uid))));
+            
+            let regeneratedCount = 0;
+            
+            if (routeMarkersAreLegacy) {
+                const regenerated = customMarkersFromRoute.map(m => ({
+                    uid: (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.generateUID === 'function') 
+                        ? MarkerUtils.generateUID(m.x, m.y, 'cm') 
+                        : `cm_${Math.random().toString(16).slice(2,10)}`,
+                    x: m.x,
+                    y: m.y
+                }));
+                
+                // Update UIDs in the original route points for customMarkers entries by matching coordinates
+                for (let i = 0; i < routePoints.length; i++) {
+                    const p = routePoints[i];
+                    if (p && p.uid && p.uid.startsWith('cm_')) {
+                        const match = regenerated.find(r => Math.abs(r.x - Number(p.x)) < 0.0000001 && Math.abs(r.y - Number(p.y)) < 0.0000001);
+                        if (match && p.uid !== match.uid) {
+                            p.uid = match.uid;
+                            regeneratedCount++;
+                        }
+                    }
+                }
+                
+                customMarkersFromRoute = regenerated;
+            }
+            
+            return {
+                markers: customMarkersFromRoute,
+                legacyDetected: routeMarkersAreLegacy,
+                regeneratedCount
+            };
+        } catch (e) {
+            NotificationUtils.showLoadError('Failed to process imported custom markers: ' + e.message);
+            return { markers: [], legacyDetected: false, regeneratedCount: 0, error: e.message };
+        }
+    },
+
+    // Main route import orchestration function
+    importRouteFromFile(fileContent, map, LAYERS, MarkerUtils, maxCustomMarkers = 50) {
+        try {
+            // Check for active drag operations and cancel them before importing
+            if (map && map.pointerHandler && 
+                (map._routeInsert || map._routeNodeCandidate || map._draggingMarker)) {
+                map.pointerHandler._cancelRouteDragOperations('Route import');
+            }
+            
+            // Parse JSON
+            const obj = JSON.parse(fileContent);
+            
+            // Validate basic structure
+            const validation = RouteUtils.validateRouteImportData(obj);
+            if (!validation.valid) {
+                throw new Error(validation.error);
+            }
+            
+            // Upgrade legacy route points if needed
+            if (typeof RouteUtils.upgradeLegacyRoute === 'function') {
+                const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
+                if (upgrade.upgraded) {
+                    NotificationUtils.showUpgradeNotification(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
+                }
+            }
+            
+            // Process custom markers
+            const markerProcessing = RouteUtils.processImportedCustomMarkers(obj.points, MarkerUtils);
+            const customMarkersFromRoute = markerProcessing.markers;
+            
+            if (markerProcessing.legacyDetected && markerProcessing.regeneratedCount > 0) {
+                NotificationUtils.showUpgradeNotification(`Upgraded custom markers: ${markerProcessing.regeneratedCount} markers regenerated. UIDs and layers matched by coordinate hash.`);
+            }
+            
+            // Validate capacity if custom markers exist
+            if (customMarkersFromRoute.length > 0) {
+                const currentMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers))
+                    ? LAYERS.customMarkers.markers
+                    : [];
+                
+                const capacityValidation = RouteUtils.validateCustomMarkerCapacity(currentMarkers, customMarkersFromRoute, maxCustomMarkers);
+                if (!capacityValidation.valid) {
+                    throw new Error(
+                        `Cannot import route custom markers.\n\n` +
+                        `You have ${capacityValidation.details.currentCount} markers, route would add ${capacityValidation.details.newCount} new ones.\n\n` +
+                        `Total would be ${capacityValidation.details.totalAfterImport}, maximum is ${maxCustomMarkers}.\n\n` +
+                        `Please delete at least ${capacityValidation.details.needToDelete} marker(s) first.`
+                    );
+                }
+                
+                // Merge markers: replace those with matching UIDs, add new ones
+                const mergedMarkers = currentMarkers.slice();
+                for (let i = 0; i < customMarkersFromRoute.length; i++) {
+                    const importedMarker = customMarkersFromRoute[i];
+                    const existingIdx = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.findMarkerIndex === 'function')
+                        ? MarkerUtils.findMarkerIndex(importedMarker.uid, mergedMarkers)
+                        : mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
+                    
+                    if (existingIdx >= 0) {
+                        // Overwrite marker with same UID (hash)
+                        mergedMarkers[existingIdx] = importedMarker;
+                    } else {
+                        // Add new marker
+                        mergedMarkers.push(importedMarker);
+                    }
+                }
+                
+                // Apply the merged markers
+                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
+                    MarkerUtils.mergeCustomMarkers(mergedMarkers);
+                } else {
+                    if (LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = mergedMarkers;
+                        if (map) {
+                            map.customMarkers = LAYERS.customMarkers.markers;
+                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
+                            if (typeof map.render === 'function') map.render();
+                        }
+                    }
+                }
+            }
+            
+            // Build sources from all points in the route
+            const sources = [];
+            for (let i = 0; i < obj.points.length; i++) {
+                const p = obj.points[i];
+                if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+                    NotificationUtils.showLoadError(`Route contains invalid point at index ${i}`);
+                    continue;
+                }
+                
+                const layerKey = (typeof RouteUtils.findLayerKeyByPrefix === 'function')
+                    ? RouteUtils.findLayerKeyByPrefix(p.uid, LAYERS)
+                    : 'unknown';
+                
+                sources.push({
+                    marker: {
+                        uid: p.uid || '',
+                        x: Number(p.x),
+                        y: Number(p.y)
+                    },
+                    layerKey: layerKey,
+                    layerIndex: i
+                });
+            }
+            
+            const routeIndices = sources.map((_, i) => i);
+            const length = typeof obj.length === 'number' ? obj.length : 0;
+            
+            // Canonicalize route markers
+            if (typeof RouteUtils.canonicalizeRouteMarkers === 'function') {
+                RouteUtils.canonicalizeRouteMarkers(sources, LAYERS);
+            }
+            
+            // Set the route
+            if (map && typeof map.setRoute === 'function') {
+                map.setRoute(routeIndices, length, sources);
+            }
+            
+            return { success: true, pointsImported: sources.length, markersProcessed: customMarkersFromRoute.length };
+            
+        } catch (e) {
+            NotificationUtils.showImportError('Route import failed: ' + e.message);
+            return { success: false, error: e.message };
         }
     }
 };

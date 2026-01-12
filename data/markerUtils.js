@@ -148,7 +148,7 @@ const MarkerUtils = {
                             // log removed
                         }
                     } catch (e) {
-                        console.warn('Legacy detection during import failed:', e);
+                        NotificationUtils.showLoadError('Legacy detection during import failed: ' + e.message);
                     }
                     
                     // Validate and add markers
@@ -181,7 +181,7 @@ const MarkerUtils = {
                     
                     // If legacy was detected, notify user with unified message
                     if (isLegacy && imported.length > 0) {
-                        alert(`Upgraded custom markers: ${imported.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                        NotificationUtils.showUpgradeNotification(`Upgraded custom markers: ${imported.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     }
                     
                     // Persist to localStorage
@@ -385,7 +385,7 @@ const MarkerUtils = {
             console.log('No consent-gated storage available, not saving');
             return false;
         } catch (e) {
-            console.warn('Error in MarkerUtils.saveToLocalStorage:', e);
+            NotificationUtils.showSaveError('Error saving custom markers: ' + e.message);
             return false;
         }
     },
@@ -430,12 +430,12 @@ const MarkerUtils = {
                         data.push(upgradedMarkers[i]);
                     }
                     // Notify user of upgrade with unified message
-                    alert(`Upgraded custom markers: ${upgradedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                    NotificationUtils.showUpgradeNotification(`Upgraded custom markers: ${upgradedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     // log removed
                 }
             } catch (e) {
                 // If any error occurs during legacy detection/upgrade, log and continue
-                console.warn('Legacy detection/upgrade failed for saved custom markers:', e);
+                NotificationUtils.showLoadError('Legacy detection/upgrade failed for saved custom markers: ' + e.message);
             }
 
             // Replace markers array in LAYERS

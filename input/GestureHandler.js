@@ -1,16 +1,115 @@
 // input/GestureHandler.js
-// Minimal scaffold for gestures (pinch, double-tap) - non-invasive layer
+// Handles multi-touch gestures (pinch-to-zoom, pan) extracted from PointerHandler
 
 (function (global) {
   class GestureHandler {
     constructor(map, config) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
+      this.pinch = null; // {startDistance, startZoom, lastMidX, lastMidY}
+      this.pointers = new Map(); // Track pointers for gesture recognition
     }
 
     init() {
-      // Gesture recognition can be implemented incrementally; for now we rely on PointerHandler + map helpers
+      // Gesture recognition is now fully implemented
     }
+
+    // ===== PINCH-TO-ZOOM GESTURES =====
+
+    /**
+     * Start a pinch gesture when two pointers are detected
+     * @param {Array} pointerValues - Array of pointer objects from PointerHandler.pointers
+     */
+    startPinch(pointerValues) {
+      try {
+        const pts = pointerValues;
+        if (pts.length < 2) return false;
+
+        const dx = pts[0].clientX - pts[1].clientX;
+        const dy = pts[0].clientY - pts[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+        const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+
+        this.pinch = {
+          startDistance: dist,
+          startZoom: this.map.zoom,
+          lastMidX: midClientX,
+          lastMidY: midClientY
+        };
+
+        return true;
+      } catch (e) {
+        console.debug('GestureHandler.startPinch failed', e);
+        return false;
+      }
+    }
+
+    /**
+     * Handle pinch movement for zoom and pan
+     * @param {Array} pointerValues - Array of pointer objects
+     * @param {DOMRect} canvasRect - Canvas bounding rectangle
+     * @param {Object} viewState - Current view state {panX, panY, zoom}
+     * @returns {Object} Updated view state {panX, panY, zoom}
+     */
+    handlePinchMove(pointerValues, canvasRect, viewState) {
+      if (!this.pinch || pointerValues.length < 2) return viewState;
+
+      try {
+        const pts = pointerValues;
+        const dx = pts[0].clientX - pts[1].clientX;
+        const dy = pts[0].clientY - pts[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const factor = dist / this.pinch.startDistance;
+
+        // Calculate new zoom with bounds
+        const newZoom = Math.max(this.map.minZoom || 0.005, Math.min(100, this.pinch.startZoom * factor));
+
+        // Calculate centroid for pan
+        const midClientX = (pts[0].clientX + pts[1].clientX) / 2;
+        const midClientY = (pts[0].clientY + pts[1].clientY) / 2;
+
+        // Handle pan during pinch
+        const panDX = midClientX - this.pinch.lastMidX;
+        const panDY = midClientY - this.pinch.lastMidY;
+
+        // Convert centroid to world coordinates for proper pan calculation
+        const worldX = (midClientX - canvasRect.left - viewState.panX) / viewState.zoom;
+        const worldY = (midClientY - canvasRect.top - viewState.panY) / viewState.zoom;
+
+        // Update view state
+        const updatedState = {
+          zoom: newZoom,
+          panX: midClientX - canvasRect.left - worldX * newZoom + panDX,
+          panY: midClientY - canvasRect.top - worldY * newZoom + panDY
+        };
+
+        // Update pinch state for next move
+        this.pinch.lastMidX = midClientX;
+        this.pinch.lastMidY = midClientY;
+
+        return updatedState;
+      } catch (e) {
+        console.debug('GestureHandler.handlePinchMove failed', e);
+        return viewState;
+      }
+    }
+
+    /**
+     * End pinch gesture
+     */
+    endPinch() {
+      this.pinch = null;
+    }
+
+    /**
+     * Check if pinch gesture is active
+     */
+    isPinching() {
+      return this.pinch !== null;
+    }
+
+    // ===== LEGACY COMPATIBILITY =====
 
     // Example hook used by PointerHandler when detecting multi-pointer gestures
     onPinch(centroid, scale) {

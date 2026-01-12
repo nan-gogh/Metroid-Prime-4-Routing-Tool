@@ -63,15 +63,17 @@ class InteractiveMap {
                         } catch (e) { console.debug('overlayClearStage failed', e); }
                     }
                 };
-                this.renderPipeline = new RenderPipeline([
-                    this.tileRenderer,
-                    this.heatmapRenderer,
-                    overlayClearStage,
-                    this.gridRenderer,
-                    this.markerRenderer,
-                    this.routeRenderer,
-                    this.overlayRenderer
-                ].filter(Boolean));
+                    // Use the concrete `OverlayRenderer` instance in the pipeline
+                    // (must be constructed above if the module is available).
+                    this.renderPipeline = new RenderPipeline([
+                        this.tileRenderer,
+                        this.heatmapRenderer,
+                        overlayClearStage,
+                        this.gridRenderer,
+                        this.markerRenderer,
+                        this.routeRenderer,
+                        this.overlayRenderer
+                    ].filter(Boolean));
             }
 
             // Phase 2: input and state scaffolds
@@ -169,11 +171,34 @@ class InteractiveMap {
         const loopBtn = document.getElementById('loopRouteBtn');
         const updateLoopUI = () => {
             if (!loopBtn) return;
-            try { loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false'); } catch (e) { console.debug('updateLoopUI: failed to set aria-pressed', e); }
+            try { 
+                loopBtn.classList.toggle('active', map.routeLooping);
+                loopBtn.setAttribute('aria-pressed', map.routeLooping ? 'true' : 'false');
+            } catch (e) { console.debug('updateLoopUI: failed to update button state', e); }
         };
         if (loopBtn) {
             loopBtn.addEventListener('click', () => {
                 map.routeLooping = !map.routeLooping;
+
+                // Recalculate route length to account for added/removed closing segment
+                if (map.currentRoute && map._routeSources && map.currentRoute.length >= 3) {
+                    let lengthNormalized = RouteUtils.computeRouteLengthNormalized(map._routeSources, MAP_SIZE);
+                    // Add closing segment length if looping is enabled
+                    if (map.routeLooping) {
+                        const firstSrc = map._routeSources[map.currentRoute[0]];
+                        const lastSrc = map._routeSources[map.currentRoute[map.currentRoute.length - 1]];
+                        if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+                            const dx = (firstSrc.marker.x - lastSrc.marker.x) * MAP_SIZE;
+                            const dy = (firstSrc.marker.y - lastSrc.marker.y) * MAP_SIZE;
+                            const closingSegmentLength = Math.hypot(dx, dy) / MAP_SIZE;
+                            lengthNormalized += closingSegmentLength;
+                        }
+                    }
+                    map.currentRouteLengthNormalized = lengthNormalized;
+                    map.currentRouteLength = lengthNormalized * MAP_SIZE;
+                    // Update the route length display
+                    try { map.updateLayerCounts(); } catch (e) {}
+                }
 
                 // Invalidate route renderer caches when looping changes
                 try {
@@ -185,11 +210,7 @@ class InteractiveMap {
                 }
 
                 try {
-                    if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                        window._mp4Storage.saveSetting(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, map.routeLooping ? '1' : '0');
-                    } else {
-                        try { localStorage.setItem(MP4Config.STORAGE_KEYS.ROUTE_LOOPING_FLAG, map.routeLooping ? '1' : '0'); } catch (e) { console.debug('loopRoute: failed to write localStorage', e); }
-                    }
+                    RouteUtils.saveRouteLoopingFlag(map.routeLooping);
                 } catch (e) { console.debug('loopRoute: failed to persist loop flag', e); }
                 try { map.render(); } catch (e) { console.debug('loopRoute: failed to request render', e); }
                 updateLoopUI();
@@ -197,6 +218,16 @@ class InteractiveMap {
         }
         updateLoopUI();
     } catch (e) { console.debug('InteractiveMap: loop controls initialization failed', e); }
+
+    // Method to update loop UI (called when route changes)
+    this.updateLoopUI = () => {
+        try {
+            const loopBtn = document.getElementById('loopRouteBtn');
+            if (!loopBtn) return;
+            loopBtn.classList.toggle('active', this.routeLooping);
+            loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
+        } catch (e) { console.debug('updateLoopUI: failed to update button state', e); }
+    };
         
         // Markers
         this.markers = [];
@@ -336,6 +367,16 @@ class InteractiveMap {
         this.centerMap();
         this.preloadAllMapImages();
         this.loadInitialImage();
+
+        // Initialize route animation properties
+        try {
+            if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.initialize === 'function') {
+                RouteAnimation.initialize(this);
+            }
+        } catch (e) {
+            console.debug('RouteAnimation initialization failed', e);
+        }
+
         this.render();
     }
 
@@ -417,10 +458,10 @@ class InteractiveMap {
                     if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.exportRoute === 'function') {
                         RouteUtils.exportRoute(map, MarkerUtils);
                     } else {
-                        alert('Route utilities not available.');
+                        NotificationUtils.showRouteError('Route utilities not available.');
                     }
                 } catch (err) {
-                    alert('Failed to export route: ' + (err.message || String(err)));
+                    NotificationUtils.showRouteError('Failed to export route: ' + (err.message || String(err)));
                 }
             });
         }
@@ -433,172 +474,24 @@ class InteractiveMap {
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     try {
-                        const obj = JSON.parse(ev.target.result);
-                        if (!obj || !Array.isArray(obj.points) || obj.points.length === 0) {
-                            throw new Error('Invalid route file: missing points array');
-                        }
-
-                        // Upgrade legacy route points if needed
-                        if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
-                            const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
-                            if (upgrade.upgraded) {
-                                alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
-                                // log removed
-                            }
-                        }
-
-                        // Extract custom markers from the route points (those with 'cm' prefix)
-                        let customMarkersFromRoute = obj.points
-                            .filter(p => p.uid && p.uid.startsWith('cm_'))
-                            .map(p => ({ uid: p.uid, x: Number(p.x), y: Number(p.y) }));
-
-                        // Detect if route's custom markers use legacy incremental UIDs
-                        const routeMarkersAreLegacy = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.isLegacyMarkerFile === 'function')
-                            ? MarkerUtils.isLegacyMarkerFile(customMarkersFromRoute)
-                            : customMarkersFromRoute.some(m => typeof m.uid === 'undefined' || !(/^[A-Za-z]+_[0-9a-fA-F]{8}$/.test(String(m.uid))));
-
-                        // If legacy, regenerate hashed UIDs and update the source points' uid fields
-                        if (routeMarkersAreLegacy) {
-                            const regenerated = customMarkersFromRoute.map(m => ({
-                                uid: (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.generateUID === 'function') ? MarkerUtils.generateUID(m.x, m.y, 'cm') : `cm_${Math.random().toString(16).slice(2,10)}`,
-                                x: m.x,
-                                y: m.y
-                            }));
-                            // Replace uids in obj.points for customMarkers entries by matching coordinates
-                            let updatedCount = 0;
-                            for (let i = 0; i < obj.points.length; i++) {
-                                const p = obj.points[i];
-                                if (p && p.uid && p.uid.startsWith('cm_')) {
-                                    const match = regenerated.find(r => Math.abs(r.x - Number(p.x)) < 0.0000001 && Math.abs(r.y - Number(p.y)) < 0.0000001);
-                                    if (match) {
-                                        if (p.uid !== match.uid) updatedCount++;
-                                        p.uid = match.uid;
-                                    }
-                                }
-                            }
-                            customMarkersFromRoute = regenerated;
-                            alert(`Upgraded custom markers: ${updatedCount} markers regenerated. UIDs and layers matched by coordinate hash.`);
-                            // log removed
-                        }
-
-                        // If custom markers exist in route, merge them with capacity check
-                        if (customMarkersFromRoute.length > 0) {
-                            const currentMarkers = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers))
-                                ? LAYERS.customMarkers.markers
-                                : [];
+                        if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.importRouteFromFile === 'function') {
                             const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
-                            
-                            // Count only NEW markers (those without matching UIDs)
-                            const newMarkersCount = customMarkersFromRoute.filter(imported => {
-                                return typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.markerExists === 'function'
-                                    ? !MarkerUtils.markerExists(imported.uid, currentMarkers)
-                                    : !currentMarkers.some(current => current.uid === imported.uid);
-                            }).length;
-                            
-                            const totalAfterImport = currentMarkers.length + newMarkersCount;
-                            
-                            if (totalAfterImport > maxMarkers) {
-                                const needToDelete = totalAfterImport - maxMarkers;
-                                alert(
-                                    `Cannot import route custom markers.\n\n` +
-                                    `You have ${currentMarkers.length} markers, route would add ${newMarkersCount} new ones.\n\n` +
-                                    `Total would be ${totalAfterImport}, maximum is ${maxMarkers}.\n\n` +
-                                    `Please delete at least ${needToDelete} marker(s) first.`
-                                );
-                                e.target.value = '';
-                                return;
+                            const result = RouteUtils.importRouteFromFile(ev.target.result, map, LAYERS, MarkerUtils, maxMarkers);
+
+                            if (!result.success) {
+                                NotificationUtils.showRouteError('Failed to import route: ' + result.error);
+                            } else {
+                                // Show success message
+                                NotificationUtils.showSuccess(`Successfully imported route with ${result.pointsImported} points${result.markersProcessed > 0 ? ` and ${result.markersProcessed} custom markers` : ''}`);
                             }
-                            
-                            // Merge markers: replace those with matching UIDs, add new ones
-                            const mergedMarkers = currentMarkers.slice();
-                            for (let i = 0; i < customMarkersFromRoute.length; i++) {
-                                const importedMarker = customMarkersFromRoute[i];
-                                const existingIdx = typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.findMarkerIndex === 'function'
-                                    ? MarkerUtils.findMarkerIndex(importedMarker.uid, mergedMarkers)
-                                    : mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
-                                if (existingIdx >= 0) {
-                                    // Overwrite marker with same UID (hash)
-                                    mergedMarkers[existingIdx] = importedMarker;
-                                } else {
-                                    // Add new marker
-                                    mergedMarkers.push(importedMarker);
-                                }
-                            }
-                            
-                            try {
-                                if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
-                                    MarkerUtils.mergeCustomMarkers(mergedMarkers);
-                                } else {
-                                    if (LAYERS.customMarkers) {
-                                        LAYERS.customMarkers.markers = mergedMarkers;
-                                        if (typeof map !== 'undefined' && map) {
-                                            map.customMarkers = LAYERS.customMarkers.markers;
-                                            if (typeof map.updateLayerCounts === 'function') map.updateLayerCounts();
-                                            map.render();
-                                        }
-                                    }
-                                }
-                            } catch (e) {
-                                console.warn('Failed to merge custom markers from route:', e);
-                            }
+                        } else {
+                            NotificationUtils.showRouteError('Route utilities not available for import.');
                         }
-
-                        // Build sources from all points in the route (derive layer from UID prefix)
-                        const sources = [];
-                        for (let i = 0; i < obj.points.length; i++) {
-                            const p = obj.points[i];
-                            if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
-                                console.warn('Route contains invalid point at index', i);
-                                continue;
-                            }
-                            const layerKey = (typeof RouteUtils !== 'undefined' && typeof RouteUtils.findLayerKeyByPrefix === 'function')
-                                ? RouteUtils.findLayerKeyByPrefix(p.uid, LAYERS)
-                                : 'unknown';
-                            sources.push({
-                                marker: {
-                                    uid: p.uid || '',
-                                    x: Number(p.x),
-                                    y: Number(p.y)
-                                },
-                                layerKey: layerKey,
-                                layerIndex: i
-                            });
-                        }
-                        const routeIndices = sources.map((_, i) => i);
-                        const length = typeof obj.length === 'number' ? obj.length : 0;
-
-                        // Replace any cloned marker objects in `sources` with canonical
-                        // marker objects from `LAYERS` (if available) so route waypoints
-                        // stay coupled to their source markers after reload/import.
-                        try {
-                            for (let si = 0; si < sources.length; si++) {
-                                const s = sources[si];
-                                try {
-                                    const uid = s && s.marker && s.marker.uid;
-                                    const layer = s && s.layerKey;
-                                    if (!uid) continue;
-                                    if (layer && LAYERS && LAYERS[layer] && Array.isArray(LAYERS[layer].markers)) {
-                                        const found = LAYERS[layer].markers.find(m => m.uid === uid);
-                                        if (found) { s.marker = found; continue; }
-                                    }
-                                    // fallback: search across customMarkers specifically
-                                    if (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) {
-                                        const found2 = LAYERS.customMarkers.markers.find(m => m.uid === uid);
-                                        if (found2) s.marker = found2;
-                                    }
-                                } catch (e) {}
-                            }
-                        } catch (e) {}
-
-                        // Set the route with all points
-                        map.setRoute(routeIndices, length, sources);
-                        // log removed
                     } catch (err) {
-                        // error logging removed
-                        alert('Failed to import route: ' + (err.message || String(err)));
+                        NotificationUtils.showRouteError('Failed to import route: ' + (err.message || String(err)));
                     }
                 };
-                reader.onerror = () => alert('Failed to read file');
+                reader.onerror = () => NotificationUtils.showFileError('Failed to read file');
                 reader.readAsText(file);
                 e.target.value = '';
             });
@@ -610,199 +503,10 @@ class InteractiveMap {
         // pointerleave similar to mouseleave. Keep tooltip visible when cursor
         // moves into UI areas (sidebar, controls, layer list) so it doesn't
         // disappear when users move from map to UI to inspect details.
-        this.canvas.addEventListener('mouseleave', (ev) => {
-            this.isDragging = false;
-            this.canvas.style.cursor = 'grab';
-            try {
-                const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
-                let enteredUi = false;
-                try {
-                    if (related && related.closest) {
-                        enteredUi = !!related.closest('.sidebar, .controls, .zoom-controls, #layerList, .header, .sidebar-handle');
-                    }
-                } catch (e) { enteredUi = false; }
-                // If pointer left into the UI, keep tooltip visible; otherwise hide it.
-                if (!enteredUi) this.hideTooltip();
-            } catch (e) { try { this.hideTooltip(); } catch (e) {} }
-            // clear hover preview
-            this._routePreview = null;
-            // If a route-insert was in progress, cancel and restore
-            try {
-                if (this._routeInsert) {
-                    const prev = this._routeInsert.prevSources || [];
-                    const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
-                    const len = RouteUtils.computeRouteLengthNormalized(prev, MAP_SIZE);
-                    this.setRoute(prevIdx, len, prev);
-                    try { this.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
-                    this._routeInsert = null;
-                }
-                // Clear any unpromoted route-node candidate so clicks behave normally after leave
-                if (this._routeNodeCandidate) this._routeNodeCandidate = null;
-            } catch (e) {}
-        });
+        // NOTE: Now handled by PointerHandler
         
         // Click handler - place custom markers or delete them when tapped
-        this.canvas.addEventListener('click', (e) => {
-            // Check if this was a quick tap (not a held drag)
-            // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
-            const holdDuration = Date.now() - this.pointerDownTime;
-            
-            // Only interact on quick taps (less than threshold)
-            const isQuickTap = this.pointerDownTime > 0 && holdDuration < this.minClickDuration;
-            
-            // Clear timer after use (important for preventing double-placement)
-            this.pointerDownTime = 0;
-            
-            // Determine whether a marker exists at the click location (don't rely on hoveredMarker for custom markers)
-            const rect = this.canvas.getBoundingClientRect();
-            const localX = e.clientX - rect.left;
-            const localY = e.clientY - rect.top;
-            const hit = this.markerRenderer.findMarkerAt(localX, localY);
-
-            if (isQuickTap && hit) {
-                const layerKey = hit.layerKey;
-                // Helper determination: deletable layers (custom markers) vs selectable layers
-                const isDeletable = !!(LAYERS[layerKey] && LAYERS[layerKey].deletable);
-                const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
-
-                // Route edit mode: tapping markers toggles their membership in the current route
-                if (this.editRouteMode) {
-                    try {
-                        const uid = hit.marker && hit.marker.uid;
-                        if (!uid) return;
-
-                        // Build ordered list of existing route marker UIDs
-                        const existing = [];
-                        if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
-                            for (let i = 0; i < this.currentRoute.length; i++) {
-                                const src = this._routeSources[this.currentRoute[i]];
-                                if (src && src.marker && src.marker.uid) existing.push(src.marker.uid);
-                            }
-                        }
-
-                        const inIdx = existing.indexOf(uid);
-                        const newSources = [];
-                        const newIndices = [];
-
-                        if (inIdx >= 0) {
-                            // Remove the tapped marker from the route
-                            for (let i = 0; i < this.currentRoute.length; i++) {
-                                const src = this._routeSources[this.currentRoute[i]];
-                                if (!src || !src.marker) continue;
-                                if (src.marker.uid === uid) continue;
-                                newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
-                                newIndices.push(newSources.length - 1);
-                            }
-                        } else {
-                            // Preserve existing route points (if any)
-                            if (Array.isArray(this.currentRoute) && Array.isArray(this._routeSources)) {
-                                for (let i = 0; i < this.currentRoute.length; i++) {
-                                    const src = this._routeSources[this.currentRoute[i]];
-                                    if (!src || !src.marker) continue;
-                                    newSources.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: newSources.length });
-                                    newIndices.push(newSources.length - 1);
-                                }
-                            }
-                            // Append the tapped marker as a new route point
-                            newSources.push({ marker: hit.marker, layerKey: layerKey, layerIndex: newSources.length });
-                            newIndices.push(newSources.length - 1);
-                        }
-
-                        // Compute simple path length (pixels) as sum of Euclidean segments
-                        let lengthPx = 0;
-                        for (let i = 1; i < newSources.length; i++) {
-                            const a = newSources[i - 1].marker;
-                            const b = newSources[i].marker;
-                            if (!a || !b) continue;
-                            const dx = (a.x - b.x) * MAP_SIZE;
-                            const dy = (a.y - b.y) * MAP_SIZE;
-                            lengthPx += Math.hypot(dx, dy);
-                        }
-                        const lengthNormalized = lengthPx / MAP_SIZE;
-
-                        // Apply the new route
-                        this.setRoute(newIndices, lengthNormalized, newSources);
-                        // Do not change looping preference on manual tap edits; looping is user-controlled
-                        this.render();
-                    } catch (err) {
-                        console.warn('Route edit tap failed:', err);
-                    }
-                    return;
-                }
-
-                if (this.editMarkersMode) {
-                    // In edit mode: allow deletion (custom markers are editable regardless of flags)
-                    const isCustom = (layerKey === 'customMarkers');
-                    if (isDeletable || isCustom) {
-                        if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
-                            MarkerUtils.deleteCustomMarker(hit.marker.uid);
-                            this.checkMarkerHover(localX, localY);
-                        }
-                    }
-                } else {
-                    // Normal mode: selection and tooltip behavior
-                    if (isSelectable) {
-                        const uid = hit.marker.uid;
-                        if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
-                            // deselect
-                            this.selectedMarker = null;
-                            this.selectedMarkerLayer = null;
-                            this.hideTooltip();
-                            this.render();
-                        } else {
-                            // select
-                            this.selectedMarker = hit.marker;
-                            this.selectedMarkerLayer = layerKey;
-                            // compute screen coords for tooltip placement
-                            const screenX = hit.marker.x * MAP_SIZE * this.zoom + this.panX;
-                            const screenY = hit.marker.y * MAP_SIZE * this.zoom + this.panY;
-                            this.showTooltip(hit.marker, screenX, screenY, layerKey);
-                            this.render();
-                        }
-                    }
-                }
-            } else if (e.button === 0 && isQuickTap && !hit) {
-                // If a marker is currently selected, a quick tap anywhere on the
-                // map should deselect it (not start a placement). This avoids
-                // accidental placement while the user intends to dismiss selection.
-                if (this.selectedMarker) {
-                    this.selectedMarker = null;
-                    this.selectedMarkerLayer = null;
-                    try { this.hideTooltip(); } catch (e) {}
-                    try { this.render(); } catch (e) {}
-                    return;
-                }
-                // Quick tap on empty space - place custom marker
-                // Reuse previously computed localX/localY to avoid redundant layout read
-                const clientX = localX;
-                const clientY = localY;
-
-                // Convert to world coordinates (0-1 normalized)
-                const worldX = (clientX - this.panX) / this.zoom / MAP_SIZE;
-                const worldY = (clientY - this.panY) / this.zoom / MAP_SIZE;
-                
-                // Only place if within map bounds
-                if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
-                    // Do not allow placement when the custom markers layer is hidden
-                    if (!this.layerVisibility || !this.layerVisibility.customMarkers) {
-                        return;
-                    }
-                    // Only place markers when edit mode is active
-                    if (this.editMarkersMode) {
-                        // Check marker limit before adding
-                        const maxMarkers = this.layerConfig && this.layerConfig.customMarkers && this.layerConfig.customMarkers.maxMarkers || 50;
-                        if (LAYERS.customMarkers.markers.length >= maxMarkers) {
-                            return; // Silently ignore - could show a message but click handler shouldn't alert
-                        }
-                        if (typeof MarkerUtils !== 'undefined') {
-                            MarkerUtils.addCustomMarker(worldX, worldY);
-                            // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
-                            this.checkMarkerHover(localX, localY);
-                        }
-                    }
-                }
-            }
-        });
+        // NOTE: Now handled by PointerHandler
         
         // Window resize
         window.addEventListener('resize', () => {
@@ -1025,7 +729,7 @@ class InteractiveMap {
         try { if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') window._mp4Storage.saveSetting('mp4_grid_heatmap', this._showGridHeatmap ? '1' : '0'); /* do not write without consent/helper */ } catch (e) {}
         try {
             // Redraw the full overlay so we clear any previously painted heatmap pixels
-            try { this.renderOverlay(); } catch (e) {}
+            try { this.render(); } catch (e) {}
             // Inline heatmap toggle removed; nothing to update here.
             // Update sidebar button state if present
             try {
@@ -1261,7 +965,7 @@ class InteractiveMap {
 
         // Only re-render the overlay (markers/route/tooltip). Tiles are expensive
         // to redraw at high zoom and don't change when toggling layers.
-        try { this.renderOverlay(); } catch (e) { try { this.render(); } catch (e) {} }
+        try { this.render(); } catch (e) {}
     }
     
     checkMarkerHover(mouseX, mouseY) {
@@ -1337,7 +1041,7 @@ class InteractiveMap {
             const ordered = RouteUtils.createOrderedSources(prevIndices, prevSources);
 
             // Calculate insertion position along the segment
-            const insertPosition = RouteUtils.calculateSegmentInsertionPosition(seg.index, seg.t, ordered);
+            const insertPosition = RouteUtils.calculateSegmentInsertionPosition(seg.index, seg.t, ordered, this.routeLooping);
             if (!insertPosition) return;
 
             // Create temporary marker
@@ -1510,15 +1214,19 @@ class InteractiveMap {
     }
     
     render() {
-        // Full redraw: prefer RenderPipeline when available
+        // Full redraw: use RenderPipeline exclusively
         if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
             try {
                 this.renderPipeline.render();
             } catch (e) {
                 console.debug('map.render: renderPipeline.render failed', e);
-                // Fall back to legacy path
-                try { if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } else if (this.tileRenderer && typeof this.tileRenderer.render === 'function') { try { this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); } } } catch (err) {}
-                try { this.renderOverlay(); } catch (err) {}
+                // Fall back to individual renderers
+                try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); }
+                try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(); } catch (err) { console.debug('renderHeatmap: heatmapRenderer.render failed', err); }
+                try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(); } catch (err) { console.debug('renderGrid: gridRenderer.render failed', err); }
+                try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(); } catch (err) { console.debug('renderMarkers: markerRenderer.render failed', err); }
+                try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(); } catch (err) { console.debug('renderRoute: routeRenderer.render failed', err); }
+                try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(); } catch (err) { console.debug('renderOverlay: overlayRenderer.render failed', err); }
                 return;
             }
             // Ensure DOM quadrant labels are updated
@@ -1528,99 +1236,21 @@ class InteractiveMap {
             return;
         }
 
-        // Fallback: tiles + overlay (legacy path)
-        try { if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } else if (this.tileRenderer && typeof this.tileRenderer.render === 'function') { try { this.tileRenderer.render(); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', err); } } } catch (e) {}
-        try { this.renderOverlay(); } catch (e) {}
+        // Fallback: individual renderers (legacy path)
+        try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(); } catch (e) { console.debug('renderTiles: tileRenderer.render failed', e); }
+        try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(); } catch (e) { console.debug('renderHeatmap: heatmapRenderer.render failed', e); }
+        try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(); } catch (e) { console.debug('renderGrid: gridRenderer.render failed', e); }
+        try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(); } catch (e) { console.debug('renderMarkers: markerRenderer.render failed', e); }
+        try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(); } catch (e) { console.debug('renderRoute: routeRenderer.render failed', e); }
+        try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(); } catch (e) { console.debug('renderOverlay: overlayRenderer.render failed', e); }
+        // Ensure DOM quadrant labels are updated
+        try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) {}
+        // Update tooltip position
+        try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
     }
 
     // Draw only the overlay contents (route, markers, tooltip).
-    renderOverlay() {
-        const ctx = this.ctx;
-        const cssWidth = this.canvas.clientWidth;
-        const cssHeight = this.canvas.clientHeight;
 
-        // Clear overlay (transparent) before drawing route/markers
-        try { ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
-
-        // Draw grid overlays (toggleable via `layerVisibility.grid`)
-        if (this.layerVisibility && this.layerVisibility.grid) {
-            this.renderQuadrantGrid();
-            this.renderDetailGrid();
-        }
-        // Always update the DOM quadrant labels if the helper exists.
-        // The helper decides visibility based on both layer visibility
-        // and highlight state so labels stay in sync with interactions.
-        try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { /* gridRenderer.updateQuadLabels failed (suppressed) */ }
-
-        // Render heatmap independently of the grid layer visibility so it adapts to zoom/pan even when grid is off
-        try {
-            if (this._showGridHeatmap) { try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') { this.heatmapRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { /* pipeline will update heatmap stage */ this.renderPipeline.render(); } } catch (e) {} }
-        } catch (e) {}
-
-        // Draw markers from all visible layers onto the overlay canvas
-        try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') { this.markerRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } } catch (e) {}
-
-        // Draw computed route on top of the map but beneath markers (so markers remain visible)
-        try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') { this.routeRenderer.render(); } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') { this.renderPipeline.render(); } } catch (e) {}
-
-        // Draw transient route-insert preview (when hovering near a segment in edit mode)
-        // (Handled by OverlayRenderer when present)
-        try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') { this.overlayRenderer.render(); } else { this._renderOverlayExtras(); } } catch (e) {}
-
-    }
-
-    // Overlay extras: backward-compatible wrapper. Delegates to OverlayRenderer when available,
-    // otherwise falls back to previous inline behavior.
-    _renderOverlayExtras() {
-        if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') {
-            try { this.overlayRenderer.render(); return; } catch (e) { console.debug('map._renderOverlayExtras delegate failed', e); }
-        }
-
-        const ctx = this.ctx;
-        try {
-            if (this.editRouteMode && this._routePreview && this._routePreview.screenX && this._routePreview.screenY) {
-                const px = this._routePreview.screenX;
-                const py = this._routePreview.screenY;
-                const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
-                const hexToRgba = (h, a) => {
-                    if (!h || typeof h !== 'string') return null;
-                    let s = h.replace('#', '').trim();
-                    if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
-                    if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
-                    let r = 0, g = 0, b = 0, alphaFromHex = 1;
-                    if (s.length === 6) {
-                        r = parseInt(s.slice(0, 2), 16);
-                        g = parseInt(s.slice(2, 4), 16);
-                        b = parseInt(s.slice(4, 6), 16);
-                    } else if (s.length === 8) {
-                        r = parseInt(s.slice(0, 2), 16);
-                        g = parseInt(s.slice(2, 4), 16);
-                        b = parseInt(s.slice(4, 6), 16);
-                        alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
-                    } else {
-                        return null;
-                    }
-                    const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
-                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                };
-                const nodeFill = routeHex ? hexToRgba(routeHex, 0.95) : null;
-                const dotSize = (this.getRouteNodeSize && typeof this.getRouteNodeSize === 'function') ? this.getRouteNodeSize() : 6;
-                ctx.save();
-                ctx.beginPath();
-                ctx.fillStyle = nodeFill || 'rgba(34, 211, 238, 1)';
-                ctx.arc(px, py, dotSize, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            }
-        } catch (e) {}
-
-        try {
-            if (this.selectedMarker && this.selectedMarkerLayer) {
-                // Use centralized updater that respects offsets/clamping to avoid duplication
-                try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
-            }
-        } catch (e) {}
-    }
 
     // Draw the quadrant grid separating the map into 4 equal sections
     renderQuadrantGrid() {
@@ -1711,10 +1341,48 @@ class InteractiveMap {
     setRoute(routeIndices, lengthNormalized, routeSources) {
         this.currentRoute = routeIndices ? routeIndices.slice() : null;
         this._routeSources = Array.isArray(routeSources) ? routeSources.slice() : null;
+        
+        // Remove duplicate indices and markers at the same position
+        if (this.currentRoute && this._routeSources) {
+            const seenIndices = new Set();
+            const seenPositions = new Set();
+            const filteredIndices = [];
+            for (const idx of this.currentRoute) {
+                if (seenIndices.has(idx)) continue;
+                const src = this._routeSources[idx];
+                if (!src || !src.marker) continue;
+                const posKey = `${src.marker.x},${src.marker.y}`;
+                if (seenPositions.has(posKey)) continue;
+                seenIndices.add(idx);
+                seenPositions.add(posKey);
+                filteredIndices.push(idx);
+            }
+            this.currentRoute = filteredIndices;
+        }
+        
         // lengthNormalized is in normalized map units (map width = 1). Store both
         // normalized length and pixel length for compatibility.
         this.currentRouteLengthNormalized = typeof lengthNormalized === 'number' ? lengthNormalized : 0;
         this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
+        
+        // Adjust route length to include closing segment if looping is enabled and route has 3+ waypoints
+        if (this.routeLooping && this.currentRoute && this.currentRoute.length >= 3 && this._routeSources) {
+            const firstIdx = this.currentRoute[0];
+            const lastIdx = this.currentRoute[this.currentRoute.length - 1];
+            const firstSrc = this._routeSources[firstIdx];
+            const lastSrc = this._routeSources[lastIdx];
+            if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+                const dx = (firstSrc.marker.x - lastSrc.marker.x) * MAP_SIZE;
+                const dy = (firstSrc.marker.y - lastSrc.marker.y) * MAP_SIZE;
+                const closingSegmentLength = Math.hypot(dx, dy) / MAP_SIZE;
+                this.currentRouteLengthNormalized += closingSegmentLength;
+                this.currentRouteLength = this.currentRouteLengthNormalized * MAP_SIZE;
+            }
+        }
+        
+        // Note: routeLooping is preserved during route mutations. UI and rendering
+        // handle invalid states (<3 waypoints) by disabling toggle and not drawing loop.
+        
         // Reset the start-point flag when a new route is set (will be overridden by generation if applicable)
         // Do not change `routeLooping` here — looping is controlled explicitly by user preference.
 
@@ -1732,6 +1400,9 @@ class InteractiveMap {
             const el = document.getElementById('routeLength');
             if (el) this.updateLayerCounts();
         } catch (e) {}
+
+        // Update loop UI if route looping state changed
+        try { this.updateLoopUI(); } catch (e) {}
 
         this.render();
         // Start animated route when a route is set
@@ -1753,6 +1424,12 @@ class InteractiveMap {
     }
 
     clearRoute() {
+        // Check for active drag operations and cancel them before clearing
+        if (this.pointerHandler && 
+            (this._routeInsert || this._routeNodeCandidate || this._draggingMarker)) {
+            this.pointerHandler._cancelRouteDragOperations('Route clearing');
+        }
+        
         this.currentRoute = null;
         this.currentRouteLength = 0;
         this.currentRouteLengthNormalized = 0;
@@ -1785,125 +1462,23 @@ class InteractiveMap {
 
     // Persist the current route to localStorage as an ordered list of positions with uid and layer info
     saveRouteToStorage() {
-        try {
-            console.log('saveRouteToStorage called');
-            if (!this.currentRoute || !Array.isArray(this._routeSources) || !this.currentRoute.length) {
-                console.log('No route to save');
-                return;
-            }
-
-            const payload = RouteUtils.convertRouteToStorageFormat(this.currentRoute, this._routeSources);
-            console.log('Converted payload:', payload);
-            if (!payload) {
-                console.log('convertRouteToStorageFormat returned null');
-                return; // conversion failed
-            }
-
-            payload.length = this.currentRouteLengthNormalized;
-            console.log('Final payload to save:', payload);
-
-            const saveResult = RouteUtils.saveRoute(payload);
-            console.log('saveRoute result:', saveResult);
-        } catch (e) {
-            console.error('saveRouteToStorage failed:', e);
-        }
+        RouteUtils.saveRouteToStorage(this);
     }
 
     // Attempt to load a previously saved route from localStorage and apply it
     loadRouteFromStorage() {
-        try {
-            console.log('loadRouteFromStorage called');
-            const obj = RouteUtils.loadRoute();
-            console.log('Loaded route data:', obj);
-            if (!obj) {
-                console.log('No route data to load');
-                return false;
-            }
-            
-            // Upgrade legacy route points if needed
-            if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.upgradeLegacyRoute === 'function') {
-                const upgrade = RouteUtils.upgradeLegacyRoute(obj.points, LAYERS);
-                if (upgrade.upgraded) {
-                    alert(`Upgraded route: ${upgrade.count} points regenerated. UIDs and layers matched by coordinate hash.`);
-                    // log removed
-                    // Save the upgraded route back to localStorage
-                    RouteUtils.saveRoute(obj);
-                }
-            }
-
-            // Convert storage format to internal route format
-            const routeData = RouteUtils.convertStorageToRouteFormat(obj.points, LAYERS);
-            if (!routeData) {
-                console.warn('Failed to convert saved route from storage format');
-                return false;
-            }
-
-            const { sources, indices: routeIndices } = routeData;
-
-            // Extract custom markers from saved route (those with 'cm' prefix)
-            const customMarkersFromRoute = RouteUtils.extractCustomMarkersFromRoute(obj.points);
-
-            // Merge custom markers if present
-            if (customMarkersFromRoute.length > 0) {
-                try {
-                    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.mergeCustomMarkers === 'function') {
-                        MarkerUtils.mergeCustomMarkers(customMarkersFromRoute);
-                    }
-                } catch (e) {
-                    console.warn('Failed to merge custom markers from saved route:', e);
-                }
-            }
-
-            const length = typeof obj.length === 'number' ? obj.length : 0;
-
-            // Canonicalize source marker objects to reference the markers stored
-            // in `LAYERS` (especially `customMarkers`) so moving markers after
-            // reload keeps associated waypoints in sync.
-            RouteUtils.canonicalizeRouteMarkers(sources, LAYERS);
-
-            this.setRoute(routeIndices, length, sources);
-            // Load the loop flag from localStorage (persisted separately from route data)
-            try {
-                const loopFlag = RouteUtils.loadRouteLoopingFlag();
-                // Stored flag `mp4_route_looping_flag` now represents explicit looping preference
-                this.routeLooping = (loopFlag === '1' || loopFlag === 1 || loopFlag === true);
-            } catch (e) { /* default to false */ }
-            // log removed
-            return true;
-        } catch (e) {
-            console.warn('Failed to load saved route:', e);
-            return false;
-        }
+        return RouteUtils.loadRouteFromStorage(this, LAYERS, MarkerUtils);
     }
 
     startRouteAnimation() {
-        if (this._routeRaf) return;
-        this._lastRouteAnimTime = performance.now();
-        const step = (t) => {
-            const dt = Math.max(0, t - this._lastRouteAnimTime) / 1000; // seconds
-            this._lastRouteAnimTime = t;
-            // advance offset by speed * dt * direction (scale with zoom so perceived
-            // animation speed remains consistent across zoom levels)
-            // Coerce direction to a number so persisted string values still work
-            const dir = (Number(this._routeAnimationDirection) === -1) ? -1 : 1;
-            const zoomFactor = (typeof this.zoom === 'number' && this.zoom > 0) ? this.zoom : 1;
-            this._routeDashOffset = (this._routeDashOffset + this._routeAnimationSpeed * dt * dir * zoomFactor + MP4Config.ROUTE.DASH_OFFSET_WRAP) % MP4Config.ROUTE.DASH_OFFSET_WRAP;
-            // only continue animating if there is a route
-            if (!this.currentRoute || !this.currentRoute.length) {
-                this._routeRaf = null;
-                return;
-            }
-            // Only redraw the overlay (route + markers) for animation frames
-            try { this.renderOverlay(); } catch (e) { try { this.render(); } catch (e) {} }
-            this._routeRaf = requestAnimationFrame(step);
-        };
-        this._routeRaf = requestAnimationFrame(step);
+        if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.startAnimation === 'function') {
+            RouteAnimation.startAnimation(this);
+        }
     }
 
     stopRouteAnimation() {
-        if (this._routeRaf) {
-            cancelAnimationFrame(this._routeRaf);
-            this._routeRaf = null;
+        if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.stopAnimation === 'function') {
+            RouteAnimation.stopAnimation(this);
         }
     }
 }
@@ -2134,7 +1709,7 @@ async function initializeLayerIcons() {
                         try {
                             if (k === 'route') {
                                 map.layerVisibility = Object.assign({}, map.layerVisibility || {}, { route: v });
-                                try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                                try { map.render(); } catch (e) {}
                             } else {
                                 if (typeof map.toggleLayer === 'function') {
                                     map.toggleLayer(k, v);
@@ -2145,7 +1720,7 @@ async function initializeLayerIcons() {
                             }
                         } catch (e) {}
                     }
-                    try { if (map) map.renderOverlay(); } catch (e) { try { if (map) map.render(); } catch (e) {} }
+                    try { if (map) map.render(); } catch (e) {}
                 }
             } catch (e) {}
         });
@@ -2235,7 +1810,7 @@ async function initializeLayerIcons() {
                                         try { map.toggleLayer(k, true); } catch (e) { /* suppressed */ }
                                     } else {
                                         try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = true; } catch (e) {}
-                                        try { if (map && typeof map.renderOverlay === 'function') map.renderOverlay(); else if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+                                        try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
                                     }
                                     try {
                                         const row = document.querySelector('#layerList .layer-toggle[data-layer="' + k + '"]');
@@ -2396,7 +1971,7 @@ async function initializeLayerIcons() {
                 if (!map.layerVisibility) map.layerVisibility = {};
                 if (layerKey === 'route') {
                     map.layerVisibility.route = initialChecked;
-                    try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                    try { map.render(); } catch (e) {}
                 } else {
                     map.toggleLayer(layerKey, initialChecked);
                 }
@@ -2611,7 +2186,7 @@ async function init() {
         } catch (e) {}
     // Load persisted custom markers (if any) via MarkerUtils so data-layer stays pure
     if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.loadFromLocalStorage === 'function') {
-        try { MarkerUtils.loadFromLocalStorage(); } catch (e) { console.warn('Failed to load custom markers:', e); }
+        try { MarkerUtils.loadFromLocalStorage(); } catch (e) { NotificationUtils.showLoadError('Failed to load custom markers: ' + e.message); }
     }
     // Runtime metadata for the special `customMarkers` layer: deletable, not selectable
     try {
@@ -2641,10 +2216,10 @@ async function init() {
             map.setMarkers(LAYERS[primaryKey].markers);
             // log removed
         } else {
-            console.warn('No layer marker data available; no markers loaded.');
+            NotificationUtils.showLoadError('No layer marker data available; no markers loaded.');
         }
     } catch (e) {
-        console.warn('Failed to initialize primary markers:', e);
+        NotificationUtils.showLoadError('Failed to initialize primary markers: ' + e.message);
     }
     
     // Populate layer icons from LAYERS definitions
@@ -2657,7 +2232,7 @@ async function init() {
         const scheduleRender = () => {
             if (_renderScheduled) return;
             _renderScheduled = true;
-            requestAnimationFrame(() => { _renderScheduled = false; try { if (map) map.renderOverlay(); } catch (e) { try { if (map) map.render(); } catch (e) {} } });
+            requestAnimationFrame(() => { _renderScheduled = false; try { if (map) map.render(); } catch (e) {} });
         };
 
         const applyToggle = (checked) => {
@@ -2710,6 +2285,15 @@ async function init() {
     } catch (e) {}
     // Attempt to restore a previously saved route (if any)
     try { map.loadRouteFromStorage(); } catch (e) {}
+    // Load route looping preference independently (persisted separately from route data)
+    try {
+        if (typeof RouteUtils !== 'undefined' && typeof RouteUtils.loadRouteLoopingFlag === 'function') {
+            const loopFlag = RouteUtils.loadRouteLoopingFlag();
+            map.routeLooping = (loopFlag === 'enabled');
+            // Update UI after loading loop state
+            try { map.updateLoopUI(); } catch (e) {}
+        }
+    } catch (e) { /* default to false */ }
     // Attempt to restore saved map view (pan/zoom) when consent is present
     try {
         const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
@@ -2734,15 +2318,7 @@ async function init() {
                 const current = saveLabel.getAttribute('aria-pressed') === 'true';
                 const on = !current;
                 if (on) {
-                    const confirmMsg = 'Enable local storage? It stores the following on this device only:\n\n' +
-                        '• Map view (position & zoom)\n' +
-                        '• Layer visibility\n' +
-                        '• Tileset & grayscale setup\n' +
-                        '• Custom markers & routes\n' +
-                        '• Route direction\n' +
-                        '• Route looping\n\n' +
-                        'Tap OK to enable or Cancel to keep storage off.';
-                    if (!confirm(confirmMsg)) {
+                    if (!NotificationUtils.confirmStorageConsent()) {
                         return;
                     }
                 }
@@ -2778,15 +2354,7 @@ async function init() {
                     try { saveLabel.classList.toggle('active', true); } catch (e) {}
                     try { map.updateLayerCounts(); } catch (e) {}
                 } else {
-                    const confirmMsg = 'Disable local storage? This will permanently delete the following saved data from this device:\n\n' +
-                        '• Map view (position & zoom)\n' +
-                        '• Layer visibility\n' +
-                        '• Tileset & grayscale setup\n' +
-                        '• Custom markers & routes\n' +
-                        '• Route direction\n' +
-                        '• Route looping\n\n' +
-                        'Tap OK to delete saved data and continue, or Cancel to keep it.';
-                    if (!confirm(confirmMsg)) {
+                    if (!NotificationUtils.confirmClearData()) {
                         try { saveLabel.setAttribute('aria-pressed', 'true'); } catch (e) {}
                         try { saveLabel.classList.toggle('active', true); } catch (e) {}
                         try { if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') window._mp4Storage.setStorageConsent(true); else localStorage.setItem('mp4_storage_consent','1'); } catch (e) {}
@@ -3115,10 +2683,10 @@ async function init() {
             if (typeof MarkerUtils !== 'undefined') {
                 MarkerUtils.exportCustomMarkers();
             } else {
-                alert('Marker utilities not available.');
+                NotificationUtils.showMarkerError('Marker utilities not available.');
             }
         } catch (err) {
-            alert('Failed to export custom markers: ' + (err.message || String(err)));
+            NotificationUtils.showMarkerError('Failed to export custom markers: ' + (err.message || String(err)));
         }
     });
 
@@ -3186,7 +2754,7 @@ async function init() {
                         } else {
                             if (!map.layerVisibility) map.layerVisibility = {};
                             map.layerVisibility.customMarkers = true;
-                            try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                            try { map.render(); } catch (e) {}
                         }
                         // Update the sidebar row visual if present and disable toggling while editing
                         try {
@@ -3336,7 +2904,7 @@ async function init() {
                         } else {
                             if (!map.layerVisibility) map.layerVisibility = {};
                             map.layerVisibility.route = true;
-                            try { map.renderOverlay(); } catch (e) { try { map.render(); } catch (e) {} }
+                            try { map.render(); } catch (e) {}
                         }
                         // Update the sidebar row visual if present and disable toggling while editing
                         try {
@@ -3451,7 +3019,7 @@ async function init() {
                 const pct = Math.round(display * 100);
                 label.textContent = `${pct}%`;
                 try { saveHighlightMultiplierToStorage && saveHighlightMultiplierToStorage(v); } catch (e) {}
-                try { map.renderOverlay ? map.renderOverlay() : map.render(); } catch (e) {}
+                try { map.render(); } catch (e) {}
             });
             
             slider.addEventListener('change', (ev) => {
@@ -3523,7 +3091,7 @@ async function init() {
                     return { uid, x, y };
                 });
                 if (isLegacyMarkersFile) {
-                    alert(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                    NotificationUtils.showUpgradeNotification(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     // log removed
                 }
 
@@ -3544,7 +3112,7 @@ async function init() {
 
                 if (totalAfterImport > maxMarkers) {
                     const needToDelete = totalAfterImport - maxMarkers;
-                    alert(
+                    NotificationUtils.showImportError(
                         `Cannot import ${migratedMarkers.length} markers.\n\n` +
                         `You have ${currentMarkers.length} markers, import would add ${newMarkersCount} new ones.\n\n` +
                         `Total would be ${totalAfterImport}, maximum is ${maxMarkers}.\n\n` +
@@ -3588,12 +3156,12 @@ async function init() {
                 e.target.value = '';
             } catch (error) {
                 // error logging removed
-                alert('Failed to import markers: ' + (error.message || String(error)));
+                NotificationUtils.showMarkerError('Failed to import markers: ' + (error.message || String(error)));
                 e.target.value = '';
             }
         };
         reader.onerror = () => {
-            alert('Failed to read file');
+            NotificationUtils.showFileError('Failed to read file');
             e.target.value = '';
         };
         reader.readAsText(file);
@@ -3602,10 +3170,10 @@ async function init() {
     document.getElementById('clearCustom').addEventListener('click', () => {
         const markerCount = (LAYERS && LAYERS.customMarkers && Array.isArray(LAYERS.customMarkers.markers)) ? LAYERS.customMarkers.markers.length : 0;
         if (markerCount === 0) {
-            alert('No custom markers to clear.');
+            NotificationUtils.showInfo('No custom markers to clear.');
             return;
         }
-        if (confirm('Clear all custom markers? This cannot be undone.')) {
+        if (NotificationUtils.confirmDestructiveAction('Clear all custom markers? This cannot be undone.')) {
             if (typeof MarkerUtils !== 'undefined') {
                 MarkerUtils.clearCustomMarkers();
                 map.customMarkers = LAYERS.customMarkers.markers;
@@ -3625,6 +3193,13 @@ async function init() {
     if (computeImprovedBtn) {
         computeImprovedBtn.addEventListener('click', () => {
             beginRouteCompute();
+            
+            // Check for active drag operations and cancel them before computing
+            if (map.pointerHandler && 
+                (map._routeInsert || map._routeNodeCandidate || map._draggingMarker)) {
+                map.pointerHandler._cancelRouteDragOperations('TSP route computation');
+            }
+            
             // Build combined visible marker sources from LAYERS (skip virtual 'route')
             const sources = [];
             const layerEntries2 = Object.entries(LAYERS || {});
@@ -3639,12 +3214,12 @@ async function init() {
                 }
             }
             if (sources.length === 0) {
-                alert('No visible markers available to route.');
+                NotificationUtils.showRouteComputationError('No visible markers available to route.');
                 return;
             }
 
             if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSPAdvanced !== 'function') {
-                alert('Advanced TSP solver not available.');
+                NotificationUtils.showRouteComputationError('Advanced TSP solver not available.');
                 return;
             }
 
@@ -3737,11 +3312,11 @@ async function init() {
                         } catch (e) {}
                         // log removed
                     } else {
-                        alert('Advanced solver returned no route.');
+                        NotificationUtils.showRouteComputationError('Advanced solver returned no route.');
                     }
                 } catch (err) {
                     // error logging removed
-                    alert('Error computing improved route: ' + err.message);
+                    NotificationUtils.showRouteComputationError('Error computing improved route: ' + err.message);
                 } finally {
                     computeImprovedBtn.disabled = false;
                     computeImprovedBtn.textContent = oldText2;
@@ -3756,7 +3331,7 @@ async function init() {
         if (typeof RouteComputation !== 'undefined') {
             RouteComputation.expandRouteNearby(map, beginRouteCompute, endRouteCompute, LAYERS, MAP_SIZE);
         } else {
-            console.error('RouteComputation module not available');
+            NotificationUtils.showModuleError('RouteComputation module not available');
         }
     }
 
@@ -3873,10 +3448,10 @@ async function init() {
     if (clearRouteBtn) {
         clearRouteBtn.addEventListener('click', () => {
             if (!map.currentRoute || map.currentRoute.length === 0) {
-                alert('No route to clear.');
+                NotificationUtils.showInfo('No route to clear.');
                 return;
             }
-            if (confirm('Clear route? This cannot be undone.')) {
+            if (NotificationUtils.confirmDestructiveAction('Clear route? This cannot be undone.')) {
                 map.clearRoute();
                 // Exit route edit mode when route is cleared
                 try { map.editRouteMode = false; } catch (e) {}
@@ -3945,7 +3520,7 @@ async function init() {
             handle.classList.remove('pressed');
         });
     } else {
-        console.warn('Sidebar handle element not found; collapsing unavailable');
+        NotificationUtils.showLoadError('Sidebar handle element not found; collapsing unavailable');
     }
 
     // Start with the sidebar collapsed on page load
@@ -4093,7 +3668,7 @@ async function init() {
             await waitForInitialImage(4000);
             // Do one overlay render now that the initial image is available
             try {
-                if (map && typeof map.renderOverlay === 'function') map.renderOverlay();
+                if (map && typeof map.render === 'function') map.render();
                 // Give the browser a chance to paint and finish any decode work
                 await new Promise(res => requestAnimationFrame(() => setTimeout(res, 140)));
             } catch (e) {}

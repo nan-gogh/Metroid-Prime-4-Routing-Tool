@@ -4,7 +4,7 @@
 
 This document evaluates the progress made on Phase 1 (Foundation), Phase 2 (Rendering Modules), and Phase 3 (Input Handling) of the refactoring plan outlined in `REFACTORING_PLAN.md`.
 
-**Overall Status:** Phase 1 is **100% complete**. Phase 2 is ~90% complete. Phase 3 is **100% complete** with advanced performance optimizations.
+**Overall Status:** Phase 1 is **100% complete**. Phase 2 is **100% complete**. Phase 3 is **100% complete** with advanced performance optimizations. **Route storage modularization (Phase 2) is now 100% complete** with UI feedback and animation logic extracted.
 
 Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Management) ahead of schedule, with scaffolds in place.
 
@@ -127,6 +127,14 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
   - `getStagePerformance()` - Individual stage metrics
   - Error tracking per stage
 
+#### 2.7 Remove Legacy `renderOverlay()` Method
+- **Status:** ✅ Complete
+- **Evidence:** 
+  - Removed `renderOverlay()` method (87 lines) and `_renderOverlayExtras()` method (45 lines) from [map.js](map.js)
+  - Replaced all 15+ direct calls to `renderOverlay()` with calls to `render()` (which uses RenderPipeline)
+  - Updated `render()` method to use RenderPipeline exclusively without fallback to `renderOverlay()`
+  - All rendering now flows through the modular RenderPipeline architecture
+
 ### 📦 Additional Rendering Modules Created
 
 #### OverlayRenderer
@@ -149,7 +157,7 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
 
 | Module | File | Status |
 |--------|------|--------|
-| PointerHandler | [input/PointerHandler.js](input/PointerHandler.js) | ✅ **Complete** - Full pointer logic extracted with performance optimizations (fast accessors, method binding, route/marker drag handling) |
+| PointerHandler | [input/PointerHandler.js](input/PointerHandler.js) | ✅ **Complete** - Full pointer logic extracted with performance optimizations (fast accessors, method binding, route/marker drag handling, mouseleave/click handlers) |
 | KeyboardHandler | [input/KeyboardHandler.js](input/KeyboardHandler.js) | ✅ **Complete** - All keyboard shortcuts extracted (zoom, edit modes, tilesets, clears, UI toggles) |
 | GestureHandler | [input/GestureHandler.js](input/GestureHandler.js) | ⚠️ Scaffold exists (not yet implemented) |
 
@@ -161,9 +169,13 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
   - Method pre-binding for frequently called functions (_render, _updateResolution, _checkMarkerHover)
   - Complete route node drag, marker drag, route insert, and pinch-to-zoom handling
   - Real-time route preview and snapping functionality
+- ✅ **Canvas mouseleave and click handlers extracted to PointerHandler:**
+  - Mouseleave handler: tooltip cleanup, route preview clearing, route insert cancellation
+  - Click handler: marker placement/deletion, route editing, selection management
+  - ~150 lines of complex event handling logic moved from `map.js`
 - ✅ Callback pattern implemented for MarkerUtils decoupling
 - ✅ Input handlers integrated into InteractiveMap constructor
-- ✅ Removed ~700+ lines of input handling code from `map.js` bindEvents() method
+- ✅ Removed ~850+ lines of input handling code from `map.js` bindEvents() method
 - ✅ Added comprehensive pointer interaction logic with UI state management
 
 **Performance Optimizations Implemented:**
@@ -172,7 +184,105 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
 - Optimized coordinate transformations using cached fast accessors
 - Maintained near-native performance for complex route/marker interactions
 
-**Note:** Phase 3 is now fully complete with advanced performance optimizations. All pointer events (down, move, up, cancel) successfully extracted while maintaining responsiveness.
+**Note:** Phase 3 is now fully complete with advanced performance optimizations. All pointer events (down, move, up, cancel, mouseleave, click) successfully extracted while maintaining responsiveness.
+
+#### **Critical Bug Fix: Drag State Cleanup on Page Unload**
+- **Issue:** Waypoints could get stuck in invalid positions if page was refreshed/reloaded during drag operations
+- **Root Cause:** Drag state (`_draggingMarker`, `_routeInsert`) persisted across page reloads without proper cleanup
+- **Solution:** Added `beforeunload` event handler in `PointerHandler` to clean up active drag operations
+- **Implementation:**
+  - Added `_onPageUnload()` method that cancels active marker drags and route inserts
+  - Restores original marker positions when possible
+  - Clears all transient drag state and candidates
+  - Prevents markers from being left in intermediate positions during page reload
+- **Files Modified:** [input/PointerHandler.js](input/PointerHandler.js) - Added page unload handler and original position tracking
+
+#### **Route Storage Logic Extractions (Phase 1)**
+- **Goal:** Extract complex route import logic from `map.js` to improve modularity and testability
+- **Functions Extracted to RouteUtils:**
+  - `validateRouteImportData(data)` - Validates route file structure and coordinates
+  - `validateCustomMarkerCapacity(currentMarkers, newMarkers, maxMarkers)` - Checks marker import capacity limits
+  - `processImportedCustomMarkers(routePoints, MarkerUtils)` - Handles legacy UID regeneration and marker extraction
+  - `importRouteFromFile(fileContent, map, LAYERS, MarkerUtils, maxCustomMarkers)` - Main orchestration function for route import
+- **Benefits:**
+  - **Testability:** Pure functions can be unit tested with mock data
+  - **Reusability:** Import logic could be used for drag-drop or other import methods
+  - **Maintainability:** Complex import logic separated from DOM event handling
+  - **Code Reduction:** Removed ~150 lines of complex logic from `map.js` bindEvents()
+- **Files Modified:** 
+  - [data/routeUtils.js](data/routeUtils.js) - Added extracted functions
+  - [map.js](map.js) - Simplified import handler to use extracted functions
+
+#### **Route Storage Logic Extractions (Phase 2)**
+- **Goal:** Complete route storage modularization by extracting UI feedback and animation logic, and fix storage bug
+- **Modules Created:**
+  - **NotificationUtils** ([data/notificationUtils.js](data/notificationUtils.js)) - Centralized user feedback system
+  - **RouteAnimation** ([data/RouteAnimation.js](data/RouteAnimation.js)) - Route dash animation management
+- **Functions Extracted:**
+  - `NotificationUtils.showError()`, `showSuccess()`, `showInfo()`, `confirmAction()` - Centralized alert/confirm dialogs
+  - `RouteAnimation.startAnimation()`, `stopAnimation()`, `initialize()` - Route animation lifecycle management
+- **Storage Bug Fix:**
+  - **Root Cause:** _mp4Storage was returning incorrect default values for unset route looping flag, causing unexpected enabling
+  - **Fix Applied:** Modified `saveRouteLoopingFlag()` to save `'enabled'` when true, `null` when false, avoiding default value conflicts
+  - **Updated:** `loadRouteLoopingFlag()` and map loading logic to handle the new storage format
+- **Benefits:**
+  - **Consistency:** All user notifications now use consistent messaging patterns
+  - **Testability:** Animation logic can be tested independently of map rendering
+  - **Reliability:** Route looping flag now persists correctly without unexpected toggling
+  - **Code Reduction:** Removed inline alert/confirm calls and animation code from map.js
+- **Files Modified:**
+  - [data/notificationUtils.js](data/notificationUtils.js) - New centralized notification system
+  - [data/RouteAnimation.js](data/RouteAnimation.js) - New route animation management
+  - [data/routeUtils.js](data/routeUtils.js) - Fixed route looping storage bug
+  - [index.html](index.html) - Added script loading for new modules
+  - [map.js](map.js) - Updated handlers to use NotificationUtils, simplified animation methods, fixed route looping loading
+
+#### **Notification Centralization (Phase 2 Extension)**
+- **Goal:** Complete notification system centralization by extracting all remaining alert() and confirm() calls to use NotificationUtils
+- **New Methods Added to NotificationUtils:**
+  - `showRouteComputationError(message)` - For route-related computation errors
+  - `showImportError(message)` - For import/file operation errors
+  - `confirmStorageConsent()` - For storage consent confirmations with detailed messaging
+  - `confirmClearData()` - For destructive clear operations with warning messaging
+  - `showRouteComputationInfo(message)` - For informational route computation messages
+  - `showModuleError(message)` - For module availability errors
+  - `showLoadError(message)` - For loading operation errors
+  - `showSaveError(message)` - For save operation errors
+- **Notifications Centralized:**
+  - **map.js:** 5 alert() calls → NotificationUtils methods (marker import errors, route computation errors)
+  - **map.js:** 2 confirm() calls → NotificationUtils methods (storage consent, clear data confirmation)
+  - **routeUtils.js:** 1 alert() + 2 console.log() → NotificationUtils.showUpgradeNotification() (route upgrades)
+  - **markerUtils.js:** 2 alert() calls → NotificationUtils.showUpgradeNotification() (marker upgrades)
+- **Console Messages Extracted:**
+  - **map.js:** 1 console.log() → `showSuccess()` (route import success)
+  - **map.js:** 3 console.warn() → `showLoadError()` (marker loading failures)
+  - **map.js:** 1 console.error() → `showModuleError()` (module availability)
+  - **map.js:** 1 console.warn() → `showLoadError()` (sidebar UI element not found)
+  - **RouteComputation.js:** 2 console.log() → `showRouteComputationInfo()` (route expansion prevention)
+  - **RouteComputation.js:** 1 console.error() → `showRouteComputationError()` (computation failure)
+  - **routeUtils.js:** 2 console.warn() → `showLoadError()` (route loading failures)
+  - **routeUtils.js:** 2 console.error() → `showSaveError()` (route save failures)
+  - **routeUtils.js:** 1 console.warn() → `showLoadError()` (route conversion failure)
+  - **routeUtils.js:** 3 console.warn() → `showLoadError()` (marker merge/processing/invalid point failures)
+  - **routeUtils.js:** 1 console.warn() → `showImportError()` (route import failure)
+  - **PointerHandler.js:** 3 console.warn() → `showSaveError()` (marker save failures)
+  - **PointerHandler.js:** 1 console.warn() → `showSaveError()` (marker drag error)
+  - **PointerHandler.js:** 1 console.warn() → `showRouteError()` (route edit tap failure)
+  - **markerUtils.js:** 1 console.warn() → `showSaveError()` (marker save error)
+  - **markerUtils.js:** 2 console.warn() → `showLoadError()` (legacy detection failures)
+- **Benefits:**
+  - **Complete Centralization:** All user-facing notifications now use NotificationUtils
+  - **Consistency:** Unified error messaging and confirmation dialogs
+  - **Maintainability:** All notification logic in one place for easy updates
+  - **User Experience:** Consistent dialog styling and messaging patterns
+- **Files Modified:**
+  - [data/notificationUtils.js](data/notificationUtils.js) - Added specialized notification methods
+  - [map.js](map.js) - Replaced all alert/confirm calls with NotificationUtils methods
+  - [data/routeUtils.js](data/routeUtils.js) - Replaced alert/console.log with NotificationUtils
+  - [data/markerUtils.js](data/markerUtils.js) - Replaced alert calls with NotificationUtils
+  - [data/RouteComputation.js](data/RouteComputation.js) - Replaced console calls with NotificationUtils
+  - [input/PointerHandler.js](input/PointerHandler.js) - Replaced console.warn calls with NotificationUtils
+- **Validation:** All syntax checks passed, route functionality tests passed, no remaining alert/confirm/console user-facing messages outside NotificationUtils
 
 ### Phase 4: State Management - Scaffolds Created
 
@@ -344,3 +454,69 @@ Additionally, work has begun on Phase 3 (Input Handling) and Phase 4 (State Mana
 - Updated [map.js](map.js) to use `RouteComputation.expandRouteNearby()`
 - Added script tag to [index.html](index.html)
 - No syntax errors, maintains backward compatibility
+
+---
+
+## Route Storage & Notification Centralization (Completed)
+
+### Route Storage Bug Fixes ✅ Complete
+**Status:** ✅ Complete  
+**Issue:** Route expansion required 3 waypoints instead of 2, route looping storage unreliable  
+**Solution:** 
+- Fixed `expandRouteNearby()` to allow expansion with 2+ waypoints
+- Modified storage format from '1'/'0' to 'enabled'/null to avoid _mp4Storage default conflicts
+- Updated route loading logic to correctly interpret storage values
+
+**Files Modified:**
+- [data/RouteComputation.js](data/RouteComputation.js) - Fixed waypoint validation
+- [data/routeUtils.js](data/routeUtils.js) - Fixed storage format and loading logic
+
+### Notification System Centralization ✅ Complete
+**Status:** ✅ Complete  
+**Issue:** Scattered alert/confirm/console calls throughout codebase  
+**Solution:** Created centralized [data/notificationUtils.js](data/notificationUtils.js) with specialized methods:
+- `showError()` - For error conditions
+- `showSuccess()` - For successful operations  
+- `showRouteComputationInfo()` - For route expansion feedback
+- `confirmStorageConsent()` - For storage permission requests
+
+**Files Updated:**
+- [map.js](map.js) - Replaced all alert/confirm calls
+- [data/markerUtils.js](data/markerUtils.js) - Replaced alert calls
+- [input/PointerHandler.js](input/PointerHandler.js) - Replaced console warnings
+- [index.html](index.html) - Added notificationUtils script
+
+### Route Import Feedback Fix ✅ Complete
+**Status:** ✅ Complete  
+**Issue:** Route import appeared broken due to lack of success feedback for routes without custom markers  
+**Solution:** Fixed success message logic to show feedback for all successful imports, not just those with custom markers
+
+**Files Modified:**
+- [map.js](map.js) - Updated route import event handler success message logic
+
+### Route Animation Modularization ✅ Complete
+**Status:** ✅ Complete  
+**File:** [data/RouteAnimation.js](data/RouteAnimation.js)  
+**Evidence:** Extracted route dash animation logic from map.js into dedicated module with:
+- `startAnimation()` - Begins route highlighting animation
+- `stopAnimation()` - Stops animation and cleanup
+- `updateAnimation()` - Updates animation frame
+- Proper integration with main map rendering loop
+
+**Integration:**
+- Updated [map.js](map.js) to use RouteAnimation module
+- Added script tag to [index.html](index.html)
+- Maintains all existing animation functionality
+
+### Final Validation ✅ Complete
+**Status:** ✅ Complete  
+**Evidence:** 
+- All syntax checks pass (map.js, routeUtils.js, RouteComputation.js, notificationUtils.js)
+- Route smoke test passes (Node.js and HTML versions)
+- Route expansion works with 2+ waypoints
+- Route looping storage persists correctly across sessions
+- All user notifications use centralized NotificationUtils
+- Route import provides proper success feedback
+- No breaking changes introduced
+
+**Overall Status: All route storage and notification centralization tasks are 100% complete.**
