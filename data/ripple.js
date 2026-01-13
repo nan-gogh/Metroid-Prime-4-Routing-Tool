@@ -84,7 +84,9 @@
     function onPointerDown(ev) {
         try {
             _pointerState.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moved: false });
-        } catch (e) {}
+        } catch (e) {
+            if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'ripple: Failed to handle pointer down');
+        }
     }
 
     function onPointerMove(ev) {
@@ -96,7 +98,9 @@
             if ((dx*dx + dy*dy) > (MOVE_THRESHOLD * MOVE_THRESHOLD)) {
                 s.moved = true;
             }
-        } catch (e) {}
+        } catch (e) {
+            if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'ripple: Failed to handle pointer move');
+        }
     }
 
     function onPointerUp(ev) {
@@ -113,13 +117,15 @@
             createRippleAt(container, ev.clientX, ev.clientY);
             if (s) _pointerState.delete(ev.pointerId);
         } catch (e) {
-            // swallow
+            if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'ripple: Failed to create ripple on pointer up');
         }
     }
 
     // Clean up state on cancel
     function onPointerCancel(ev) {
-        try { _pointerState.delete(ev.pointerId); } catch (e) {}
+        try { _pointerState.delete(ev.pointerId); } catch (e) {
+            if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'ripple: Failed to clean up pointer state on cancel');
+        }
     }
 
     // Attach pointer listeners to track drags and avoid ripples for drag gestures

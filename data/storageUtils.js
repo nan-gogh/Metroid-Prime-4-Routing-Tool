@@ -54,9 +54,13 @@
   function clearSavedData(removeConsent = true) {
     try {
       for (const k of KNOWN_KEYS) {
-        try { localStorage.removeItem(k); } catch (e) {}
+        try { localStorage.removeItem(k); } catch (e) {
+          if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'storageUtils: Failed to remove item from localStorage');
+        }
       }
-      if (removeConsent) try { localStorage.removeItem('mp4_storage_consent'); } catch (e) {}
+      if (removeConsent) try { localStorage.removeItem('mp4_storage_consent'); } catch (e) {
+        if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'storageUtils: Failed to remove storage consent from localStorage');
+      }
       return true;
     } catch (e) { return false; }
   }

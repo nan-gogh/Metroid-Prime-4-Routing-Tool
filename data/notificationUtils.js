@@ -8,7 +8,11 @@ const NotificationUtils = {
             if (typeof message !== 'string') message = String(message);
             alert(`${title}: ${message}`);
         } catch (e) {
-            console.error('Failed to show error notification:', e);
+            if (typeof errorHandler !== 'undefined' && errorHandler) {
+                errorHandler.logError(e, 'NotificationUtils: Failed to show error notification');
+            } else {
+                console.error('Failed to show error notification:', e);
+            }
         }
     },
 
@@ -18,7 +22,11 @@ const NotificationUtils = {
             if (typeof message !== 'string') message = String(message);
             alert(`${title}: ${message}`);
         } catch (e) {
-            console.error('Failed to show success notification:', e);
+            if (typeof errorHandler !== 'undefined' && errorHandler) {
+                errorHandler.logError(e, 'NotificationUtils: Failed to show success notification');
+            } else {
+                console.error('Failed to show success notification:', e);
+            }
         }
     },
 
@@ -28,7 +36,11 @@ const NotificationUtils = {
             if (typeof message !== 'string') message = String(message);
             alert(`${title}: ${message}`);
         } catch (e) {
-            console.error('Failed to show info notification:', e);
+            if (typeof errorHandler !== 'undefined' && errorHandler) {
+                errorHandler.logError(e, 'NotificationUtils: Failed to show info notification');
+            } else {
+                console.error('Failed to show info notification:', e);
+            }
         }
     },
 
@@ -38,7 +50,11 @@ const NotificationUtils = {
             if (typeof message !== 'string') message = String(message);
             return confirm(`${title}: ${message}`);
         } catch (e) {
-            console.error('Failed to show confirmation dialog:', e);
+            if (typeof errorHandler !== 'undefined' && errorHandler) {
+                errorHandler.logError(e, 'NotificationUtils: Failed to show confirmation dialog');
+            } else {
+                console.error('Failed to show confirmation dialog:', e);
+            }
             return false;
         }
     },

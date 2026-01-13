@@ -1,0 +1,158 @@
+/**
+ * Centralized Error Handler for Metroid Prime 4 Routing Tool
+ *
+ * Provides consistent error logging and handling across the application.
+ * Replaces scattered empty catch blocks with meaningful error reporting.
+ */
+
+class ErrorHandler {
+    constructor(config = {}) {
+        this.config = {
+            enableDebugLogging: config.enableDebugLogging !== false,
+            enableConsoleErrors: config.enableConsoleErrors !== false,
+            enableNotifications: config.enableNotifications !== false,
+            logLevel: config.logLevel || 'debug', // 'debug', 'info', 'warn', 'error'
+            ...config
+        };
+    }
+
+    /**
+     * Log an error with context information
+     * @param {Error|string} error - The error object or message
+     * @param {string} context - Description of where the error occurred
+     * @param {Object} additionalData - Additional context data
+     */
+    logError(error, context = '', additionalData = {}) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : '';
+
+        const logData = {
+            timestamp: new Date().toISOString(),
+            context,
+            message: errorMessage,
+            stack: errorStack,
+            ...additionalData
+        };
+
+        // Console logging
+        if (this.config.enableConsoleErrors) {
+            console.error(`[${context}] ${errorMessage}`, logData);
+        }
+
+        // Debug logging for development
+        if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
+            console.debug('Error details:', logData);
+        }
+
+        // User notification (if available)
+        if (this.config.enableNotifications && typeof NotificationUtils !== 'undefined') {
+            try {
+                NotificationUtils.showError(`Error in ${context}: ${errorMessage}`);
+            } catch (notifyError) {
+                console.warn('Failed to show error notification:', notifyError);
+            }
+        }
+    }
+
+    /**
+     * Log a warning with context
+     * @param {string} message - Warning message
+     * @param {string} context - Description of where the warning occurred
+     * @param {Object} additionalData - Additional context data
+     */
+    logWarning(message, context = '', additionalData = {}) {
+        if (this.config.enableDebugLogging) {
+            console.warn(`[${context}] ${message}`, {
+                timestamp: new Date().toISOString(),
+                context,
+                ...additionalData
+            });
+        }
+    }
+
+    /**
+     * Log debug information
+     * @param {string} message - Debug message
+     * @param {string} context - Description of where the debug occurred
+     * @param {Object} additionalData - Additional context data
+     */
+    logDebug(message, context = '', additionalData = {}) {
+        if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
+            console.debug(`[${context}] ${message}`, {
+                timestamp: new Date().toISOString(),
+                context,
+                ...additionalData
+            });
+        }
+    }
+
+    /**
+     * Safe execution wrapper - executes a function and logs any errors
+     * @param {Function} fn - Function to execute safely
+     * @param {string} context - Context description for error logging
+     * @param {*} defaultValue - Value to return if function fails
+     * @returns {*} Result of function or defaultValue on error
+     */
+    safeExecute(fn, context = 'safeExecute', defaultValue = undefined) {
+        try {
+            return fn();
+        } catch (error) {
+            this.logError(error, context);
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Safe async execution wrapper
+     * @param {Function} asyncFn - Async function to execute safely
+     * @param {string} context - Context description for error logging
+     * @param {*} defaultValue - Value to return if function fails
+     * @returns {Promise<*>} Result of function or defaultValue on error
+     */
+    async safeExecuteAsync(asyncFn, context = 'safeExecuteAsync', defaultValue = undefined) {
+        try {
+            return await asyncFn();
+        } catch (error) {
+            this.logError(error, context);
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Create a safe method wrapper for object methods
+     * @param {Object} obj - Object containing the method
+     * @param {string} methodName - Name of the method to wrap
+     * @param {string} context - Context description
+     * @returns {Function} Wrapped method that logs errors
+     */
+    createSafeMethod(obj, methodName, context = '') {
+        const originalMethod = obj[methodName];
+        if (typeof originalMethod !== 'function') {
+            this.logWarning(`Method ${methodName} not found on object`, context);
+            return () => {};
+        }
+
+        const safeContext = context || `${obj.constructor.name}.${methodName}`;
+
+        return (...args) => {
+            try {
+                return originalMethod.apply(obj, args);
+            } catch (error) {
+                this.logError(error, safeContext, { args });
+            }
+        };
+    }
+}
+
+// Global error handler instance
+const errorHandler = new ErrorHandler({
+    enableDebugLogging: true,
+    enableConsoleErrors: true,
+    enableNotifications: false, // Disable notifications by default to avoid spam
+    logLevel: 'debug'
+});
+
+// Export for use in modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ErrorHandler, errorHandler };
+}

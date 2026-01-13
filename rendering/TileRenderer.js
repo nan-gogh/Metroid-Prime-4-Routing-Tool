@@ -87,7 +87,7 @@
     preloadAllMapImages() {
       const initial = (typeof this.map.getNeededResolution === 'function') ? this.map.getNeededResolution() : 0;
       const toPreload = [initial];
-      if (!this.map._lowSpec && (initial + 1 < RESOLUTIONS.length)) toPreload.push(initial + 1);
+      if (!this.map._lowSpec && (initial + 1 < this.config.TILE_RESOLUTIONS.length)) toPreload.push(initial + 1);
 
       for (let p = 0; p < toPreload.length; p++) {
         const i = toPreload[p];
@@ -115,7 +115,7 @@
      * @returns {Promise<void>} Resolves when the image is loaded or fails
      */
     async loadImage(resolutionIndex) {
-      const size = RESOLUTIONS[resolutionIndex];
+      const size = this.config.TILE_RESOLUTIONS[resolutionIndex];
       if (this.map.images[resolutionIndex]) {
         this.map.currentImage = this.map.images[resolutionIndex];
         this.map.currentResolution = resolutionIndex;
@@ -284,20 +284,20 @@
           reject(new Error('bitmap-decode-timeout'));
         }, ms || 0);
 
-        Promise.resolve()
-          .then(() => fn())
-          .then((v) => {
+        setTimeout(() => {
+          try {
+            const res = fn();
             if (done) return;
             done = true;
             clearTimeout(timer);
-            resolve(v);
-          })
-          .catch((err) => {
+            resolve(res);
+          } catch (e) {
             if (done) return;
             done = true;
             clearTimeout(timer);
-            reject(err);
-          });
+            reject(e);
+          }
+        }, 0);
       });
     }
 
@@ -326,10 +326,10 @@
     preloadResolution(resolutionIndex) {
       try {
         const i = Number(resolutionIndex);
-        if (isNaN(i) || i < 0 || i >= RESOLUTIONS.length) return;
+        if (isNaN(i) || i < 0 || i >= this.config.TILE_RESOLUTIONS.length) return;
         const gen = this.map._tilesetGeneration;
         if (this.map.images[i]) return;
-        const size = RESOLUTIONS[i];
+        const size = this.config.TILE_RESOLUTIONS[i];
         const folder = this.map.getTilesetFolder();
         const href = `tiles/${folder}/${size}.avif`;
 
@@ -381,13 +381,13 @@
      */
     determineBestResolution() {
       try {
-        const displayedCss = MAP_SIZE * (this.map.zoom || 0);
+        const displayedCss = this.config.MAP_SIZE * (this.map.zoom || 0);
         const dpr = window.devicePixelRatio || 1;
         const displayedPx = displayedCss * dpr;
-        for (let i = 0; i < RESOLUTIONS.length; i++) {
-          if (RESOLUTIONS[i] >= displayedPx) return i;
+        for (let i = 0; i < this.config.TILE_RESOLUTIONS.length; i++) {
+          if (this.config.TILE_RESOLUTIONS[i] >= displayedPx) return i;
         }
-        return RESOLUTIONS.length - 1;
+        return this.config.TILE_RESOLUTIONS.length - 1;
       } catch (e) { return 0; }
     }
   }
