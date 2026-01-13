@@ -12,8 +12,7 @@ class MarkerManager {
         this.onChanged = null;
         this.onCleanupRouteReferences = null;
 
-        // Load persisted markers on initialization
-        this.loadFromStorage();
+        // Note: loadFromStorage() is called explicitly after consent is obtained
     }
 
     // Set callback for when markers change
@@ -37,39 +36,31 @@ class MarkerManager {
         }
     }
 
+    // Load markers from storage (alias for loadFromStorage for API consistency)
+    loadMarkers() {
+        return this.loadFromStorage();
+    }
+
     // Load markers from storage
     loadFromStorage() {
         try {
-            // Use consent-gated storage if available, fallback to interface
-            let markers = [];
-            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                markers = window._mp4Storage.loadSetting('mp4_customMarkers') || [];
-            } else if (this.storage && typeof this.storage.loadMarkers === 'function') {
-                markers = this.storage.loadMarkers() || [];
-            }
-            
-            this.markers = markers;
-            // Synchronize with LAYERS for backward compatibility
-            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-                LAYERS.customMarkers.markers = this.markers;
+            const markers = this.storage.loadMarkers();
+            if (Array.isArray(markers)) {
+                // Validate and filter markers
+                this.markers = markers.filter(marker => MarkerUtilsCore.validateMarker(marker));
+                return true;
             }
         } catch (e) {
             console.warn('Failed to load markers from storage:', e);
-            this.markers = [];
-            // Synchronize with LAYERS even on failure
-            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-                LAYERS.customMarkers.markers = this.markers;
-            }
         }
+        return false;
     }
 
     // Save markers to storage
     saveToStorage() {
         try {
-            // Use consent-gated storage if available, fallback to interface
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_customMarkers', this.markers);
-            } else if (this.storage && typeof this.storage.saveMarkers === 'function') {
+            // Use injected storage interface
+            if (this.storage && typeof this.storage.saveMarkers === 'function') {
                 this.storage.saveMarkers(this.markers);
             }
         } catch (e) {
@@ -110,10 +101,6 @@ class MarkerManager {
         this.markers.push(marker);
 
         this.saveToStorage();
-        // Synchronize with LAYERS for backward compatibility
-        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-            LAYERS.customMarkers.markers = this.markers;
-        }
         this._notifyChanged();
 
         return marker;
@@ -136,10 +123,6 @@ class MarkerManager {
         }
 
         this.saveToStorage();
-        // Synchronize with LAYERS for backward compatibility
-        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-            LAYERS.customMarkers.markers = this.markers;
-        }
         this._notifyChanged();
 
         return true;
@@ -154,10 +137,6 @@ class MarkerManager {
     clearMarkers() {
         this.markers = [];
         this.saveToStorage();
-        // Synchronize with LAYERS for backward compatibility
-        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-            LAYERS.customMarkers.markers = this.markers;
-        }
         this._notifyChanged();
     }
 
@@ -174,6 +153,20 @@ class MarkerManager {
     // Get all markers
     getAllMarkers() {
         return [...this.markers]; // Return copy to prevent external modification
+    }
+
+    // Set all markers (replaces existing markers)
+    setMarkers(markers) {
+        if (!Array.isArray(markers)) {
+            throw new Error('Markers must be an array');
+        }
+        
+        // Validate all markers
+        const validMarkers = markers.filter(marker => MarkerUtilsCore.validateMarker(marker));
+        
+        this.markers = validMarkers;
+        this.saveToStorage();
+        this._notifyChanged();
     }
 
     // Check if marker exists by UID (alias for markerExists)
@@ -256,10 +249,6 @@ class MarkerManager {
 
                     // Persist to storage and notify
                     this.saveToStorage();
-                    // Synchronize with LAYERS for backward compatibility
-                    if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-                        LAYERS.customMarkers.markers = this.markers;
-                    }
                     this._notifyChanged();
 
                     resolve(imported);
@@ -292,10 +281,6 @@ class MarkerManager {
         // Only save and notify if we actually added markers
         if (addedCount > 0) {
             this.saveToStorage();
-            // Synchronize with LAYERS for backward compatibility
-            if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-                LAYERS.customMarkers.markers = this.markers;
-            }
             this._notifyChanged();
         }
 

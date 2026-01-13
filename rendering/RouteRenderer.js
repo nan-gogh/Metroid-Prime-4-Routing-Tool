@@ -10,12 +10,18 @@
   class RouteRenderer {
     /**
      * Creates a new RouteRenderer instance.
-     * @param {InteractiveMap} map - The parent map instance
+     * @param {Object} mapState - The map state manager
+     * @param {Object} layerState - The layer state manager
+     * @param {Object} routeState - The route state manager
      * @param {Object} config - Configuration object from MP4Config
+     * @param {string} routeColor - Route color (defaults to LAYERS.route.color)
      */
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, layerState, routeState, config, routeColor) {
+      this.mapState = mapState;
+      this.layerState = layerState;
+      this.routeState = routeState;
       this.config = config || (global.MP4Config || {});
+      this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
       this._lastRenderTime = 0;
       this._renderCount = 0;
       this._cachedPath = null;
@@ -42,27 +48,24 @@
 
     // Edge-case handling: validate route data before rendering
     _validateRouteData() {
-      const map = this.map;
-      if (!map) return false;
-
       // Check for empty or invalid route
-      if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length === 0) {
+      if (!this.routeState.currentRoute || !Array.isArray(this.routeState.currentRoute) || this.routeState.currentRoute.length === 0) {
         return false;
       }
 
       // Check route visibility
-      if (!map.layerVisibility || !map.layerVisibility.route) {
+      if (!this.layerState.isLayerVisible('route')) {
         return false;
       }
 
       // Check route sources exist
-      if (!map._routeSources || !Array.isArray(map._routeSources)) {
+      if (!this.map._routeSources || !Array.isArray(this.map._routeSources)) {
         return false;
       }
 
       // Validate route indices are within bounds
-      const maxIndex = map._routeSources.length - 1;
-      for (const idx of map.currentRoute) {
+      const maxIndex = this.map._routeSources.length - 1;
+      for (const idx of this.routeState.currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
           console.warn('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
           return false;
@@ -74,14 +77,13 @@
 
     // Micro-optimization: Cache path computation when route hasn't changed
     _computePathData() {
-      const map = this.map;
       // Include marker positions in cache key to detect when waypoints are dragged
-      const markerPositions = map.currentRoute.map(idx => {
-        const src = map._routeSources[idx];
+      const markerPositions = this.routeState.currentRoute.map(idx => {
+        const src = this.map._routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const routeKey = JSON.stringify(map.currentRoute) + '|' + map.routeLooping + '|' + map.zoom + '|' + map.panX + '|' + map.panY + '|' + markerPositions;
+      const routeKey = JSON.stringify(this.routeState.currentRoute) + '|' + this.routeState.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._cachedPath && this._pathCacheValid && this._cachedPath.key === routeKey) {
         return this._cachedPath.data;
@@ -92,10 +94,10 @@
         valid: true
       };
 
-      const n = map.currentRoute.length;
+      const n = this.routeState.currentRoute.length;
       for (let i = 0; i < n; i++) {
-        const idx = map.currentRoute[i];
-        const src = map._routeSources[idx];
+        const idx = this.routeState.currentRoute[i];
+        const src = this.map._routeSources[idx];
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
@@ -105,15 +107,15 @@
         }
 
         const MAP_SIZE = (this.config && this.config.MAP_SIZE) ? this.config.MAP_SIZE : (typeof window !== 'undefined' && window.MAP_SIZE) ? window.MAP_SIZE : 8192;
-        const x = m.x * MAP_SIZE * map.zoom + map.panX;
-        const y = m.y * MAP_SIZE * map.zoom + map.panY;
+        const x = m.x * MAP_SIZE * this.mapState.zoom + this.mapState.panX;
+        const y = m.y * MAP_SIZE * this.mapState.zoom + this.mapState.panY;
 
         pathData.points.push({ x, y });
       }
 
       // Handle route looping: close the route by connecting the last waypoint back to the first
       // Only when BOTH conditions are met: route looping is enabled AND route has at least 3 waypoints
-      if (map.routeLooping && pathData.points.length >= 3) {
+      if (this.routeState.routeLooping && pathData.points.length >= 3) {
         pathData.points.push({ ...pathData.points[0] });
       }
 
@@ -128,14 +130,13 @@
 
     // Micro-optimization: Cache glow path separately
     _computeGlowPathData() {
-      const map = this.map;
       // Include marker positions in cache key to detect when waypoints are dragged
-      const markerPositions = map.currentRoute.map(idx => {
-        const src = map._routeSources[idx];
+      const markerPositions = this.routeState.currentRoute.map(idx => {
+        const src = this.map._routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const glowKey = JSON.stringify(map.currentRoute) + '|' + map.routeLooping + '|glow|' + map.zoom + '|' + map.panX + '|' + map.panY + '|' + markerPositions;
+      const glowKey = JSON.stringify(this.routeState.currentRoute) + '|' + this.routeState.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._glowCache && this._glowCacheValid && this._glowCache.key === glowKey) {
         return this._glowCache.data;
@@ -164,8 +165,7 @@
           return;
         }
 
-        const map = this.map;
-        const ctx = map.ctx;
+        const ctx = this.map.ctx;
         const pathData = this._computePathData();
 
         if (!pathData.valid || pathData.points.length < 2) {
@@ -214,7 +214,7 @@
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
-      const routeHex = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : null;
+      const routeHex = this.routeColor;
       if (routeHex) {
         ctx.strokeStyle = this._hexToRgba(routeHex, 1);
       }
@@ -240,7 +240,7 @@
 
       try {
         const glowAlpha = 0.85;
-        const routeHex = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : null;
+        const routeHex = this.routeColor;
         const glowColor = routeHex ? this._hexToRgba(routeHex, glowAlpha) : 'rgba(34,211,238,0.85)';
 
         ctx.save();
@@ -290,7 +290,7 @@
 
     _renderNodes(ctx, pathData) {
       const map = this.map;
-      const routeHex = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : null;
+      const routeHex = this.routeColor;
       const nodeFill = routeHex ? this._hexToRgba(routeHex, 0.95) : null;
 
       if (nodeFill) {
@@ -316,7 +316,7 @@
       const map = this.map;
       ctx.save();
 
-      const routeHex = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : null;
+      const routeHex = this.routeColor;
       const nodeFill = routeHex ? this._hexToRgba(routeHex, 0.95) : null;
 
       if (nodeFill) {

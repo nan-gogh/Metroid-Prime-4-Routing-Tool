@@ -189,31 +189,6 @@ const MarkerUtils = {
     // Unified marker size calculator
     computeMarkerSize(opts) {
         return MarkerUtilsCore.computeMarkerSize(opts);
-    },
-
-    // ---------- Deprecated methods (kept for compatibility) ----------
-
-    // Save to localStorage - DEPRECATED: Use manager's saveToStorage instead
-    saveToLocalStorage() {
-        console.warn('MarkerUtils.saveToLocalStorage() is deprecated. Use MarkerManager.saveToStorage() instead.');
-        return this.getManager().saveToStorage();
-    },
-
-    // Load from localStorage - DEPRECATED: Use manager's loadMarkers instead
-    loadFromLocalStorage() {
-        console.warn('MarkerUtils.loadFromLocalStorage() is deprecated. Use MarkerManager.loadMarkers() instead.');
-        return this.getManager().loadMarkers();
-    },
-
-    // Merge custom markers - DEPRECATED: Use manager's mergeMarkers instead
-    mergeCustomMarkers(markersArray) {
-        console.warn('MarkerUtils.mergeCustomMarkers() is deprecated. Use MarkerManager.mergeMarkers() instead.');
-        return this.getManager().mergeMarkers(markersArray);
-    },
-
-    // Clean up route references - DEPRECATED: Handled by manager callbacks
-    cleanupRouteReferences(deletedMarkerUid) {
-        console.debug('cleanupRouteReferences is deprecated - using manager callbacks instead');
     }
 };
 

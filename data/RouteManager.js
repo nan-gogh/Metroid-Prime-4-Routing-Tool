@@ -2,7 +2,8 @@
 // Handles all route operations without global state dependencies
 
 class RouteManager {
-    constructor(storage, notifications) {
+    constructor(markerManager, storage, notifications) {
+        this.markerManager = markerManager;
         this.storage = storage;
         this.notifications = notifications;
 
@@ -13,8 +14,7 @@ class RouteManager {
         this.routeLooping = false;
         this.onRouteChanged = null;
 
-        // Load persisted route on initialization
-        this.loadFromStorage();
+        // Note: loadFromStorage() is called explicitly after consent is obtained
     }
 
     // Set callback for when route changes
@@ -110,6 +110,16 @@ class RouteManager {
         return RouteUtilsCore.computeRouteLength(this.currentRoute, this.routeSources, mapSize);
     }
 
+    // Compute normalized route length (divided by mapSize for 0-1 range)
+    computeRouteLengthNormalized(mapSize) {
+        return RouteUtilsCore.computeRouteLengthNormalized(this.routeSources, mapSize);
+    }
+
+    // Find position of marker in current route
+    findRoutePositionOfMarker(markerUid) {
+        return RouteUtilsCore.findRoutePositionOfMarker(markerUid, this.currentRoute, this.routeSources);
+    }
+
     // Find route segment at screen position
     findRouteSegmentAt(screenX, screenY, viewState, mapSize, threshold = 10) {
         return RouteUtilsCore.findRouteSegmentAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
@@ -136,13 +146,13 @@ class RouteManager {
     }
 
     // Import route from file
-    importRoute(file, layers) {
+    importRoute(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    this._processImportedRoute(data, layers);
+                    this._processImportedRoute(data);
                     this.notifications.showSuccess('Route imported successfully');
                     resolve(true);
                 } catch (err) {
@@ -159,10 +169,10 @@ class RouteManager {
     }
 
     // Import route from content string (for backward compatibility)
-    importRouteFromContent(content, layers) {
+    importRouteFromContent(content) {
         try {
             const data = JSON.parse(content);
-            this._processImportedRoute(data, layers);
+            this._processImportedRoute(data);
             this.notifications.showSuccess('Route imported successfully');
             return true;
         } catch (err) {
@@ -172,7 +182,7 @@ class RouteManager {
     }
 
     // Process imported route data
-    _processImportedRoute(data, layers) {
+    _processImportedRoute(data) {
         if (!data.points || !Array.isArray(data.points)) {
             throw new Error('Invalid route file format');
         }
@@ -182,7 +192,7 @@ class RouteManager {
 
         for (let i = 0; i < data.points.length; i++) {
             const point = data.points[i];
-            const marker = this._findMarkerForPoint(point, layers);
+            const marker = this._findMarkerForPoint(point);
 
             if (marker) {
                 routeSources.push({ marker });
@@ -200,28 +210,20 @@ class RouteManager {
     }
 
     // Find marker for imported route point
-    _findMarkerForPoint(point, layers) {
-        // Try to find by UID first
-        if (point.uid) {
-            for (const layerKey in layers) {
-                const layer = layers[layerKey];
-                if (layer.markers) {
-                    const marker = layer.markers.find(m => m.uid === point.uid);
-                    if (marker) return marker;
-                }
-            }
+    _findMarkerForPoint(point) {
+        // Try to find by UID first in markerManager
+        if (point.uid && this.markerManager) {
+            const marker = this.markerManager.markers.find(m => m.uid === point.uid);
+            if (marker) return marker;
         }
 
         // Fall back to coordinate matching
-        const targetHash = RouteUtilsCore.getCoordinateHash(point.x, point.y);
-        for (const layerKey in layers) {
-            const layer = layers[layerKey];
-            if (layer.markers) {
-                const marker = layer.markers.find(m =>
-                    RouteUtilsCore.markerMatchesCoordinates(m, targetHash)
-                );
-                if (marker) return marker;
-            }
+        if (this.markerManager) {
+            const targetHash = RouteUtilsCore.getCoordinateHash(point.x, point.y);
+            const marker = this.markerManager.markers.find(m =>
+                RouteUtilsCore.markerMatchesCoordinates(m, targetHash)
+            );
+            if (marker) return marker;
         }
 
         return null;

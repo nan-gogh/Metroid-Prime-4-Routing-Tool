@@ -5,14 +5,20 @@
   class HeatmapRenderer {
     /**
      * Creates a new HeatmapRenderer instance for rendering green crystal density heatmaps.
-     * @param {Object} map - The map instance that owns this renderer
+     * @param {Object} mapState - The map state manager
      * @param {Object} config - Configuration object (defaults to global MP4Config)
+     * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
+     * @param {Array} greenCrystalLayers - Array of green crystal layer keys (defaults to GREEN_CRYSTAL_LAYERS)
      */
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, config, layers, greenCrystalLayers) {
+      this.mapState = mapState;
       this.config = config || (global.MP4Config || {});
-      this.canvas = map.canvasHeatmap || null;
-      this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+      this.layers = layers || (global.LAYERS || {});
+      this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
+      // Keep map reference for canvas access during transition
+      this.map = null;
+      this.canvas = null;
+      this.ctx = null;
     }
 
     /**
@@ -89,11 +95,10 @@
         const buckets = new Array(cols * rows);
         for (let i = 0; i < buckets.length; i++) buckets[i] = [];
         try {
-          if (typeof LAYERS !== 'undefined') {
-            const greenKeys = GREEN_CRYSTAL_LAYERS;
-            greenKeys.forEach(k => {
-              const layer = LAYERS[k];
-              if (layer && Array.isArray(layer.markers)) {
+          const greenKeys = this.greenCrystalLayers;
+          greenKeys.forEach(k => {
+            const layer = this.layers[k];
+            if (layer && Array.isArray(layer.markers)) {
                 layer.markers.forEach(m => {
                   const mx = Number(m.x); const my = Number(m.y);
                   if (!isFinite(mx) || !isFinite(my)) return;
@@ -103,7 +108,6 @@
                 });
               }
             });
-          }
         } catch (e) { console.debug('HeatmapRenderer._renderNow: failed to build buckets', e); }
 
         // Compute counts and draw soft radial blobs per marker into offscreen
@@ -131,11 +135,11 @@
 
           for (let m of markers) {
             try {
-              const screenX = m.mx * MAP_SIZE * this.map.zoom + this.map.panX;
-              const screenY = m.my * MAP_SIZE * this.map.zoom + this.map.panY;
+              const screenX = m.mx * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
+              const screenY = m.my * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
               // offscreen coords use CSS px scaled by DPR, but we drew scaled so use CSS coords
               if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
-              const radius = Math.max(8, Math.round((MAP_SIZE / 8) * this.map.zoom * 0.45));
+              const radius = Math.max(8, Math.round(((this.config.MAP_SIZE || 8192) / 8) * this.mapState.zoom * 0.45));
               const cx = Math.round(screenX);
               const cy = Math.round(screenY);
               const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);

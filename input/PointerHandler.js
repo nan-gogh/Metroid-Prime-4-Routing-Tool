@@ -8,7 +8,13 @@
       this.config = config || (global.MP4Config || {});
       this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
       this.bound = false;
-      
+
+      // Get state managers from map
+      this.mapState = map.mapState;
+      this.selectionState = map.selectionState;
+      this.routeState = map.routeState;
+      this.layerState = map.layerState;
+
       // Performance optimization: Create fast property accessors
       this._createFastAccessors();
       
@@ -26,17 +32,17 @@
       try {
         // Fast property accessors for hot path (avoids this.map.property lookup)
         Object.defineProperties(this, {
-          panX: { get: () => this.map.panX, set: (v) => this.map.panX = v },
-          panY: { get: () => this.map.panY, set: (v) => this.map.panY = v },
-          zoom: { get: () => this.map.zoom, set: (v) => this.map.zoom = v },
+          panX: { get: () => this.mapState.panX, set: (v) => this.mapState.panX = v },
+          panY: { get: () => this.mapState.panY, set: (v) => this.mapState.panY = v },
+          zoom: { get: () => this.mapState.zoom, set: (v) => this.mapState.zoom = v },
           canvas: { get: () => this.map.canvas },
-          currentRoute: { get: () => this.map.currentRoute },
-          _routeSources: { get: () => this.map._routeSources },
-          editRouteMode: { get: () => this.map.editRouteMode },
-          editMarkersMode: { get: () => this.map.editMarkersMode },
-          _routeInsert: { get: () => this.map._routeInsert, set: (v) => this.map._routeInsert = v },
+          currentRoute: { get: () => this.routeState.currentRoute },
+          _routeSources: { get: () => this.routeState._routeSources },
+          editRouteMode: { get: () => this.selectionState.editRouteMode },
+          editMarkersMode: { get: () => this.selectionState.editMarkersMode },
+          _routeInsert: { get: () => this.routeState._routeInsert, set: (v) => this.routeState._routeInsert = v },
           _draggingMarker: { get: () => this.map._draggingMarker, set: (v) => this.map._draggingMarker = v },
-          _routePreview: { get: () => this.map._routePreview, set: (v) => this.map._routePreview = v }
+          _routePreview: { get: () => this.routeState._routePreview, set: (v) => this.routeState._routePreview = v }
         });
 
         // Pre-bind frequently called methods (eliminates lookup overhead)
@@ -45,7 +51,7 @@
         this._checkMarkerHover = this.map.checkMarkerHover.bind(this.map);
         this._findRouteSegmentAt = this.map.findRouteSegmentAt.bind(this.map);
         this._setRoute = this.map.setRoute.bind(this.map);
-        this._computeRouteLengthNormalized = (sources) => RouteUtils.computeRouteLengthNormalized(sources, this.config.MAP_SIZE || 8192);
+        this._computeRouteLengthNormalized = (sources) => this.map.routeManager ? this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
         this._saveViewToStorage = this.map.saveViewToStorage.bind(this.map);
         
         // Marker utilities
@@ -111,8 +117,8 @@
         
         // Use a larger zoom step for wheel to match programmatic zoomIn/zoomOut (1.3x)
         const zoomFactor = ev.deltaY > 0 ? (1 / 1.3) : 1.3;
-        const newZoom = Math.max(this.map.minZoom || (this.config.ZOOM && this.config.ZOOM.DEFAULT_MIN) || 0.005, 
-                                Math.min((this.config.ZOOM && this.config.ZOOM.MAX) || 100, this.zoom * zoomFactor));
+        const newZoom = Math.max(this.mapState.minZoom,
+                                Math.min(this.mapState.maxZoom, this.zoom * zoomFactor));
         
         // Zoom towards mouse position
         const worldX = (mouseX - this.panX) / this.zoom;
@@ -448,8 +454,8 @@
             console.log(`Marker ${this._draggingMarker.uid} moved from (${oldX}, ${oldY}) to (${nx}, ${ny})`);
             
             // Check if this marker is part of the current route and update route sources
-            if (this.currentRoute && this._routeSources && typeof RouteUtils !== 'undefined') {
-              const routePos = RouteUtils.findRoutePositionOfMarker(this._draggingMarker.uid, this.currentRoute, this._routeSources);
+            if (this.currentRoute && this._routeSources && this.map.routeManager) {
+              const routePos = this.map.routeManager.findRoutePositionOfMarker(this._draggingMarker.uid);
               if (routePos >= 0) {
                 const srcIdx = this.currentRoute[routePos];
                 if (this._routeSources[srcIdx] && this._routeSources[srcIdx].marker) {
@@ -458,7 +464,7 @@
                   this._routeSources[srcIdx].marker.y = ny;
                   
                   // Recalculate route length
-                  let newLengthNormalized = RouteUtils.computeRouteLengthNormalized(this._routeSources, this.config.MAP_SIZE || 8192);
+                  let newLengthNormalized = this.map.routeManager ? this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
                   
                   // Adjust for looping if enabled
                   if (this.map.routeLooping && this.currentRoute.length >= 3) {
@@ -634,15 +640,12 @@
       if (this._draggingMarker && ev.pointerId === this._draggingMarker.pointerId) {
         console.log('Drag ended for marker:', this._draggingMarker.uid);
         try { 
-          if (typeof global.MarkerUtils !== 'undefined' && global.MarkerUtils.saveToLocalStorage) {
-            console.log('Calling MarkerUtils.saveToLocalStorage');
-            const saveResult = global.MarkerUtils.saveToLocalStorage();
-            console.log('saveToLocalStorage result:', saveResult);
-            if (!saveResult) {
-              // NotificationUtils.showSaveError('Failed to save custom marker position after drag');
-            }
+          if (this.map.markerManager) {
+            console.log('Calling markerManager.saveToStorage');
+            this.map.markerManager.saveToStorage();
+            console.log('markerManager.saveToStorage completed');
           } else {
-            NotificationUtils.showSaveError('MarkerUtils.saveToLocalStorage not available');
+            NotificationUtils.showSaveError('MarkerManager not available');
           }
         } catch (e) {
           NotificationUtils.showSaveError('Error saving custom marker position: ' + e.message);
@@ -735,7 +738,7 @@
           if (this._routeInsert) {
             const prev = this._routeInsert.prevSources || [];
             const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
-            const len = RouteUtils.computeRouteLengthNormalized(prev, this.config.MAP_SIZE || 8192);
+            const len = this.map.routeManager ? this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
             this._setRoute(prevIdx, len, prev);
             try { this.map.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) {}
             this._routeInsert = null;
@@ -839,8 +842,8 @@
             // In edit mode: allow deletion (custom markers are editable regardless of flags)
             const isCustom = (layerKey === 'customMarkers');
             if (isDeletable || isCustom) {
-              if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.deleteCustomMarker === 'function') {
-                MarkerUtils.deleteCustomMarker(hit.marker.uid);
+              if (this.map.markerManager) {
+                this.map.markerManager.removeMarker(hit.marker.uid);
                 this._checkMarkerHover(localX, localY);
               }
             }
@@ -896,12 +899,13 @@
             if (this.editMarkersMode) {
               // Check marker limit before adding
               const maxMarkers = this.map.layerConfig && this.map.layerConfig.customMarkers && this.map.layerConfig.customMarkers.maxMarkers || 50;
-              if (LAYERS.customMarkers.markers.length >= maxMarkers) {
+              const currentMarkerCount = this.map.markerManager ? this.map.markerManager.getCount() : 0;
+              if (currentMarkerCount >= maxMarkers) {
                 return; // Silently ignore - could show a message but click handler shouldn't alert
               }
-              if (typeof MarkerUtils !== 'undefined') {
-                MarkerUtils.addCustomMarker(worldX, worldY);
-                // MarkerUtils updates LAYERS and triggers map updates; ensure hover state refresh
+              if (this.map.markerManager) {
+                this.map.markerManager.addMarker(worldX, worldY);
+                // markerManager updates markers and triggers map updates; ensure hover state refresh
                 this._checkMarkerHover(localX, localY);
               }
             }
@@ -924,7 +928,7 @@
           if (this._routeInsert.prevSources && this._routeInsert.prevIndices) {
             const prev = this._routeInsert.prevSources || [];
             const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ? this._routeInsert.prevIndices : (prev.map((_,i)=>i));
-            const len = RouteUtils.computeRouteLengthNormalized(prev, this.config.MAP_SIZE || 8192);
+            const len = this.map.routeManager ? this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
             this._setRoute(prevIdx, len, prev);
             
             if (this._routeInsert.prevRouteLooping !== undefined) {

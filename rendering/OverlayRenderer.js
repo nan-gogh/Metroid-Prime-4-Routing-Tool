@@ -3,9 +3,14 @@
 
 (function (global) {
   class OverlayRenderer {
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, selectionState, routeState, config, routeColor) {
+      this.mapState = mapState;
+      this.selectionState = selectionState;
+      this.routeState = routeState;
       this.config = config || (global.MP4Config || {});
+      this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
+      // Keep map reference for canvas access during transition
+      this.map = null;
     }
 
     init() {
@@ -14,19 +19,18 @@
 
     render() {
       try {
-        const map = this.map;
-        const ctx = map && map.ctx;
-        if (!map || !ctx) return;
+        const ctx = this.map.ctx;
+        if (!ctx) return;
 
         // Draw transient route preview dot (when editing route)
         try {
-          if (map.editRouteMode && map._routePreview) {
-            const pos = (typeof RouteUtils !== 'undefined' && RouteUtils.getRoutePreviewScreenPosition) ? RouteUtils.getRoutePreviewScreenPosition(map._routePreview, map) : null;
+          if (this.routeState.routePreview) {
+            const pos = RouteUtilsCore.getRoutePreviewScreenPosition(this.routeState.routePreview, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
             if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
               const px = pos.x;
               const py = pos.y;
               // Derive route color like RouteRenderer uses
-              const routeHex = (LAYERS && LAYERS.route) ? LAYERS.route.color : null;
+              const routeHex = this.routeColor;
               let nodeFill = null;
               try {
                   if (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) {
@@ -65,9 +69,9 @@
 
         // Tooltip follow: prefer TooltipManager when available
         try {
-          if (map.selectedMarker && map.selectedMarkerLayer) {
-            const m = map.selectedMarker;
-            const pos2 = (typeof MarkerUtils !== 'undefined' && MarkerUtils.getMarkerScreenPosition) ? MarkerUtils.getMarkerScreenPosition(m, map) : null;
+          if (this.selectionState.selectedMarker && this.selectionState.selectedMarkerLayer) {
+            const m = this.selectionState.selectedMarker;
+            const pos2 = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
             if (pos2 && typeof pos2.x === 'number' && typeof pos2.y === 'number') {
               // Compute canvas-local coords and offset into container
               let canvasOffsetLeft = 0, canvasOffsetTop = 0;
@@ -79,10 +83,10 @@
               } catch (e) {}
               const tooltipX = Math.round(canvasOffsetLeft + pos2.x + 15);
               const tooltipY = Math.round(canvasOffsetTop + pos2.y - 10);
-              if (map.tooltipManager && typeof map.tooltipManager.update === 'function') {
-                try { map.tooltipManager.update(tooltipX, tooltipY); } catch (e) { console.debug('OverlayRenderer: tooltipManager update failed', e.message); }
+              if (this.map.tooltipManager && typeof this.map.tooltipManager.update === 'function') {
+                try { this.map.tooltipManager.update(tooltipX, tooltipY); } catch (e) { console.debug('OverlayRenderer: tooltipManager update failed', e.message); }
               } else {
-                try { map.showTooltip(m, pos2.x, pos2.y, map.selectedMarkerLayer); } catch (e) { console.debug('OverlayRenderer: showTooltip failed', e.message); }
+                try { this.map.showTooltip(m, pos2.x, pos2.y, this.selectionState.selectedMarkerLayer); } catch (e) { console.debug('OverlayRenderer: showTooltip failed', e.message); }
               }
             }
           }
@@ -92,7 +96,7 @@
         try {
           if (map.selectedMarker && map.selectedMarkerLayer) {
             const m = map.selectedMarker;
-            const pos = (typeof MarkerUtils !== 'undefined' && MarkerUtils.getMarkerScreenPosition) ? MarkerUtils.getMarkerScreenPosition(m, map) : null;
+            const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: map.zoom, panX: map.panX, panY: map.panY}, this.config.MAP_SIZE || 8192);
             if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
               try { map.showTooltip(m, pos.x, pos.y, map.selectedMarkerLayer); } catch (e) {}
             }

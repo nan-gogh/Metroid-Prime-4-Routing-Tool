@@ -8,6 +8,12 @@
       this.config = config || (global.MP4Config || {});
       this.pinch = null; // {startDistance, startZoom, lastMidX, lastMidY}
       this.pointers = new Map(); // Track pointers for gesture recognition
+
+      // Get state managers from map
+      this.mapState = map.mapState;
+      this.selectionState = map.selectionState;
+      this.routeState = map.routeState;
+      this.layerState = map.layerState;
     }
 
     init() {
@@ -33,7 +39,7 @@
 
         this.pinch = {
           startDistance: dist,
-          startZoom: this.map.zoom,
+          startZoom: this.mapState.zoom,
           lastMidX: midClientX,
           lastMidY: midClientY
         };
@@ -63,7 +69,7 @@
         const factor = dist / this.pinch.startDistance;
 
         // Calculate new zoom with bounds
-        const newZoom = Math.max(this.map.minZoom || 0.005, Math.min(100, this.pinch.startZoom * factor));
+        const newZoom = Math.max(this.mapState.minZoom, Math.min(this.mapState.maxZoom, this.pinch.startZoom * factor));
 
         // Calculate centroid for pan
         const midClientX = (pts[0].clientX + pts[1].clientX) / 2;

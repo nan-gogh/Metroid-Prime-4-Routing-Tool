@@ -54,25 +54,36 @@ eval(routeRendererCode);
 
 console.log('RouteRenderer loaded successfully');
 
-// Create a mock map and RouteRenderer instance
-const mockMap = {
+// Create mock state managers
+const mockMapState = {
+    zoom: 1,
+    panX: 0,
+    panY: 0
+};
+
+const mockLayerState = {
+    isLayerVisible: (layer) => layer === 'route'
+};
+
+const mockRouteState = {
     currentRoute: [0, 1, 2],
+    routeLooping: false
+};
+
+// Create a mock map for canvas access
+const mockMap = {
     _routeSources: [
         { marker: { x: 0.1, y: 0.1, uid: 'marker1' } },
         { marker: { x: 0.5, y: 0.5, uid: 'marker2' } },
         { marker: { x: 0.9, y: 0.9, uid: 'marker3' } }
     ],
-    layerVisibility: { route: true },
-    routeLooping: false,
-    zoom: 1,
-    panX: 0,
-    panY: 0,
     canvas: { clientWidth: 800, clientHeight: 600 },
     ctx: document.createElement('canvas').getContext('2d')
 };
 
 const canvas = document.createElement('canvas');
-const routeRenderer = new RouteRenderer(mockMap, MP4Config);
+const routeRenderer = new RouteRenderer(mockMapState, mockLayerState, mockRouteState, MP4Config);
+routeRenderer.map = mockMap; // Set map reference for canvas access
 
 console.log('RouteRenderer instance created');
 

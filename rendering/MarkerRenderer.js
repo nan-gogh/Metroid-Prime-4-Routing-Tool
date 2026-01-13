@@ -5,14 +5,24 @@
   class MarkerRenderer {
     /**
      * Creates a new MarkerRenderer instance for drawing markers and handling hit detection.
-     * @param {Object} map - The map instance that owns this renderer
+     * @param {Object} mapState - The map state manager
+     * @param {Object} layerState - The layer state manager
+     * @param {Object} selectionState - The selection state manager
+     * @param {Object} markerManager - The marker manager for custom markers
      * @param {Object} config - Configuration object (defaults to global MP4Config)
+     * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
      */
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, layerState, selectionState, markerManager, config, layers) {
+      this.mapState = mapState;
+      this.layerState = layerState;
+      this.selectionState = selectionState;
+      this.markerManager = markerManager;
       this.config = config || (global.MP4Config || {});
-      this.canvas = map.canvas || null;
-      this.ctx = map.ctx || null;
+      this.layers = layers || (global.LAYERS || {});
+      // Keep map reference for canvas access during transition
+      this.map = null;
+      this.canvas = null;
+      this.ctx = null;
     }
 
     /**
@@ -31,24 +41,31 @@
      */
     render() {
       // Fully migrated marker rendering from map.renderMarkers()
-      const map = this.map;
-      const ctx = map.ctx;
+      const ctx = this.ctx;
       if (!ctx) return;
-      const cssWidth = map.canvas.clientWidth;
-      const cssHeight = map.canvas.clientHeight;
-      const entries = Object.entries(LAYERS || {});
+      const cssWidth = this.canvas.clientWidth;
+      const cssHeight = this.canvas.clientHeight;
+      const entries = Object.entries(this.layers || {});
       for (let li = 0; li < entries.length; li++) {
         const layerKey = entries[li][0];
         const layer = entries[li][1];
-        if (!map.layerVisibility[layerKey]) continue;
-        if (!Array.isArray(layer.markers)) continue;
+        if (!this.layerState.isLayerVisible(layerKey)) continue;
+        
+        // Special handling for customMarkers: use markers from markerManager if available
+        let markersToRender = layer.markers;
+        if (layerKey === 'customMarkers' && this.markerManager) {
+          markersToRender = this.markerManager.getAllMarkers();
+        } else if (!Array.isArray(layer.markers)) {
+          continue;
+        }
+        
         const color = layer.color || '#888';
-        for (let i = 0; i < layer.markers.length; i++) {
-          const marker = layer.markers[i];
-          const screenX = marker.x * MAP_SIZE * map.zoom + map.panX;
-          const screenY = marker.y * MAP_SIZE * map.zoom + map.panY;
+        for (let i = 0; i < markersToRender.length; i++) {
+          const marker = markersToRender[i];
+          const screenX = marker.x * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
+          const screenY = marker.y * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
           if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
-          const isSelected = map.selectedMarker && map.selectedMarker.uid === marker.uid && map.selectedMarkerLayer === layerKey;
+          const isSelected = this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
           const size = this.getMarkerRenderSize(marker, layerKey);
           try { const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i)); this._markerSizeFrame[key] = size; } catch (e) {}
 
@@ -83,8 +100,8 @@
     getHitRadius() {
       try {
         // Use same size calculation as render size but add touch padding
-        const renderSize = MarkerUtils.computeMarkerSize({ 
-          zoom: this.map.zoom || 1,
+        const renderSize = MarkerUtilsCore.computeMarkerSize({
+          zoom: this.mapState.zoom || 1,
           baseSize: this.map.getMarkerBaseSize()
         });
         const touchPadding = this.map.touchPadding || 4;
@@ -125,8 +142,14 @@
           }
         } catch (e) {}
 
-        const isSelected = this.map.selectedMarker && marker && this.map.selectedMarker.uid === marker.uid && this.map.selectedMarkerLayer === layerKey;
-        const size = (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.computeMarkerRenderSize === 'function') ? MarkerUtils.computeMarkerRenderSize({ baseSize: base, detailScale, markerShrinkFactor, highlighted, highlightScale, highlightScaleMultiplier: this.map.highlightScaleMultiplier, isSelected }) : Math.max(1, (isSelected ? base * 1.3 : base) * 1);
+        const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
+        const size = MarkerUtilsCore.computeMarkerSize({
+          baseSize: base,
+          zoom: 1, // Hit radius doesn't scale with zoom
+          isHighlighted: highlighted,
+          isSelected: isSelected,
+          highlightMultiplier: highlightScale
+        });
         return size + (this.map.touchPadding || 0);
       } catch (e) {
         return this.getHitRadius();
@@ -154,10 +177,10 @@
         } catch (e) {}
         
         // Check selection state
-        const isSelected = this.map.selectedMarker && marker && this.map.selectedMarker.uid === marker.uid && this.map.selectedMarkerLayer === layerKey;
+        const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
         
         // Use unified calculator
-        return MarkerUtils.computeMarkerSize({
+        return MarkerUtilsCore.computeMarkerSize({
           zoom,
           isHighlighted,
           isSelected,
@@ -179,18 +202,17 @@
      * @returns {Object|null} Object containing {marker, index, layerKey} or null if no marker found
      */
     findMarkerAt(screenX, screenY) {
-      const map = this.map;
       const entries = Object.entries(LAYERS || {});
       // Iterate in reverse so later layers (higher in DOM) get priority
       for (let li = entries.length - 1; li >= 0; li--) {
         const layerKey = entries[li][0];
         const layer = entries[li][1];
-        if (!map.layerVisibility[layerKey]) continue;
+        if (!this.layerState.isLayerVisible(layerKey)) continue;
         if (!Array.isArray(layer.markers)) continue;
         for (let i = layer.markers.length - 1; i >= 0; i--) {
           const marker = layer.markers[i];
-          const mx = marker.x * MAP_SIZE * map.zoom + map.panX;
-          const my = marker.y * MAP_SIZE * map.zoom + map.panY;
+          const mx = marker.x * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
+          const my = marker.y * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
           const r = this.getMarkerHitRadius(marker, layerKey);
           if (Math.hypot(screenX - mx, screenY - my) < r) {
             return { marker: marker, index: i, layerKey };

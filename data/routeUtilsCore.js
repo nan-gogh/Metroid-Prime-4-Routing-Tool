@@ -55,6 +55,13 @@ const RouteUtilsCore = {
         return length;
     },
 
+    // Compute normalized route length (divided by mapSize for 0-1 range)
+    computeRouteLengthNormalized: (sources, mapSize) => {
+        if (!Array.isArray(sources)) return 0;
+        const indices = sources.map((_, i) => i);
+        return RouteUtilsCore.computeRouteLength(indices, sources, mapSize) / mapSize;
+    },
+
     // Find route segment at screen position
     findRouteSegmentAt: (routeIndices, routeSources, screenX, screenY, viewState, mapSize, threshold = 10) => {
         // Convert screen to world coordinates

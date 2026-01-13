@@ -5,14 +5,16 @@
   class TileRenderer {
     /**
      * Creates a new TileRenderer instance for handling map tile loading and rendering.
-     * @param {Object} map - The map instance that owns this renderer
+     * @param {Object} mapState - The map state manager
      * @param {Object} config - Configuration object (defaults to global MP4Config)
      */
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, config) {
+      this.mapState = mapState;
       this.config = config || (global.MP4Config || {});
-      this.canvas = map.canvasTiles || null;
-      this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+      // Keep map reference for canvas access during transition
+      this.map = null;
+      this.canvas = null;
+      this.ctx = null;
     }
 
     /**
@@ -70,10 +72,10 @@
         } catch (e) { console.debug('TileRenderer: honeycomb fill failed', e); }
       } catch (e) { console.debug('TileRenderer: background fill failed', e); }
 
-      if (map.currentImage) {
-        const size = MAP_SIZE * map.zoom;
+      if (this.map.currentImage) {
+        const size = (this.config.MAP_SIZE || 8192) * this.mapState.zoom;
         try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { console.debug('TileRenderer: image smoothing not supported', e.message); }
-        try { ctxT.drawImage(map.currentImage, map.panX, map.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', e); }
+        try { ctxT.drawImage(this.map.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', e); }
       }
     }
 

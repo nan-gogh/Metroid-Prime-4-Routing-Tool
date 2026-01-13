@@ -7,6 +7,12 @@
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.bound = false;
+
+      // Get state managers from map
+      this.mapState = map.mapState;
+      this.selectionState = map.selectionState;
+      this.routeState = map.routeState;
+      this.layerState = map.layerState;
     }
 
     init() {
@@ -30,12 +36,12 @@
             // Prefer clicking the toggles so their handlers run UI sync
             const markersToggle = document.getElementById('editMarkersToggle');
             const routeToggle = document.getElementById('editRouteToggle');
-            if (this.map && this.map.editMarkersMode) {
-              if (markersToggle) markersToggle.click(); else this.map.editMarkersMode = false;
+            if (this.selectionState.editMarkersMode) {
+              if (markersToggle) markersToggle.click(); else this.selectionState.setEditMarkersMode(false);
             }
-            if (this.map && this.map.editRouteMode) {
+            if (this.selectionState.editRouteMode) {
               if (routeToggle) routeToggle.click(); else {
-                this.map.editRouteMode = false;
+                this.selectionState.setEditRouteMode(false);
                 try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) {}
               }
             }
@@ -158,7 +164,7 @@
         } else if (ev.key === 'x' || ev.key === 'X') {
           try {
             const btn = document.getElementById('clearCustom');
-            if (btn) btn.click(); else if (typeof MarkerUtils !== 'undefined' && MarkerUtils.clearCustomMarkers) MarkerUtils.clearCustomMarkers();
+            if (btn) btn.click(); else if (this.map && this.map.markerManager && typeof this.map.markerManager.clearMarkers === 'function') this.map.markerManager.clearMarkers();
           } catch (err) {}
           try { ev.preventDefault(); } catch (err) {}
           return;

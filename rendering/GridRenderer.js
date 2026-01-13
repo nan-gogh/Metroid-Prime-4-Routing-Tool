@@ -5,12 +5,18 @@
   class GridRenderer {
     /**
      * Creates a new GridRenderer instance for rendering grid overlays and quadrant labels.
-     * @param {Object} map - The map instance that owns this renderer
+     * @param {Object} mapState - The map state manager
+     * @param {Object} layerState - The layer state manager
      * @param {Object} config - Configuration object (defaults to global MP4Config)
+     * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
+     * @param {Array} greenCrystalLayers - Array of green crystal layer keys (defaults to GREEN_CRYSTAL_LAYERS)
      */
-    constructor(map, config) {
-      this.map = map;
+    constructor(mapState, layerState, config, layers, greenCrystalLayers) {
+      this.mapState = mapState;
+      this.layerState = layerState;
       this.config = config || (global.MP4Config || {});
+      this.layers = layers || (global.LAYERS || {});
+      this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
     }
 
     /**
@@ -68,9 +74,8 @@
      */
     render() {
       try {
-        const map = this.map;
         // Only render the grid when the runtime grid layer is enabled
-        if (!map || !(map.layerVisibility && map.layerVisibility.grid)) return;
+        if (!this.layerState.isLayerVisible('grid')) return;
         try { this.renderQuadrantGrid(); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', e); }
         try { this.renderDetailGrid(); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', e); }
         // Keep DOM labels in sync
@@ -84,28 +89,27 @@
      */
     renderQuadrantGrid() {
       try {
-        const map = this.map;
-        const ctx = map && map.ctx;
-        const cssWidth = map.canvas.clientWidth;
-        const cssHeight = map.canvas.clientHeight;
+        const ctx = this.map.ctx;
+        const cssWidth = this.map.canvas.clientWidth;
+        const cssHeight = this.map.canvas.clientHeight;
 
         // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * map.zoom + map.panX;
-        const mapScreenTop = 0 * map.zoom + map.panY;
-        const mapScreenRight = MAP_SIZE * map.zoom + map.panX;
-        const mapScreenBottom = MAP_SIZE * map.zoom + map.panY;
+        const mapScreenLeft = 0 * this.mapState.zoom + this.mapState.panX;
+        const mapScreenTop = 0 * this.mapState.zoom + this.mapState.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
 
         // Map center is at (MAP_SIZE/2, MAP_SIZE/2) in normalized coords
         // Calculate screen position of center
-        const mapCenterX = (MAP_SIZE / 2) * map.zoom + map.panX;
-        const mapCenterY = (MAP_SIZE / 2) * map.zoom + map.panY;
+        const mapCenterX = ((this.config.MAP_SIZE || 8192) / 2) * this.mapState.zoom + this.mapState.panX;
+        const mapCenterY = ((this.config.MAP_SIZE || 8192) / 2) * this.mapState.zoom + this.mapState.panY;
 
         // Only draw grid lines if they're visible on screen
         if (mapCenterX > mapScreenLeft && mapCenterX < mapScreenRight &&
             mapCenterY > mapScreenTop && mapCenterY < mapScreenBottom) {
             ctx.save();
             // Scale opacity with zoom for visibility at all levels
-            const opacity = Math.min(0.6, 0.15 + map.zoom * 0.5);
+            const opacity = Math.min(0.6, 0.15 + this.mapState.zoom * 0.5);
             // Cyan gridlines for both satellite and holo views
             ctx.strokeStyle = 'rgba(34, 211, 238, ' + opacity + ')';
             ctx.lineWidth = 2;
@@ -142,11 +146,11 @@
         // Map boundaries in screen coordinates
         const mapScreenLeft = 0 * map.zoom + map.panX;
         const mapScreenTop = 0 * map.zoom + map.panY;
-        const mapScreenRight = MAP_SIZE * map.zoom + map.panX;
-        const mapScreenBottom = MAP_SIZE * map.zoom + map.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * map.zoom + map.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * map.zoom + map.panY;
 
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
-        const gridSpacing = MAP_SIZE / 8;
+        const gridSpacing = (this.config.MAP_SIZE || 8192) / 8;
 
         // Clear heatmap backing canvas so it doesn't accumulate between draws
         try {
@@ -164,21 +168,19 @@
             try {
                 const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
                 const counts = new Array(cols * rows).fill(0);
-                const greenKeys = GREEN_CRYSTAL_LAYERS;
-                if (typeof LAYERS !== 'undefined') {
-                    greenKeys.forEach(k => {
-                        const layer = LAYERS[k];
-                        if (layer && Array.isArray(layer.markers)) {
-                            layer.markers.forEach(m => {
-                                const mx = Number(m.x); const my = Number(m.y);
-                                if (!isFinite(mx) || !isFinite(my)) return;
-                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                                counts[rr * cols + cc]++;
-                            });
-                        }
-                    });
-                }
+                const greenKeys = this.greenCrystalLayers;
+                greenKeys.forEach(k => {
+                    const layer = this.layers[k];
+                    if (layer && Array.isArray(layer.markers)) {
+                        layer.markers.forEach(m => {
+                            const mx = Number(m.x); const my = Number(m.y);
+                            if (!isFinite(mx) || !isFinite(my)) return;
+                            const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
+                            const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
+                            counts[rr * cols + cc]++;
+                        });
+                    }
+                });
                 const maxCount = Math.max(1, ...counts);
                 const hmCtx = map.ctxHeatmap;
                 hmCtx.save();
@@ -191,9 +193,9 @@
                 const buckets = new Array(cols * rows);
                 for (let i = 0; i < buckets.length; i++) buckets[i] = [];
                 try {
-                    const greenKeys = GREEN_CRYSTAL_LAYERS;
+                    const greenKeys = this.greenCrystalLayers;
                     greenKeys.forEach(k => {
-                        const layer = LAYERS[k];
+                        const layer = this.layers[k];
                         if (layer && Array.isArray(layer.markers)) {
                             layer.markers.forEach(m => {
                                 const mx = Number(m.x); const my = Number(m.y);
@@ -232,11 +234,11 @@
                     // Draw a radial gradient for each marker (smaller radius for less blur)
                     for (let m of markers) {
                         try {
-                            const screenX = m.mx * MAP_SIZE * map.zoom + map.panX;
-                            const screenY = m.my * MAP_SIZE * map.zoom + map.panY;
+                            const screenX = m.mx * (this.config.MAP_SIZE || 8192) * map.zoom + map.panX;
+                            const screenY = m.my * (this.config.MAP_SIZE || 8192) * map.zoom + map.panY;
                             // Skip off-screen markers early
                             if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
-                            const radius = Math.max(8, Math.round((MAP_SIZE / 8) * map.zoom * 0.45));
+                            const radius = Math.max(8, Math.round(((this.config.MAP_SIZE || 8192) / 8) * map.zoom * 0.45));
                             const cx = Math.round(screenX);
                             const cy = Math.round(screenY);
                             const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
@@ -306,11 +308,11 @@
         // Map boundaries in screen coordinates
         const mapScreenLeft = 0 * map.zoom + map.panX;
         const mapScreenTop = 0 * map.zoom + map.panY;
-        const mapScreenRight = MAP_SIZE * map.zoom + map.panX;
-        const mapScreenBottom = MAP_SIZE * map.zoom + map.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * map.zoom + map.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * map.zoom + map.panY;
 
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
-        const gridSpacing = MAP_SIZE / 8;
+        const gridSpacing = (this.config.MAP_SIZE || 8192) / 8;
 
         ctx.save();
         // Compute a readable font size based on zoom but clamp it
@@ -389,7 +391,7 @@
         container.style.display = shouldShow ? 'block' : 'none';
         if (!shouldShow) return;
         const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-        const gridSpacing = MAP_SIZE / MP4Config.GRID.COLS;
+        const gridSpacing = (this.config.MAP_SIZE || 8192) / MP4Config.GRID.COLS;
         const cssWidth = map.canvas.clientWidth;
         const cssHeight = map.canvas.clientHeight;
         const labels = container.querySelectorAll('.grid-quad-label');
@@ -397,23 +399,21 @@
         const fontMax = 48;
         const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(map.zoom * 80)));
         const pad = Math.max(2, Math.round(fontSize * 0.18));
-        const greenKeys = GREEN_CRYSTAL_LAYERS;
+        const greenKeys = this.greenCrystalLayers;
         const counts = new Array(cols * rows).fill(0);
         try {
-          if (typeof LAYERS !== 'undefined') {
             greenKeys.forEach(k => {
-              const layer = LAYERS[k];
-              if (layer && Array.isArray(layer.markers)) {
-                layer.markers.forEach(m => {
-                  const mx = Number(m.x); const my = Number(m.y);
-                  if (!isFinite(mx) || !isFinite(my)) return;
-                  let cc = Math.floor(Math.min(cols - 1, Math.max(0, mx * cols)));
-                  let rr = Math.floor(Math.min(rows - 1, Math.max(0, my * rows)));
-                  counts[rr * cols + cc]++;
-                });
-              }
+                const layer = this.layers[k];
+                if (layer && Array.isArray(layer.markers)) {
+                    layer.markers.forEach(m => {
+                        const mx = Number(m.x); const my = Number(m.y);
+                        if (!isFinite(mx) || !isFinite(my)) return;
+                        let cc = Math.floor(Math.min(cols - 1, Math.max(0, mx * cols)));
+                        let rr = Math.floor(Math.min(rows - 1, Math.max(0, my * rows)));
+                        counts[rr * cols + cc]++;
+                    });
+                }
             });
-          }
         } catch (e) { console.debug('GridRenderer.updateQuadLabels: failed to compute counts', e); }
 
         for (let i = 0; i < labels.length; i++) {
