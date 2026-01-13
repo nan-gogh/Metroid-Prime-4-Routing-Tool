@@ -7,6 +7,7 @@
       this.map = map;
       this.config = config || global.MP4Config || {};
       this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+    }
 
     /**
      * Initialize toolbar controls
