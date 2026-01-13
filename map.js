@@ -2841,7 +2841,7 @@ async function init() {
     // Helpers to lock UI while route computation runs
     function beginRouteCompute() {
         try {
-            if (typeof map !== 'undefined' && map) map._computingRoute = true;
+            if (map) map._computingRoute = true;
             let overlay = document.getElementById('computingOverlay');
             if (!overlay) {
                 overlay = document.createElement('div');
@@ -2859,7 +2859,7 @@ async function init() {
 
     function endRouteCompute() {
         try {
-            if (typeof map !== 'undefined' && map) map._computingRoute = false;
+            if (map) map._computingRoute = false;
             const overlay = document.getElementById('computingOverlay');
             if (overlay) try { overlay.style.display = 'none'; } catch (e) {}
         } catch (e) {}
@@ -3492,7 +3492,7 @@ async function init() {
     }
 
     // Expose expandRouteNearby for programmatic use
-    try { if (typeof map !== 'undefined' && map) map.expandRouteNearby = expandRouteNearby; } catch (e) {}
+    try { if (map) map.expandRouteNearby = expandRouteNearby; } catch (e) { _logError(e, 'init.exposeExpandRouteNearby'); }
 
     // Wire mini on-screen Expand Route button if present
     try {
@@ -3549,7 +3549,7 @@ async function init() {
                 toggleDirBtn.addEventListener('click', toggleRouteDirection);
             }
             // Expose toggler for mini button and programmatic use
-            try { if (typeof map !== 'undefined' && map) map.toggleRouteDirection = toggleRouteDirection; } catch (e) {}
+            try { if (map) map.toggleRouteDirection = toggleRouteDirection; } catch (e) { _logError(e, 'init.exposeToggleRouteDirection'); }
             // Wire mini on-screen Reverse Route button if present
             try {
                 const toggleDirMini = document.getElementById('toggleRouteDirMini');
