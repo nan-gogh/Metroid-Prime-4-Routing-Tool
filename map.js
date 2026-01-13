@@ -2199,17 +2199,17 @@ async function initializeLayerIcons() {
                                     map.layerVisibility[k] = v;
                                 }
                             }
-                        } catch (e) {}
+                        } catch (e) { _logError(e, 'initializeLayerIcons._scheduleApplyLayerToggles.applyToggle'); }
                     }
-                    try { if (map) map.render(); } catch (e) {}
+                    try { if (map) map.render(); } catch (e) { _logError(e, 'initializeLayerIcons._scheduleApplyLayerToggles.render'); }
                 }
-            } catch (e) {}
+            } catch (e) { _logError(e, 'initializeLayerIcons._scheduleApplyLayerToggles'); }
         });
     };
     const _scheduleSaveLayerVisibility = () => {
-        try { if (_layerToggleSaveTimeout) clearTimeout(_layerToggleSaveTimeout); } catch (e) {}
+        try { if (_layerToggleSaveTimeout) clearTimeout(_layerToggleSaveTimeout); } catch (e) { _logError(e, 'initializeLayerIcons._scheduleSaveLayerVisibility.clearTimeout'); }
         _layerToggleSaveTimeout = setTimeout(() => {
-            try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) {}
+            try { saveLayerVisibilityToStorage && saveLayerVisibilityToStorage(map && map.layerVisibility ? map.layerVisibility : {}); } catch (e) { _logError(e, 'initializeLayerIcons._scheduleSaveLayerVisibility.saveStorage'); }
             _layerToggleSaveTimeout = null;
         }, 300);
     };
@@ -2278,7 +2278,7 @@ async function initializeLayerIcons() {
             try { iconDiv.addEventListener('pointerdown', (ev) => { try { ev.stopPropagation(); } catch (e) {} }); } catch (e) {}
             try { iconDiv.addEventListener('touchstart', (ev) => { try { ev.stopPropagation(); } catch (e) {} }, { passive: true }); } catch (e) {}
             const _handleIconActivate = (ev) => {
-                try { if (ev && ev.stopPropagation) ev.stopPropagation(); } catch (e) {}
+                try { if (ev && ev.stopPropagation) ev.stopPropagation(); } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.stopPropagation'); }
                 try {
                     const k = label.dataset && label.dataset.layer;
                     if (!k) return;
@@ -2290,17 +2290,17 @@ async function initializeLayerIcons() {
                                     if (typeof map.toggleLayer === 'function') {
                                         try { map.toggleLayer(k, true); } catch (e) { /* suppressed */ }
                                     } else {
-                                        try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = true; } catch (e) {}
-                                        try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+                                        try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = true; } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.setVisibility'); }
+                                        try { if (map && typeof map.render === 'function') map.render(); } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.renderAfterVisibility'); }
                                     }
                                     try {
                                         const row = document.querySelector('#layerList .layer-toggle[data-layer="' + k + '"]');
                                         if (row) { row.classList.add('active'); row.setAttribute('aria-pressed', 'true'); }
-                                    } catch (e) {}
-                                    try { _scheduleSaveLayerVisibility(); } catch (e) {}
+                                    } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.updateRowUI'); }
+                                    try { _scheduleSaveLayerVisibility(); } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.saveLayers'); }
                                 }
                             }
-                        } catch (e) {}
+                        } catch (e) { _logError(e, 'initializeLayerIcons._handleIconActivate.highlightFlow'); }
                     } else if (map) {
                         map.highlightedLayers = map.highlightedLayers || new Set();
                         if (map.highlightedLayers.has(k)) {
@@ -2413,31 +2413,31 @@ async function initializeLayerIcons() {
                 const checked = !label.classList.contains('active');
                 
                 // Immediate visual feedback for responsiveness
-                try { label.classList.toggle('active', checked); } catch (e) {}
-                try { label.setAttribute('aria-pressed', checked ? 'true' : 'false'); } catch (e) {}
+                try { label.classList.toggle('active', checked); } catch (e) { _logError(e, 'initializeLayerIcons.label.toggleActive.pointerdown'); }
+                try { label.setAttribute('aria-pressed', checked ? 'true' : 'false'); } catch (e) { _logError(e, 'initializeLayerIcons.label.setAttribute.pointerdown'); }
 
                 // Update runtime visibility object so other code reads the new state
-                try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[layerKey] = !!checked; } catch (e) {}
+                try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[layerKey] = !!checked; } catch (e) { _logError(e, 'initializeLayerIcons.label.setVisibility.pointerdown'); }
 
                 // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
                 if (!checked) {
-                    try { exitEditModeForLayer(layerKey); } catch (e) {}
+                    try { exitEditModeForLayer(layerKey); } catch (e) { _logError(e, 'initializeLayerIcons.exitEditModeForLayer.pointerdown'); }
                 }
 
                 // Queue the heavier work to RAF to batch rapid toggles
-                try { _pendingLayerToggles[layerKey] = !!checked; _scheduleApplyLayerToggles(); } catch (e) {}
+                try { _pendingLayerToggles[layerKey] = !!checked; _scheduleApplyLayerToggles(); } catch (e) { _logError(e, 'initializeLayerIcons._scheduleApplyLayerToggles.pointerdown'); }
 
                 // Debounced save to storage
-                try { _scheduleSaveLayerVisibility(); } catch (e) {}
-            } catch (e) {}
+                try { _scheduleSaveLayerVisibility(); } catch (e) { _logError(e, 'initializeLayerIcons._scheduleSaveLayerVisibility.pointerdown'); }
+            } catch (e) { _logError(e, 'initializeLayerIcons.label.pointerdown'); }
         });
 
         // On touch devices, prevent native touch scrolling while interacting with
         // the layer row so swipes toggle rows instead of scrolling the sidebar.
         try {
-            label.addEventListener('touchstart', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
-            label.addEventListener('touchmove', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
-        } catch (e) {}
+            label.addEventListener('touchstart', (ev) => { try { ev.preventDefault(); } catch (e) { _logError(e, 'initializeLayerIcons.label.touchstart.preventDefault'); } }, { passive: false });
+            label.addEventListener('touchmove', (ev) => { try { ev.preventDefault(); } catch (e) { _logError(e, 'initializeLayerIcons.label.touchmove.preventDefault'); } }, { passive: false });
+        } catch (e) { _logError(e, 'initializeLayerIcons.label.touchEventListeners'); }
 
         // No pressed-state handlers for layer toggles: remove animations/press
         // feedback to avoid delayed or sticky toggles on mobile when tapping
@@ -2452,7 +2452,7 @@ async function initializeLayerIcons() {
                 if (!map.layerVisibility) map.layerVisibility = {};
                 if (layerKey === 'route') {
                     map.layerVisibility.route = initialChecked;
-                    try { map.render(); } catch (e) {}
+                    try { map.render(); } catch (e) { _logError(e, 'initializeLayerIcons.label.render.syncInitialState'); }
                 } else {
                     map.toggleLayer(layerKey, initialChecked);
                 }
@@ -2477,29 +2477,29 @@ async function initializeLayerIcons() {
             const k = row.dataset && row.dataset.layer;
             const willChecked = !row.classList.contains('active');
 
-            try { row.classList.toggle('active', willChecked); } catch (e) {}
-            try { row.setAttribute('aria-pressed', willChecked ? 'true' : 'false'); } catch (e) {}
-            try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = !!willChecked; } catch (e) {}
+            try { row.classList.toggle('active', willChecked); } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.toggleActive'); }
+            try { row.setAttribute('aria-pressed', willChecked ? 'true' : 'false'); } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.setAttribute'); }
+            try { if (!map.layerVisibility) map.layerVisibility = {}; map.layerVisibility[k] = !!willChecked; } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.setVisibility'); }
             
             // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
             if (!willChecked) {
-                try { exitEditModeForLayer(k); } catch (e) {}
+                try { exitEditModeForLayer(k); } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.exitEdit'); }
             }
 
-            try { _pendingLayerToggles[k] = !!willChecked; _scheduleApplyLayerToggles(); } catch (e) {}
-            try { _scheduleSaveLayerVisibility(); } catch (e) {}
-        } catch (e) {}
+            try { _pendingLayerToggles[k] = !!willChecked; _scheduleApplyLayerToggles(); } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.scheduleApply'); }
+            try { _scheduleSaveLayerVisibility(); } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle.scheduleSave'); }
+        } catch (e) { _logError(e, 'initializeLayerIcons.swipeToggle'); }
     }, { passive: true });
 
     const _endGesture = (ev) => {
         try {
             if (!_gestureActive) return;
             if (ev && ev.pointerId && ev.pointerId !== _gesturePointerId) return;
-        } catch (e) {}
+        } catch (e) { _logError(e, 'initializeLayerIcons._endGesture.guard'); }
         _gestureActive = false;
         _gesturePointerId = null;
-        try { _gestureToggled.clear(); } catch (e) {}
-        try { if (_controlsEl) _controlsEl.style.touchAction = 'manipulation'; } catch (e) {}
+        try { _gestureToggled.clear(); } catch (e) { _logError(e, 'initializeLayerIcons._endGesture.clearToggled'); }
+        try { if (_controlsEl) _controlsEl.style.touchAction = 'manipulation'; } catch (e) { _logError(e, 'initializeLayerIcons._endGesture.touchAction'); }
     };
 
     document.addEventListener('pointerup', _endGesture, { passive: true });
@@ -2554,12 +2554,12 @@ async function init() {
             // Global multiplier applied to all highlight scales (user-configurable)
             try { map.highlightScaleMultiplier = (function(){ const v = loadHighlightMultiplierFromStorage(); return (typeof v === 'number' && !isNaN(v)) ? v : 1.0; })(); } catch (e) { map.highlightScaleMultiplier = 1.0; }
             map.setLayerHighlight = function(layerKey, scale) {
-                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
-                try { this.highlightedLayers.add(layerKey); } catch (e) {}
+                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) { _logError(e, 'setLayerHighlight.initHighlightedLayers'); }
+                try { this.highlightedLayers.add(layerKey); } catch (e) { _logError(e, 'setLayerHighlight.addLayer'); }
                 // (debug logs removed)
-                try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) {}
-                try { if (typeof this.render === 'function') this.render(); } catch (e) {}
-                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
+                try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) { _logError(e, 'setLayerHighlight.setConfig'); }
+                try { if (typeof this.render === 'function') this.render(); } catch (e) { _logError(e, 'setLayerHighlight.render'); }
+                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) { _logError(e, 'setLayerHighlight.saveStorage'); }
                 // Ensure hit-testing is recalculated to match new visual sizes.
                 try {
                     if (typeof this.checkMarkerHover === 'function') {
@@ -2569,26 +2569,26 @@ async function init() {
                                 if (rect) {
                                     const lx = this.lastMouseX - rect.left;
                                     const ly = this.lastMouseY - rect.top;
-                                    try { this.checkMarkerHover(lx, ly); } catch (e) {}
+                                    try { this.checkMarkerHover(lx, ly); } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.withOffset'); }
                                 } else {
-                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) {}
+                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.noOffset'); }
                                 }
-                            } catch (e) {}
+                            } catch (e) { _logError(e, 'setLayerHighlight.getBoundingRect'); }
                         } else {
                             try {
                                 const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
                                 if (rect) this.checkMarkerHover(rect.width / 2, rect.height / 2);
-                            } catch (e) {}
+                            } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.center'); }
                         }
                     }
-                } catch (e) {}
+                } catch (e) { _logError(e, 'setLayerHighlight.hoverCheck'); }
             };
             map.clearLayerHighlight = function(layerKey) {
-                try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) {}
+                try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) { _logError(e, 'clearLayerHighlight.deleteLayer'); }
                 // (debug logs removed)
-                try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) {}
-                try { if (typeof this.render === 'function') this.render(); } catch (e) {}
-                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) {}
+                try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) { _logError(e, 'clearLayerHighlight.deleteConfig'); }
+                try { if (typeof this.render === 'function') this.render(); } catch (e) { _logError(e, 'clearLayerHighlight.render'); }
+                try { saveHighlightedLayersToStorage && saveHighlightedLayersToStorage(this._highlightConfig || {}); } catch (e) { _logError(e, 'clearLayerHighlight.saveStorage'); }
                 // Recompute hit testing after clearing highlight
                 try {
                     if (typeof this.checkMarkerHover === 'function') {
@@ -2598,23 +2598,23 @@ async function init() {
                                 if (rect) {
                                     const lx = this.lastMouseX - rect.left;
                                     const ly = this.lastMouseY - rect.top;
-                                    try { this.checkMarkerHover(lx, ly); } catch (e) {}
+                                    try { this.checkMarkerHover(lx, ly); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.withOffset'); }
                                 } else {
-                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) {}
+                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.noOffset'); }
                                 }
-                            } catch (e) {}
+                            } catch (e) { _logError(e, 'clearLayerHighlight.getBoundingRect'); }
                         } else {
-                            try { const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null; if (rect) this.checkMarkerHover(rect.width/2, rect.height/2); } catch (e) {}
+                            try { const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null; if (rect) this.checkMarkerHover(rect.width/2, rect.height/2); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.center'); }
                         }
                     }
-                } catch (e) {}
+                } catch (e) { _logError(e, 'clearLayerHighlight.hoverCheck'); }
             };
             map.toggleLayerHighlight = function(layerKey, scale) {
-                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) {}
+                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) { _logError(e, 'toggleLayerHighlight.initHighlightedLayers'); }
                 if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
-                    try { this.clearLayerHighlight(layerKey); } catch (e) {}
+                    try { this.clearLayerHighlight(layerKey); } catch (e) { _logError(e, 'toggleLayerHighlight.clearLayerHighlight'); }
                 } else {
-                    try { this.setLayerHighlight(layerKey, scale); } catch (e) {}
+                    try { this.setLayerHighlight(layerKey, scale); } catch (e) { _logError(e, 'toggleLayerHighlight.setLayerHighlight'); }
                 }
             };
 
@@ -2628,7 +2628,7 @@ async function init() {
                     if (!row) return '#22d3ee';
                     const s = window.getComputedStyle(row).getPropertyValue('--layer-inline-highlight-color');
                     if (s && s.trim()) return s.trim();
-                } catch (e) {}
+                } catch (e) { _logError(e, 'getLayerInlineOutlineColor.cssQuery'); }
                 return '#22d3ee';
             };
 
@@ -2646,7 +2646,7 @@ async function init() {
                                 row.style.setProperty('--edit-mode-outline-color', layerColor);
                                 row.classList.add('edit-mode-outline');
                             }
-                        } catch (e) {}
+                        } catch (e) { _logError(e, '_enterEditMode.setOutlineColor'); }
                     }
                 } catch (e) {}
             };

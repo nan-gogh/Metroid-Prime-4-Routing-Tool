@@ -46,7 +46,7 @@
 
         return true;
       } catch (e) {
-        console.debug('GestureHandler.startPinch failed', e);
+        this.errorHandler && this.errorHandler.logError(e, 'GestureHandler.startPinch');
         return false;
       }
     }
@@ -96,7 +96,7 @@
 
         return updatedState;
       } catch (e) {
-        console.debug('GestureHandler.handlePinchMove failed', e);
+        this.errorHandler && this.errorHandler.logError(e, 'GestureHandler.handlePinchMove');
         return viewState;
       }
     }
@@ -121,7 +121,7 @@
     onPinch(centroid, scale) {
       try {
         if (typeof this.map.onPinch === 'function') this.map.onPinch(centroid, scale);
-      } catch (e) { console.debug('GestureHandler.onPinch failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'GestureHandler.onPinch'); }
     }
   }
 

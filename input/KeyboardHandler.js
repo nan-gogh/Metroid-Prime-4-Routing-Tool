@@ -42,7 +42,7 @@
             if (this.selectionState.editRouteMode) {
               if (routeToggle) routeToggle.click(); else {
                 this.selectionState.setEditRouteMode(false);
-                try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) {}
+                try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
               }
             }
             try { if (typeof updateEditOverlay === 'function') updateEditOverlay(); } catch (err) {}
@@ -103,12 +103,12 @@
             } else if (this.map) {
               this.map.editRouteMode = !this.map.editRouteMode;
               if (this.map.editRouteMode) {
-                try { this.map._enterEditMode && this.map._enterEditMode('route', 2.0); } catch (e) {}
-                try { this.map.editMarkersMode = false; } catch (e) {}
-                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) {}
+                try { this.map._enterEditMode && this.map._enterEditMode('route', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.enterRoute'); }
+                try { this.map.editMarkersMode = false; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkers'); }
+                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkersMode'); }
                 this._updateEditModeUI('route', true);
               } else {
-                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) {}
+                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitRoute'); }
               }
             }
           } catch (err) {}
@@ -122,12 +122,12 @@
             } else if (this.map) {
               this.map.editMarkersMode = !this.map.editMarkersMode;
               if (this.map.editMarkersMode) {
-                try { this.map._enterEditMode && this.map._enterEditMode('customMarkers', 2.0); } catch (e) {}
-                try { this.map.editRouteMode = false; } catch (e) {}
-                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) {}
+                try { this.map._enterEditMode && this.map._enterEditMode('customMarkers', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.enterMarkers'); }
+                try { this.map.editRouteMode = false; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRoute'); }
+                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRouteMode'); }
                 this._updateEditModeUI('markers', true);
               } else {
-                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) {}
+                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitMarkers'); }
               }
             }
           } catch (err) {}
