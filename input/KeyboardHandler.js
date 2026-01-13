@@ -221,7 +221,9 @@
           try { 
             ev.preventDefault(); 
             this.map.updateResolution(); 
-            this.map.render(); 
+            this.map.render();
+            // Save view after keyboard pan
+            try { this.map.saveViewToStorage(); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'KeyboardHandler.pan.saveViewToStorage'); }
           } catch (err) {}
           return;
         }

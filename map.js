@@ -982,7 +982,7 @@ class InteractiveMap {
             const worldX = (centerX - this.panX) / this.zoom;
             const worldY = (centerY - this.panY) / this.zoom;
 
-            this.zoom = Math.min(MAX_ZOOM, this.zoom * 1.3);
+            this.zoom = Math.min(this.mapState ? this.mapState.maxZoom : (MP4Config.ZOOM ? MP4Config.ZOOM.MAX || 4 : 4), this.zoom * 1.3);
 
             this.panX = centerX - worldX * this.zoom;
             this.panY = centerY - worldY * this.zoom;
@@ -1040,7 +1040,7 @@ class InteractiveMap {
             const worldX = (centerX - this.panX) / this.zoom;
             const worldY = (centerY - this.panY) / this.zoom;
 
-            this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, this.zoom / 1.3);
+            this.zoom = Math.max(this.mapState ? this.mapState.minZoom : (MP4Config.ZOOM ? MP4Config.ZOOM.DEFAULT_MIN || 0.05 : 0.05), this.zoom / 1.3);
 
             this.panX = centerX - worldX * this.zoom;
             this.panY = centerY - worldY * this.zoom;
@@ -1104,22 +1104,11 @@ class InteractiveMap {
         }
     }
     
-    // Save / restore helpers for map view (panX, panY, zoom)
-    scheduleSaveMapView() {
-        try {
-            if (this._saveViewTimer) clearTimeout(this._saveViewTimer);
-        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.scheduleSaveMapView.clearTimer'); }
-        try {
-            this._saveViewTimer = setTimeout(() => {
-                try { this.saveViewToStorage(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.scheduleSaveMapView.saveViewToStorage'); }
-            }, 300);
-        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.scheduleSaveMapView.setTimeout'); }
-    }
-
     saveViewToStorage() {
         try {
-            const obj = { panX: Number(this.panX || 0), panY: Number(this.panY || 0), zoom: Number(this.zoom || 0) };
-            try { StorageUtils.saveMapView(obj); } catch (e) { /* no fallback: StorageUtils manages consent */ }
+            if (this.mapState && typeof this.mapState.saveToStorage === 'function') {
+                this.mapState.saveToStorage();
+            }
         } catch (e) {
             this.errorHandler.logError(e, 'InteractiveMap.saveViewToStorage');
         }
@@ -1127,17 +1116,19 @@ class InteractiveMap {
 
     loadViewFromStorage() {
         try {
-            const v = loadMapViewFromStorage();
-            if (!v || typeof v !== 'object') return false;
-            if (typeof v.zoom === 'number' && Number.isFinite(v.zoom)) {
-                this.zoom = Math.max(this.minZoom || DEFAULT_MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom));
+            if (this.mapState && typeof this.mapState.loadFromStorage === 'function') {
+                const result = this.mapState.loadFromStorage();
+                if (result) {
+                    try { this.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.loadViewFromStorage.updateResolution'); }
+                    try { this.render(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.loadViewFromStorage.render'); }
+                }
+                return result;
             }
-            if (typeof v.panX === 'number' && Number.isFinite(v.panX)) this.panX = v.panX;
-            if (typeof v.panY === 'number' && Number.isFinite(v.panY)) this.panY = v.panY;
-            try { this.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.loadViewFromStorage.updateResolution'); }
-            try { this.render(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.loadViewFromStorage.render'); }
-            return true;
-        } catch (e) { return false; }
+            return false;
+        } catch (e) { 
+            console.debug('loadViewFromStorage failed:', e);
+            return false; 
+        }
     }
 
     loadInitialImage() {
@@ -2022,29 +2013,6 @@ function saveHighlightedLayersToStorage(obj) {
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_highlighted_layers', obj || {});
         }
-    } catch (e) {}
-}
-
-// Map view persistence (consent-gated). Stores an object {panX, panY, zoom}
-function loadMapViewFromStorage() {
-    try {
-        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadMapView === 'function') {
-            return StorageUtils.loadMapView();
-        }
-        // If StorageUtils is not present, avoid writing/reading directly—return null as a conservative default.
-        return null;
-    } catch (e) {
-        return null;
-    }
-}
-
-function saveMapViewToStorage(obj) {
-    try {
-        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveMapView === 'function') {
-            try { StorageUtils.saveMapView(obj); } catch (e) {}
-            return;
-        }
-        // If StorageUtils not available, do nothing (conservative: do not write without consent helper)
     } catch (e) {}
 }
 

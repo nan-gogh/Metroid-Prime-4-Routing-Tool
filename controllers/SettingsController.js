@@ -319,8 +319,8 @@
         }
 
         // Save view
-        if (this.map && typeof this.map.saveViewToStorage === 'function') {
-          this.map.saveViewToStorage();
+        if (this.map && this.map.mapState && typeof this.map.mapState.saveToStorage === 'function') {
+          this.map.mapState.saveToStorage();
         }
 
       } catch (e) {

@@ -189,6 +189,46 @@
              screen.y >= -padding &&
              screen.y <= this.canvasHeight + padding;
     }
+
+    // State persistence (consent-gated)
+    saveToStorage() {
+      try {
+        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveMapView === 'function') {
+          const viewData = { panX: this.panX, panY: this.panY, zoom: this.zoom };
+          StorageUtils.saveMapView(viewData);
+        }
+      } catch (e) {
+        console.debug('MapState.saveToStorage failed', e);
+      }
+    }
+
+    loadFromStorage() {
+      try {
+        if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadMapView === 'function') {
+          const viewData = StorageUtils.loadMapView();
+          if (viewData && typeof viewData === 'object') {
+            // Apply zoom bounds
+            const minZoom = this.minZoom;
+            const maxZoom = this.maxZoom;
+            
+            if (typeof viewData.zoom === 'number' && Number.isFinite(viewData.zoom)) {
+              this.zoom = Math.max(minZoom, Math.min(maxZoom, viewData.zoom));
+            }
+            if (typeof viewData.panX === 'number' && Number.isFinite(viewData.panX)) {
+              this.panX = viewData.panX;
+            }
+            if (typeof viewData.panY === 'number' && Number.isFinite(viewData.panY)) {
+              this.panY = viewData.panY;
+            }
+            return true;
+          }
+        }
+        return false;
+      } catch (e) {
+        console.debug('MapState.loadFromStorage failed', e);
+        return false;
+      }
+    }
   }
 
   global.MapState = MapState;
