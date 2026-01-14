@@ -388,7 +388,7 @@
       
       this.map._draggingCandidate = null;
       this.map.pointerDownTime = 0;
-      try { this.canvas.style.cursor = 'grabbing'; } catch (e) {}
+      try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
     }
 
     _finalizeDrags(ev, localX, localY) {
@@ -432,7 +432,7 @@
           } catch (e) { enteredUi = false; }
           // If pointer left into the UI, keep tooltip visible; otherwise hide it.
           if (!enteredUi) this.map.hideTooltip();
-        } catch (e) { try { this.map.hideTooltip(); } catch (e) {} }
+        } catch (e) { try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
 
         // Handle route-specific mouse leave
         if (this.routeEditHandler) {
@@ -508,8 +508,8 @@
           if (this.map.selectedMarker) {
             this.map.selectedMarker = null;
             this.map.selectedMarkerLayer = null;
-            try { this.map.hideTooltip(); } catch (e) {}
-            try { this._render(); } catch (e) {}
+            try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onClick.hideTooltip'); }
+            try { this._render(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onClick.render'); }
             return;
           }
           // Quick tap on empty space - place custom marker

@@ -273,7 +273,7 @@
                 const worldX = (px - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
                 const worldY = (py - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
                 this._routePreview = { index: seg.index, t, worldX, worldY, screenX: px, screenY: py };
-                try { this.canvas.style.cursor = 'pointer'; } catch (e) {}
+                try { this.canvas.style.cursor = 'pointer'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerMove.setCursor'); }
                 this._render();
                 return;
               }

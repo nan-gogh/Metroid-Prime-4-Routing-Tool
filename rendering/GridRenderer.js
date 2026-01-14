@@ -157,7 +157,7 @@
             if (map.ctxHeatmap && map.canvasHeatmap) {
                 map.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight);
             }
-        } catch (e) {}
+        } catch (e) { console.error('GridRenderer.render: Failed to clear heatmap canvas:', e); }
 
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
@@ -249,7 +249,7 @@
                             hmCtx.fillStyle = g;
                             hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
                             hmCtx.globalCompositeOperation = 'source-over';
-                        } catch (e) {}
+                        } catch (e) { console.error('GridRenderer.render: Failed to render heatmap marker:', e); }
                     }
                 }
                 hmCtx.restore();

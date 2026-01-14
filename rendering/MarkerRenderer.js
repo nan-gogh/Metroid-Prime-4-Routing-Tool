@@ -67,7 +67,7 @@
           if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
           const isSelected = this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
           const size = this.getMarkerRenderSize(marker, layerKey);
-          try { const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i)); this._markerSizeFrame[key] = size; } catch (e) {}
+          try { const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i)); this._markerSizeFrame[key] = size; } catch (e) { console.error('MarkerRenderer.render: Failed to cache marker size:', e); }
 
           if (isSelected) {
             try {
@@ -127,7 +127,7 @@
             const last = this._markerSizeFrame[key];
             if (typeof last === 'number' && last > 0) return last + (this.map.touchPadding || 0);
           }
-        } catch (e) {}
+        } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to get cached size:', e); }
         const base = (typeof this.map.getBaseMarkerRadius === 'function') ? this.map.getBaseMarkerRadius() : 6;
         const detailScale = (typeof this.map.getDetailScale === 'function') ? this.map.getDetailScale() : 1;
         const markerShrinkFactor = (typeof this.map.markerShrinkFactor === 'number') ? this.map.markerShrinkFactor : 0.6;
@@ -140,7 +140,7 @@
             const cfg = (this.map._highlightConfig && this.map._highlightConfig[layerKey]) ? this.map._highlightConfig[layerKey] : null;
             highlightScale = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
           }
-        } catch (e) {}
+        } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to check highlight state:', e); }
 
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
         const size = MarkerUtilsCore.computeMarkerSize({
@@ -174,7 +174,7 @@
           if (this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey)) {
             isHighlighted = true;
           }
-        } catch (e) {}
+        } catch (e) { console.error('MarkerRenderer.getMarkerRenderSize: Failed to check highlight state:', e); }
         
         // Check selection state
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;

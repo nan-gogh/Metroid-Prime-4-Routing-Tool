@@ -370,7 +370,7 @@
           keys.forEach(key => {
             try {
               localStorage.removeItem(key);
-            } catch (e) {}
+            } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'SettingsController._clearSavedData.removeItem'); }
           });
         }
       } catch (e) {

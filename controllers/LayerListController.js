@@ -455,7 +455,7 @@
             label.style.removeProperty('--layer-inline-highlight-color');
             iconDiv.style.boxShadow = '';
           }
-        } catch (e) {}
+        } catch (e) { this._logError(e, 'LayerListController._updateHighlightVisuals.styleUpdate'); }
       } catch (e) {
         this._logError(e, 'LayerListController._updateHighlightVisuals');
       }

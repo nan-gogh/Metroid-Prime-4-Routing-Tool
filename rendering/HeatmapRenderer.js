@@ -46,7 +46,7 @@
           this.offscreenCanvas.height = ph;
           this.offscreenCtx = this.offscreenCanvas.getContext('2d');
           // Keep pixel-clean drawing
-          try { this.offscreenCtx.imageSmoothingEnabled = true; this.offscreenCtx.imageSmoothingQuality = 'high'; } catch (e) {}
+          try { this.offscreenCtx.imageSmoothingEnabled = true; this.offscreenCtx.imageSmoothingQuality = 'high'; } catch (e) { console.error('HeatmapRenderer._ensureBufferSize: Failed to set image smoothing:', e); }
           this._lastCanvasSize = { w: cssWidth, h: cssHeight, dpr };
         }
       } catch (e) { /* ignore */ }
@@ -63,10 +63,10 @@
       // Clear visible canvas quickly if heatmap disabled
       try {
         if (!this.map._showGridHeatmap) {
-          try { const cssWidth = this.map.canvas.clientWidth; const cssHeight = this.map.canvas.clientHeight; this.ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) {}
+          try { const cssWidth = this.map.canvas.clientWidth; const cssHeight = this.map.canvas.clientHeight; this.ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer.render: Failed to clear canvas:', e); }
           return;
         }
-      } catch (e) {}
+      } catch (e) { console.error('HeatmapRenderer.render: Failed to check heatmap visibility:', e); }
 
       if (this._pendingRender) return;
       this._pendingRender = true;
@@ -88,7 +88,7 @@
         const ph = Math.round(cssHeight * dpr);
 
         // Clear offscreen
-        try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) {}
+        try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear offscreen canvas:', e); }
 
         // Build buckets (coarse 8x8 grid) and draw into offscreen
         const cols = this.config.GRID.COLS, rows = this.config.GRID.ROWS;
@@ -158,10 +158,10 @@
         // Blit offscreen to visible canvas with screen blend to integrate with tiles
         try {
           this.ctx.save();
-          try { this.ctx.globalCompositeOperation = 'screen'; } catch (e) {}
+          try { this.ctx.globalCompositeOperation = 'screen'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to set composite operation to screen:', e); }
           // draw scaled (use DPR-aware drawImage)
-          try { this.ctx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { }
-          try { this.ctx.globalCompositeOperation = 'source-over'; } catch (e) {}
+          try { this.ctx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', e); }
+          try { this.ctx.globalCompositeOperation = 'source-over'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to reset composite operation:', e); }
           this.ctx.restore();
         } catch (e) { console.debug('HeatmapRenderer._renderNow: blit failed', e); }
 
