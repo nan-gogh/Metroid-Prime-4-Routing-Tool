@@ -2260,9 +2260,9 @@ async function init() {
                                 row.style.setProperty('--edit-mode-outline-color', layerColor);
                                 row.classList.add('edit-mode-outline');
                             }
-                        } catch (e) { _logError(e, '_enterEditMode.setOutlineColor'); }
+                        } catch (e) { console.error('_enterEditMode: Failed to set outline color:', e); }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('_enterEditMode: Unexpected error:', e); }
             };
 
             map._exitEditMode = function(layerKey) {
@@ -2274,12 +2274,12 @@ async function init() {
                             row.classList.remove('edit-mode-outline');
                             row.style.removeProperty('--edit-mode-outline-color');
                         }
-                    } catch (e) {}
+                    } catch (e) { console.error('_exitEditMode: Failed to remove edit outline:', e); }
                     // Reset cursor when exiting route edit mode
                     if (layerKey === 'route') {
-                        try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) {}
+                        try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { console.error('_exitEditMode: Failed to reset cursor:', e); }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('_exitEditMode: Unexpected error:', e); }
             };
             // Apply any previously saved highlighted layers (consent-gated)
             try {
@@ -2293,16 +2293,16 @@ async function init() {
                             map.layerVisibility[layerKey] = true;
                             const scale = (saved[layerKey] && typeof saved[layerKey].scale === 'number') ? saved[layerKey].scale : (map._highlightConfig && map._highlightConfig[layerKey] && map._highlightConfig[layerKey].scale) || 2.0;
                             map.setLayerHighlight(layerKey, scale);
-                        } catch (e) {}
+                        } catch (e) { console.error('init: Failed to set layer highlight:', e); }
                     }
                 }
-            } catch (e) {}
+            } catch (e) { console.error('init: Failed to load highlighted layers from storage:', e); }
             // Grid DOM label creation is handled by GridRenderer.init()
             // Ensure GridRenderer performed its init (idempotent)
-            try { if (map && map.gridRenderer && typeof map.gridRenderer.init === 'function') { map.gridRenderer.init(); } } catch (e) { /* deferred createGridQuadLabels failed (suppressed) */ }
+            try { if (map && map.gridRenderer && typeof map.gridRenderer.init === 'function') { map.gridRenderer.init(); } } catch (e) { console.error('init: Failed to initialize GridRenderer:', e); }
 
 
-        } catch (e) {}
+        } catch (e) { console.error('init: Unexpected error during map initialization:', e); }
     // Runtime metadata for the special `customMarkers` layer: deletable, not selectable
     try {
         if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
@@ -2312,7 +2312,7 @@ async function init() {
                 LAYERS.customMarkers.maxMarkers = (map && map.layerConfig && map.layerConfig.customMarkers && map.layerConfig.customMarkers.maxMarkers) || 50;
             }
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to configure customMarkers layer:', e); }
 
     // Populate layer icons from LAYERS definitions
     let layerListController;
@@ -2372,34 +2372,34 @@ async function init() {
                 map.markerManager.loadMarkers();
             }
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to load markers from storage:', e); }
     // Attempt to restore a previously saved route (if any) - consent-gated
     try { 
         if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
             map.loadRouteFromStorage(); 
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to load route from storage:', e); }
     // Load route looping preference independently (persisted separately from route data)
     // Note: routeManager.loadFromStorage() already loads the looping flag, so this is redundant
     try {
         if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
             // Looping flag is already loaded by routeManager.loadFromStorage() above
             // Update UI after loading loop state
-            try { map.updateLoopUI(); } catch (e) {}
+            try { map.updateLoopUI(); } catch (e) { console.error('init: Failed to update loop UI:', e); }
         }
     } catch (e) { /* default to false */ }
     // Attempt to restore saved map view (pan/zoom) when consent is present
     try {
         const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
         if (consent && map && typeof map.loadViewFromStorage === 'function') {
-            try { map.loadViewFromStorage(); } catch (e) {}
+            try { map.loadViewFromStorage(); } catch (e) { console.error('init: Failed to load view from storage:', e); }
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to restore saved map view:', e); }
     // Wire the compact Save-data toggle and Clear button (consent-aware)
     // NOTE: Storage consent controls are now handled by SettingsController
 
     // Ensure the sidebar counts reflect current map state now that elements exist
-    try { map.updateLayerCounts(); } catch (e) {}
+    try { map.updateLayerCounts(); } catch (e) { console.error('init: Failed to update layer counts:', e); }
 
     // Setup controls
     // NOTE: Zoom controls are now handled by ToolbarController
@@ -2413,10 +2413,10 @@ async function init() {
         const controls = document.querySelectorAll('.control-btn');
         controls.forEach(btn => {
             try {
-                btn.addEventListener('click', () => { try { btn.blur(); } catch (e) {} });
-            } catch (e) {}
+                btn.addEventListener('click', () => { try { btn.blur(); } catch (e) { console.error('init: Failed to blur control button:', e); } });
+            } catch (e) { console.error('init: Failed to add blur event listener to control button:', e); }
         });
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to setup control button blur handlers:', e); }
 
     // Ensure on-screen toggles/buttons don't retain focus after interaction
     try {
@@ -2425,11 +2425,11 @@ async function init() {
                 const sel = (ev && ev.target) ? ev.target.closest('button, .control-btn, .zoom-btn, .hints-toggle, .layer-toggle, [role="button"]') : null;
                 if (sel && typeof sel.blur === 'function') {
                     // blur after current event loop so any click handlers still run
-                    setTimeout(() => { try { sel.blur(); } catch (e) {} }, 0);
+                    setTimeout(() => { try { sel.blur(); } catch (e) { console.error('init: Failed to blur element:', e); } }, 0);
                 }
-            } catch (e) {}
+            } catch (e) { console.error('init: Failed to handle click event for blur:', e); }
         }, true);
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to setup global blur handler:', e); }
 
     // Position the hints overlay exactly above the Hints toggle button
     function positionHintsOverlay() {
@@ -2448,18 +2448,18 @@ async function init() {
                     const cs = window.getComputedStyle(consentBtn);
                     consentMarginBottom = parseFloat(cs.marginBottom) || 0;
                 }
-            } catch (e) { consentMarginBottom = 0; }
+            } catch (e) { consentMarginBottom = 0; console.error('positionHintsOverlay: Failed to get consent margin:', e); }
 
             // Align overlay's bottom to the footer height so it always sits
             // immediately above the footer area (CSS variable controls height).
             try {
                 hintsOverlay.style.bottom = 'var(--sidebar-footer-height)';
-            } catch (e) {}
+            } catch (e) { console.error('positionHintsOverlay: Failed to set overlay bottom style:', e); }
 
-        } catch (e) {}
+        } catch (e) { console.error('positionHintsOverlay: Unexpected error:', e); }
     }
-    try { positionHintsOverlay(); } catch (e) {}
-    try { window.addEventListener('resize', positionHintsOverlay, { passive: true }); } catch (e) {}
+    try { positionHintsOverlay(); } catch (e) { console.error('init: Failed to position hints overlay:', e); }
+    try { window.addEventListener('resize', positionHintsOverlay, { passive: true }); } catch (e) { console.error('init: Failed to add resize listener for hints overlay:', e); }
     // Helpers to lock UI while route computation runs
     function beginRouteCompute() {
         try {
@@ -2473,18 +2473,18 @@ async function init() {
                 inner.className = 'computing-inner';
                 inner.textContent = 'Computing route…';
                 overlay.appendChild(inner);
-                try { document.body.appendChild(overlay); } catch (e) {}
+                try { document.body.appendChild(overlay); } catch (e) { console.error('beginRouteCompute: Failed to append computing overlay to body:', e); }
             }
-            try { overlay.style.display = 'flex'; } catch (e) {}
-        } catch (e) {}
+            try { overlay.style.display = 'flex'; } catch (e) { console.error('beginRouteCompute: Failed to show computing overlay:', e); }
+        } catch (e) { console.error('beginRouteCompute: Unexpected error:', e); }
     }
 
     function endRouteCompute() {
         try {
             if (map) map._computingRoute = false;
             const overlay = document.getElementById('computingOverlay');
-            if (overlay) try { overlay.style.display = 'none'; } catch (e) {}
-        } catch (e) {}
+            if (overlay) try { overlay.style.display = 'none'; } catch (e) { console.error('endRouteCompute: Failed to hide computing overlay:', e); }
+        } catch (e) { console.error('endRouteCompute: Unexpected error:', e); }
     }
     
     // Helper to show/hide and position the edit overlay when either edit mode is active
@@ -2531,21 +2531,21 @@ async function init() {
                             ov.style.backgroundColor = `rgba(${c.r},${c.g},${c.b},${EDIT_OVERLAY_ALPHA})`;
                         }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('_updateOverlayFrame: Failed to set overlay background color:', e); }
                 // Keep aria-hidden=false while visible (during fade in/out)
                 ov.classList.add('visible');
-                try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
+                try { ov.setAttribute('aria-hidden', 'false'); } catch (e) { console.error('_updateOverlayFrame: Failed to set aria-hidden attribute:', e); }
                 // continue RAF while visible so overlay follows pan/zoom smoothly
                 _editOverlayRaf_module = requestAnimationFrame(_updateOverlayFrame);
             } else {
                 // Should not usually reach here because updateEditOverlay controls RAF lifecycle,
                 // but defensively hide overlay and clear inline sizes.
                 ov.classList.remove('visible');
-                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
-                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; } catch (e) {}
+                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) { console.error('_updateOverlayFrame: Failed to set aria-hidden attribute:', e); }
+                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; } catch (e) { console.error('_updateOverlayFrame: Failed to clear overlay styles:', e); }
                 _editOverlayRaf_module = null;
             }
-        } catch (e) { _editOverlayRaf_module = null; }
+        } catch (e) { console.error('_updateOverlayFrame: Unexpected error:', e); _editOverlayRaf_module = null; }
     }
 
     function updateEditOverlay() {
@@ -2583,30 +2583,30 @@ async function init() {
                             ov.style.backgroundColor = `rgba(${c.r},${c.g},${c.b},${EDIT_OVERLAY_ALPHA})`;
                         }
                     }
-                } catch (e) {}
-                if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} _overlayHideTimer_module = null; }
+                } catch (e) { console.error('updateEditOverlay: Failed to set overlay background color:', e); }
+                if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) { console.error('updateEditOverlay: Failed to clear hide timer:', e); } _overlayHideTimer_module = null; }
                 if (!_editOverlayRaf_module) _editOverlayRaf_module = requestAnimationFrame(_updateOverlayFrame);
                 return;
             }
 
             // Turning off: stop RAF, but keep inline sizing for the transition,
             // then clear sizing after the CSS opacity transition to avoid snapping.
-            if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) {} _editOverlayRaf_module = null; }
+            if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) { console.error('updateEditOverlay: Failed to cancel animation frame:', e); } _editOverlayRaf_module = null; }
             // Start fade-out by removing visible class
             ov.classList.remove('visible');
             // Keep aria-hidden=false during fade; only mark hidden after transition completes
-            try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
-            if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} }
+            try { ov.setAttribute('aria-hidden', 'false'); } catch (e) { console.error('updateEditOverlay: Failed to set aria-hidden attribute:', e); }
+            if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) { console.error('updateEditOverlay: Failed to clear hide timer:', e); } }
             _overlayHideTimer_module = setTimeout(() => {
                 try {
                     // If overlay was re-enabled in the meantime, don't clear
                     if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer_module = null; return; }
-                    try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
-                    try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) {}
-                } catch (e) {}
+                    try { ov.setAttribute('aria-hidden', 'true'); } catch (e) { console.error('updateEditOverlay: Failed to set aria-hidden attribute:', e); }
+                    try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) { console.error('updateEditOverlay: Failed to clear overlay styles:', e); }
+                } catch (e) { console.error('updateEditOverlay: Unexpected error in hide timer:', e); }
                 _overlayHideTimer_module = null;
             }, 220); // slightly longer than CSS transition (160ms) to ensure smooth fade
-        } catch (e) {}
+        } catch (e) { console.error('updateEditOverlay: Unexpected error:', e); }
     }
     
     // Unified helper: apply layer color to sidebar and mini edit-toggle buttons
@@ -2636,13 +2636,13 @@ async function init() {
             const sidebarEl = document.getElementById(sidebarId);
             const miniEl = document.getElementById(miniId);
             if (on) {
-                try { if (sidebarEl) { sidebarEl.style.setProperty(`--${sidebarCssPrefix}-border`, border); sidebarEl.style.setProperty(`--${sidebarCssPrefix}-glow1`, glow1); } } catch (e) {}
-                try { if (miniEl) { miniEl.style.setProperty('--edit-layer-glow1', glow1); miniEl.style.setProperty('--edit-layer-glow2', glow2); miniEl.style.setProperty('--edit-layer-border', border); } } catch (e) {}
+                try { if (sidebarEl) { sidebarEl.style.setProperty(`--${sidebarCssPrefix}-border`, border); sidebarEl.style.setProperty(`--${sidebarCssPrefix}-glow1`, glow1); } } catch (e) { console.error('setEditToggleColor: Failed to set sidebar styles:', e); }
+                try { if (miniEl) { miniEl.style.setProperty('--edit-layer-glow1', glow1); miniEl.style.setProperty('--edit-layer-glow2', glow2); miniEl.style.setProperty('--edit-layer-border', border); } } catch (e) { console.error('setEditToggleColor: Failed to set mini styles:', e); }
             } else {
-                try { if (sidebarEl) { sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-border`); sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-glow1`); } } catch (e) {}
-                try { if (miniEl) { miniEl.style.removeProperty('--edit-layer-glow1'); miniEl.style.removeProperty('--edit-layer-glow2'); } } catch (e) {}
+                try { if (sidebarEl) { sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-border`); sidebarEl.style.removeProperty(`--${sidebarCssPrefix}-glow1`); } } catch (e) { console.error('setEditToggleColor: Failed to remove sidebar styles:', e); }
+                try { if (miniEl) { miniEl.style.removeProperty('--edit-layer-glow1'); miniEl.style.removeProperty('--edit-layer-glow2'); } } catch (e) { console.error('setEditToggleColor: Failed to remove mini styles:', e); }
             }
-        } catch (e) {}
+        } catch (e) { console.error('setEditToggleColor: Unexpected error:', e); }
     }
     
     // Layer toggle handlers are created dynamically in `initializeLayerIcons()`
@@ -2706,10 +2706,10 @@ async function init() {
                             }
                         }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('init: Failed to handle marker size slider change:', e); }
             });
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to setup marker size slider:', e); }
     
     // Settings: marker size slider wiring
     try {
@@ -2752,10 +2752,10 @@ async function init() {
                             }
                         }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('init: Failed to handle marker size slider change:', e); }
             });
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to setup marker size slider:', e); }
     
     // Settings: highlight scale slider wiring
     try {
@@ -2798,10 +2798,10 @@ async function init() {
                             }
                         }
                     }
-                } catch (e) {}
+                } catch (e) { console.error('init: Failed to handle highlight scale slider change:', e); }
             });
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to setup highlight scale slider:', e); }
     
     document.getElementById('importCustom').addEventListener('click', () => {
         document.getElementById('importFile').click();
@@ -2931,10 +2931,10 @@ async function init() {
             }
             map.updateLayerCounts();
             // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
-            try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('customMarkers'); } catch (e) {}
-            try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) {}
-            try { map.canvas.style.cursor = 'grab'; } catch (e) {}
-            try { map.render(); } catch (e) {}
+            try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('customMarkers'); } catch (e) { console.error('clearMarkers: Failed to exit edit mode for customMarkers:', e); }
+            try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) { console.error('clearMarkers: Failed to clear dragging state:', e); }
+            try { map.canvas.style.cursor = 'grab'; } catch (e) { console.error('clearMarkers: Failed to reset cursor:', e); }
+            try { map.render(); } catch (e) { console.error('clearMarkers: Failed to render after clearing:', e); }
         }
     });
 
@@ -3029,6 +3029,7 @@ async function init() {
                             }
                         } catch (e) {
                             length = (typeof result.length === 'number') ? result.length : 0;
+                            console.error('computeRoute: Failed to get route length from result:', e);
                         }
                         map.setRoute(finalTour, length, sources);
                         // Do not change looping preference when computing a route; looping is explicit via UI.
@@ -3037,7 +3038,7 @@ async function init() {
                             map.selectedMarker = null;
                             map.selectedMarkerLayer = null;
                             map.hideTooltip();
-                        } catch (e) {}
+                        } catch (e) { console.error('computeRoute: Failed to deselect marker:', e); }
                         // Enter route edit mode automatically so user can refine the computed route
                         try {
                             const routeToggle = document.getElementById('editRouteToggle');
@@ -3047,20 +3048,20 @@ async function init() {
                             } else {
                                 // Fallback: set mode and update overlay/mini toggle directly
                                 map.editRouteMode = true;
-                                try { updateEditOverlay(); } catch (e) {}
+                                try { updateEditOverlay(); } catch (e) { console.error('computeRoute: Failed to update edit overlay:', e); }
                                 try {
                                     const mini = document.getElementById('editRouteToggleMini');
-                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) {} mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
-                                } catch (e) {}
+                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) { console.error('computeRoute: Failed to set edit toggle color:', e); } mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                                } catch (e) { console.error('computeRoute: Failed to setup mini route toggle:', e); }
                                 // Ensure route edit-mode visual state: enter route edit mode helper
-                                try { map._enterEditMode && map._enterEditMode('route', 2.0); } catch (e) {}
+                                try { map._enterEditMode && map._enterEditMode('route', 2.0); } catch (e) { console.error('computeRoute: Failed to enter route edit mode:', e); }
                                 // Disable markers edit mode (and properly exit it)
-                                try { map.editMarkersMode = false; } catch (e) {}
-                                try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
-                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) {}
-                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) {} miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) {}
+                                try { map.editMarkersMode = false; } catch (e) { console.error('computeRoute: Failed to disable markers edit mode:', e); }
+                                try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) { console.error('computeRoute: Failed to exit customMarkers edit mode:', e); }
+                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) { console.error('computeRoute: Failed to update markers toggle:', e); }
+                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) { console.error('computeRoute: Failed to set mini markers toggle color:', e); } miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) { console.error('computeRoute: Failed to update mini markers toggle:', e); }
                             }
-                        } catch (e) {}
+                        } catch (e) { console.error('computeRoute: Failed to enter route edit mode after computation:', e); }
                         // log removed
                     } else {
                         NotificationUtils.showRouteComputationError('Advanced solver returned no route.');
@@ -3132,22 +3133,22 @@ async function init() {
                         computeNearbyMini.style.setProperty('--edit-layer-border', routeColor);
                         computeNearbyMini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
                         computeNearbyMini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
-                    } catch(e) {}
+                    } catch(e) { console.error('init: Failed to set compute nearby mini styles:', e); }
                 }
-            } catch (e) {}
-            computeNearbyMini.addEventListener('click', (e) => { try { expandRouteNearby(); } catch (err) {} });
+            } catch (e) { console.error('init: Failed to setup compute nearby mini button:', e); }
+            computeNearbyMini.addEventListener('click', (e) => { try { expandRouteNearby(); } catch (err) { console.error('expandRouteNearby: Failed to expand route nearby:', err); } });
         }
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to initialize compute nearby mini:', e); }
 
     // Route direction toggle: single button that flips animation direction
         try {
             const toggleDirBtn = document.getElementById('toggleRouteDirBtn');
             // Animation direction flag is no longer persisted or flipped; keep forward by default
-            try { map._routeAnimationDirection = 1; } catch (e) {}
+            try { map._routeAnimationDirection = 1; } catch (e) { console.error('init: Failed to set route animation direction:', e); }
 
             // Centralized toggler: reverse waypoint order only (do not change animation direction)
             const toggleRouteDirection = () => {
-                try { map._lastRouteAnimTime = performance.now(); } catch (e) {}
+                try { map._lastRouteAnimTime = performance.now(); } catch (e) { console.error('toggleRouteDirection: Failed to set last route animation time:', e); }
                 try {
                     if (Array.isArray(map.currentRoute) && map.currentRoute.length > 1 && Array.isArray(map._routeSources)) {
                         const ordered = [];
@@ -3160,11 +3161,11 @@ async function init() {
                             ordered.reverse();
                             const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
                             const newIndices = newSources.map((_, i) => i);
-                            try { map.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, MAP_SIZE), newSources); } catch (e) {}
+                            try { map.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, MAP_SIZE), newSources); } catch (e) { console.error('toggleRouteDirection: Failed to set reversed route:', e); }
                         }
                     }
-                } catch (e) {}
-                try { map.render(); } catch (e) {}
+                } catch (e) { console.error('toggleRouteDirection: Failed to reverse route direction:', e); }
+                try { map.render(); } catch (e) { console.error('toggleRouteDirection: Failed to render after direction change:', e); }
             };
 
             if (toggleDirBtn) {
@@ -3188,13 +3189,13 @@ async function init() {
                                 toggleDirMini.style.setProperty('--edit-layer-border', routeColor);
                                 toggleDirMini.style.setProperty('--edit-layer-press1', `rgba(${r},${g},${b},0.18)`);
                                 toggleDirMini.style.setProperty('--edit-layer-press2', `rgba(${r},${g},${b},0.08)`);
-                            } catch(e) {}
+                            } catch(e) { console.error('init: Failed to set toggle direction mini styles:', e); }
                         }
-                    } catch (e) {}
-                    toggleDirMini.addEventListener('click', (ev) => { try { toggleRouteDirection(); } catch (err) {} });
+                    } catch (e) { console.error('init: Failed to setup toggle direction mini button:', e); }
+                    toggleDirMini.addEventListener('click', (ev) => { try { toggleRouteDirection(); } catch (err) { console.error('toggleRouteDirection: Failed to toggle route direction:', err); } });
                 }
-            } catch (e) {}
-        } catch (e) {}
+            } catch (e) { console.error('init: Failed to initialize toggle direction mini:', e); }
+        } catch (e) { console.error('init: Failed to setup route direction toggle:', e); }
 
     if (clearRouteBtn) {
         clearRouteBtn.addEventListener('click', () => {
@@ -3205,19 +3206,19 @@ async function init() {
             if (NotificationUtils.confirmDestructiveAction('Clear route? This cannot be undone.')) {
                 map.clearRoute();
                 // Exit route edit mode when route is cleared
-                try { map.editRouteMode = false; } catch (e) {}
-                try { map._routeNodeCandidate = null; map._routeInsert = null; } catch (e) {}
+                try { map.editRouteMode = false; } catch (e) { console.error('clearRoute: Failed to disable route edit mode:', e); }
+                try { map._routeNodeCandidate = null; map._routeInsert = null; } catch (e) { console.error('clearRoute: Failed to clear route candidates:', e); }
                 // Update sidebar & mini toggles if present
                 try {
                     const routeToggle = document.getElementById('editRouteToggle');
                     if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
-                } catch (e) {}
+                } catch (e) { console.error('clearRoute: Failed to update route toggle:', e); }
                 try {
                     const miniRoute = document.getElementById('editRouteToggleMini');
-                    if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) {} miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
-                } catch (e) {}
-                try { updateEditOverlay(); } catch (e) {}
-                try { map.render(); } catch (e) {}
+                    if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) { console.error('clearRoute: Failed to set mini route toggle color:', e); } miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                } catch (e) { console.error('clearRoute: Failed to update mini route toggle:', e); }
+                try { updateEditOverlay(); } catch (e) { console.error('clearRoute: Failed to update edit overlay:', e); }
+                try { map.render(); } catch (e) { console.error('clearRoute: Failed to render after clearing route:', e); }
             }
         });
     }
@@ -3238,14 +3239,14 @@ async function init() {
                 if (hintsOverlay) {
                     hintsOverlay.classList.remove('visible');
                     // Mark closed explicitly so CSS can target the closed state
-                    try { hintsOverlay.classList.add('closed'); } catch (e) {}
+                    try { hintsOverlay.classList.add('closed'); } catch (e) { console.error('sidebarToggle: Failed to add closed class to hints overlay:', e); }
                     hintsOverlay.setAttribute('aria-hidden', 'true');
                 }
                 if (hintsToggle) {
                     hintsToggle.setAttribute('aria-expanded', 'false');
                     hintsToggle.classList.remove('active');
                 }
-            } catch (e) {}
+            } catch (e) { console.error('sidebarToggle: Failed to close hints overlay:', e); }
         } else {
             app.classList.remove('sidebar-collapsed');
             handle && handle.setAttribute('aria-expanded', 'true');
@@ -3302,14 +3303,14 @@ async function init() {
                     // Detailed panel values
                     const dev_loadingResolution = document.getElementById('dev_loadingResolution');
                     const dev_imagesCached = document.getElementById('dev_imagesCached');
-                    try { if (dev_loadingResolution) dev_loadingResolution.textContent = (map.loadingResolution != null) ? (MP4Config.TILE_RESOLUTIONS[map.loadingResolution] + 'px') : '—'; } catch (e) {}
-                    try { if (dev_imagesCached) dev_imagesCached.textContent = Object.keys(map.images || {}).length; } catch (e) {}
+                    try { if (dev_loadingResolution) dev_loadingResolution.textContent = (map.loadingResolution != null) ? (MP4Config.TILE_RESOLUTIONS[map.loadingResolution] + 'px') : '—'; } catch (e) { console.error('updateDevStats: Failed to update loading resolution:', e); }
+                    try { if (dev_imagesCached) dev_imagesCached.textContent = Object.keys(map.images || {}).length; } catch (e) { console.error('updateDevStats: Failed to update images cached count:', e); }
                 } catch (e) {
                     if (devStatsPanel) {
-                        try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) {}
-                        try { if (dev_bitmapQueue) dev_bitmapQueue.textContent = 'err'; } catch (e) {}
-                        try { if (dev_imageControllers) dev_imageControllers.textContent = 'err'; } catch (e) {}
-                        try { if (dev_imageBitmaps) dev_imageBitmaps.textContent = 'err'; } catch (e) {}
+                        try { if (dev_bitmapActive) dev_bitmapActive.textContent = 'err'; } catch (e) { console.error('updateDevStats: Failed to set bitmap active error:', e); }
+                        try { if (dev_bitmapQueue) dev_bitmapQueue.textContent = 'err'; } catch (e) { console.error('updateDevStats: Failed to set bitmap queue error:', e); }
+                        try { if (dev_imageControllers) dev_imageControllers.textContent = 'err'; } catch (e) { console.error('updateDevStats: Failed to set image controllers error:', e); }
+                        try { if (dev_imageBitmaps) dev_imageBitmaps.textContent = 'err'; } catch (e) { console.error('updateDevStats: Failed to set image bitmaps error:', e); }
                     } else if (devStats) {
                         devStats.textContent = 'error';
                     }
@@ -3379,19 +3380,19 @@ async function init() {
                 hintsToggle.addEventListener('click', () => {
                     const isOpen = hintsOverlay.classList.toggle('visible');
                     // Keep an explicit "closed" class so CSS can easily target the closed state
-                    try { hintsOverlay.classList.toggle('closed', !isOpen); } catch (e) {}
+                    try { hintsOverlay.classList.toggle('closed', !isOpen); } catch (e) { console.error('hintsToggle: Failed to toggle closed class:', e); }
                     hintsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
                     hintsOverlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     hintsList.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
                     // Mirror visual pressed state like other toggle buttons
-                    try { hintsToggle.classList.toggle('active', !!isOpen); } catch (e) {}
+                    try { hintsToggle.classList.toggle('active', !!isOpen); } catch (e) { console.error('hintsToggle: Failed to toggle active class:', e); }
                     // No map.resize() needed — the hints list is now in-flow inside the footer
                 });
             }
-        } catch (e) {}
+        } catch (e) { console.error('init: Failed to setup hints toggle:', e); }
 
         // File migration tools removed — routes and markers now upgrade in place on import/load
-    } catch (e) {}
+    } catch (e) { console.error('init: Failed to initialize UI components:', e); }
 
     // Signal that the app finished initial synchronous startup work so the UI
     // (loading fade) can be removed when the page is ready for interaction.
@@ -3410,7 +3411,7 @@ async function init() {
                             if (needed !== null && map.images && map.images[needed]) return resolve(true);
                             if (map.currentImage) return resolve(true);
                         }
-                    } catch (e) {}
+                    } catch (e) { console.error('waitForInitialImage: Failed to check image availability:', e); }
                     if (Date.now() - start >= timeoutMs) return resolve(false);
                     setTimeout(check, 80);
                 })();
@@ -3422,11 +3423,11 @@ async function init() {
                 if (map && typeof map.render === 'function') map.render();
                 // Give the browser a chance to paint and finish any decode work
                 await new Promise(res => requestAnimationFrame(() => setTimeout(res, 140)));
-            } catch (e) {}
-        } catch (e) {}
-        try { window._mp4Ready = true; } catch (e) {}
+            } catch (e) { console.error('init: Failed to render initial overlay:', e); }
+        } catch (e) { console.error('init: Failed to wait for initial image:', e); }
+        try { window._mp4Ready = true; } catch (e) { console.error('init: Failed to set _mp4Ready flag:', e); }
         document.dispatchEvent(new Event('mp4-ready'));
-    } catch (e) {}
+    } catch (e) { console.error('init: Unexpected error during initialization:', e); }
 }
 
 document.addEventListener('DOMContentLoaded', init);
