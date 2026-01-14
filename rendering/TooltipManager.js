@@ -13,6 +13,9 @@
     }
 
     init(container) {
+      // Initialize error handler from global
+      this.errorHandler = global.errorHandler;
+      
       try {
         this.container = container || document.body;
         // Try to adopt existing tooltip if present
@@ -28,10 +31,10 @@
           this.container.appendChild(this.tooltip);
         }
         // Ensure container is positioned
-        try { if (window.getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative'; } catch (e) { console.debug('TooltipManager: getComputedStyle failed', e.message); }
+        try { if (window.getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative'; } catch (e) { this.errorHandler && this.errorHandler.logDebug('TooltipManager: getComputedStyle failed', 'TooltipManager.init.getComputedStyle', { message: e.message }); }
         // Ensure tooltip is inside container
-        try { if (this.tooltip.parentElement !== this.container) this.container.appendChild(this.tooltip); } catch (e) { console.debug('TooltipManager: appendChild failed', e.message); }
-      } catch (e) { console.debug('TooltipManager.init failed', e); }
+        try { if (this.tooltip.parentElement !== this.container) this.container.appendChild(this.tooltip); } catch (e) { this.errorHandler && this.errorHandler.logDebug('TooltipManager: appendChild failed', 'TooltipManager.init.appendChild', { message: e.message }); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('TooltipManager.init failed', 'TooltipManager.init', { error: e }); }
     }
 
     show(content, x, y) {
@@ -80,7 +83,7 @@
           this._place(req.x, req.y);
           last.x = req.x; last.y = req.y;
         }
-      } catch (e) { console.debug('TooltipManager._applyPending failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('TooltipManager._applyPending failed', 'TooltipManager._applyPending', { error: e }); }
     }
 
     _place(x, y) {
@@ -101,7 +104,7 @@
         }
         this.tooltip.style.left = desiredLeft + 'px';
         this.tooltip.style.top = desiredTop + 'px';
-      } catch (e) { console.debug('TooltipManager._place failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('TooltipManager._place failed', 'TooltipManager._place', { error: e }); }
     }
   }
 

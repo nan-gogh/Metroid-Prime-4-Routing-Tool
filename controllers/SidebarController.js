@@ -35,11 +35,7 @@
           hideBtn.addEventListener('click', () => this._applyLayerToggle(false));
         }
       } catch (e) {
-        if (this.errorHandler) {
-          this.errorHandler.logError(e, 'SidebarController: Failed to bind show/hide all buttons');
-        } else {
-          console.debug('SidebarController: Failed to bind show/hide all buttons:', e);
-        }
+        this.errorHandler.logDebug('SidebarController: Failed to bind show/hide all buttons', 'SidebarController._bindShowHideAllButtons', { error: e });
       }
     }
 

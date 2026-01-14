@@ -6,6 +6,9 @@ class RouteManager {
         this.markerManager = markerManager;
         this.storage = storage;
         this.notifications = notifications;
+        
+        // Error handling
+        this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
 
         // Internal state
         this.currentRoute = [];
@@ -28,7 +31,7 @@ class RouteManager {
             try {
                 this.onRouteChanged();
             } catch (e) {
-                console.debug('RouteManager._notifyRouteChanged failed:', e);
+                this.errorHandler.logDebug('RouteManager._notifyRouteChanged failed', 'RouteManager._notifyRouteChanged', { error: e });
             }
         }
     }
@@ -44,7 +47,7 @@ class RouteManager {
             }
             this.routeLooping = this.storage.loadRouteLoopingFlag();
         } catch (e) {
-            console.warn('Failed to load route from storage:', e);
+            this.errorHandler.logWarning(e, 'RouteManager.loadFromStorage.failed', {});
             this.currentRoute = [];
             this.routeSources = [];
             this.currentRouteLengthNormalized = 0;
@@ -63,7 +66,7 @@ class RouteManager {
             this.storage.saveRoute(routeData);
             this.storage.saveRouteLoopingFlag(this.routeLooping);
         } catch (e) {
-            console.warn('Failed to save route to storage:', e);
+            this.errorHandler.logWarning(e, 'RouteManager.saveToStorage.failed', {});
         }
     }
 
@@ -198,7 +201,7 @@ class RouteManager {
                 routeSources.push({ marker });
                 routeIndices.push(i);
             } else {
-                console.warn(`Could not find marker for route point ${i}:`, point);
+                this.errorHandler.logWarning(`Could not find marker for route point ${i}`, 'RouteManager.importRoute.markerNotFound', { routePointIndex: i, point });
             }
         }
 

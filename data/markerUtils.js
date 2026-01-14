@@ -3,11 +3,12 @@
 
 const MarkerUtils = {
     _manager: null,
+    errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
 
     // Factory method to create manager with dependencies
     createManager(config, storage, notifications) {
         if (this._manager) {
-            console.warn('MarkerManager already exists, returning existing instance');
+            this.errorHandler.logWarning('MarkerManager already exists, returning existing instance', 'MarkerUtils.createManager.duplicate', {});
             return this._manager;
         }
 
@@ -19,7 +20,7 @@ const MarkerUtils = {
                 try {
                     this._onMarkersChanged();
                 } catch (e) {
-                    console.debug('MarkerUtils._notifyMarkersChanged failed:', e);
+                    this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils._notifyMarkersChanged', { error: e });
                 }
             }
         };
@@ -29,7 +30,7 @@ const MarkerUtils = {
                 try {
                     this._onCleanupRouteReferences(uid);
                 } catch (e) {
-                    console.debug('Route cleanup callback failed:', e);
+                    this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.routeCleanupCallback', { error: e });
                 }
             }
         };
@@ -51,7 +52,7 @@ const MarkerUtils = {
                             try {
                                 this._onMarkersChanged();
                             } catch (e) {
-                                console.debug('MarkerUtils._notifyMarkersChanged failed:', e);
+                                this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils.getManager._notifyMarkersChanged', { error: e });
                             }
                         }
                     };
@@ -61,14 +62,14 @@ const MarkerUtils = {
                             try {
                                 this._onCleanupRouteReferences(uid);
                             } catch (e) {
-                                console.debug('Route cleanup callback failed:', e);
+                                this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.getManager.routeCleanupCallback', { error: e });
                             }
                         }
                     };
                     
-                    console.log('On-demand MarkerManager creation succeeded');
+                    this.errorHandler.logDebug('On-demand MarkerManager creation succeeded', 'MarkerUtils.getManager.creationSuccess', {});
                 } catch (e) {
-                    console.error('On-demand MarkerManager creation failed:', e);
+                    this.errorHandler.logError(e, 'MarkerUtils.getManager.creationFailed', {});
                     throw new Error('MarkerManager creation failed: ' + e.message);
                 }
             } else {
@@ -87,7 +88,7 @@ const MarkerUtils = {
                     try {
                         callback();
                     } catch (e) {
-                        console.debug('MarkerUtils._notifyMarkersChanged failed:', e);
+                        this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils.setOnMarkersChanged', { error: e });
                     }
                 }
             };
@@ -102,7 +103,7 @@ const MarkerUtils = {
                     try {
                         callback(uid);
                     } catch (e) {
-                        console.debug('Route cleanup callback failed:', e);
+                        this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.setOnCleanupRouteReferences', { error: e });
                     }
                 }
             };

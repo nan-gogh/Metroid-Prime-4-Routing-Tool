@@ -195,6 +195,9 @@
     
     <script src="data/init.js"></script>
     
+    <!-- Error handling utility - load early -->
+    <script src="utils/ErrorHandler.js"></script>
+    
     <script src="data/layers/lamornStatue.js"></script>
     <script src="data/layers/gfDebris.js"></script>
     <script src="data/layers/tokabisCamp.js"></script>
@@ -219,9 +222,11 @@
 
     <script src="data/storageUtils.js"></script>
     <script src="data/StorageInterface.js"></script>
+    <script src="data/StorageService.js"></script>
     <script src="data/NotificationInterface.js"></script>
     <script src="data/MarkerManager.js"></script>
     <script src="data/RouteManager.js"></script>
+    <script src="data/ObjectPool.js"></script>
     <script src="data/markerUtilsCore.js"></script>
     <script src="data/markerUtils.js"></script>
     <script src="data/notificationUtils.js"></script>
@@ -231,9 +236,6 @@
     <script src="data/RouteAnimation.js"></script>
     <script src="tools/tsp_euclid.js"></script>
     <script src="data/config.js"></script>
-
-    <!-- Error handling utility -->
-    <script src="utils/ErrorHandler.js"></script>
 
     <!-- Rendering modules (phase 2 scaffolding) -->
     <script src="rendering/TileRenderer.js"></script>
@@ -252,6 +254,13 @@
     <script src="state/SelectionState.js"></script>
     <script src="state/RouteState.js"></script>
     <script src="state/LayerState.js"></script>
+
+    <!-- Controller modules (phase 2 scaffolding) -->
+    <script src="controllers/LayerListController.js"></script>
+    <script src="controllers/SettingsController.js"></script>
+    <script src="controllers/SidebarController.js"></script>
+    <script src="controllers/ToolbarController.js"></script>
+    <script src="controllers/RouteComputeController.js"></script>
 
     <script src="map.js"></script>
     <script src="data/ripple.js"></script>
@@ -291,7 +300,7 @@
         try {
             document.addEventListener('mp4-ready', removeFade, { once: true });
             // Fallback: ensure fade removed after 7s even if event not fired
-            setTimeout(() => { try { removeFade(); } catch (e) {} }, 7000);
+            setTimeout(() => { try { removeFade(); } catch (e) { console.error('Failed to remove fade in fallback timeout:', e); } }, 7000);
         } catch (e) {
             // As a final fallback, remove fade on window load
             if (document.readyState === 'complete') removeFade(); else window.addEventListener('load', removeFade);

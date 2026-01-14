@@ -24,6 +24,9 @@
      * Sets up a positioned container with grid labels (A1, B1, etc.) that can display marker counts.
      */
     init() {
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      
       try {
         const parent = this.map.canvas && this.map.canvas.parentElement;
         if (!parent) return;
@@ -65,7 +68,7 @@
         }
         container.style.display = 'none';
         this._labelsContainer = container;
-      } catch (e) { console.debug('GridRenderer.init failed', e); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.init failed', 'GridRenderer.init', { error: e }); }
     }
 
     /**
@@ -76,11 +79,11 @@
       try {
         // Only render the grid when the runtime grid layer is enabled
         if (!this.layerState.isLayerVisible('grid')) return;
-        try { this.renderQuadrantGrid(); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', e); }
-        try { this.renderDetailGrid(); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', e); }
+        try { this.renderQuadrantGrid(); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
+        try { this.renderDetailGrid(); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
         // Keep DOM labels in sync
-        try { this.updateQuadLabels(); } catch (e) { console.debug('GridRenderer.render: updateQuadLabels failed', e); }
-      } catch (e) { console.debug('GridRenderer.render: non-fatal error', e); }
+        try { this.updateQuadLabels(); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
     }
 
     /**
@@ -128,7 +131,7 @@
 
             ctx.restore();
         }
-      } catch (e) { console.debug('GridRenderer.renderQuadrantGrid failed', e); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderQuadrantGrid failed', 'GridRenderer.renderQuadrantGrid', { error: e }); }
     }
 
     /**
@@ -157,7 +160,7 @@
             if (map.ctxHeatmap && map.canvasHeatmap) {
                 map.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight);
             }
-        } catch (e) { console.error('GridRenderer.render: Failed to clear heatmap canvas:', e); }
+        } catch (e) { (this.errorHandler || global.errorHandler || console).error('GridRenderer.render: Failed to clear heatmap canvas:', e); }
 
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
@@ -206,7 +209,7 @@
                             });
                         }
                     });
-                } catch (e) { console.debug('renderDetailGrid: failed to build heatmap buckets', e); }
+                } catch (e) { this.errorHandler.logDebug('renderDetailGrid: failed to build heatmap buckets', 'GridRenderer.renderDetailGrid.buildBuckets', { error: e }); }
 
                 // For each cell with markers, compute the target total alpha and split it across markers
                 for (let idx = 0; idx < buckets.length; idx++) {
@@ -249,7 +252,7 @@
                             hmCtx.fillStyle = g;
                             hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
                             hmCtx.globalCompositeOperation = 'source-over';
-                        } catch (e) { console.error('GridRenderer.render: Failed to render heatmap marker:', e); }
+                        } catch (e) { (this.errorHandler || global.errorHandler || console).error('GridRenderer.render: Failed to render heatmap marker:', e); }
                     }
                 }
                 hmCtx.restore();
@@ -290,7 +293,7 @@
         
         this.renderAxisLabels();
         ctx.restore();
-      } catch (e) { console.debug('GridRenderer.renderDetailGrid failed', e); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
     }
 
     /**
@@ -372,7 +375,7 @@
         }
 
         ctx.restore();
-      } catch (e) { console.debug('GridRenderer.renderAxisLabels failed', e); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderAxisLabels failed', 'GridRenderer.renderAxisLabels', { error: e }); }
     }
 
     /**
@@ -414,7 +417,7 @@
                     });
                 }
             });
-        } catch (e) { console.debug('GridRenderer.updateQuadLabels: failed to compute counts', e); }
+        } catch (e) { this.errorHandler.logDebug('GridRenderer.updateQuadLabels: failed to compute counts', 'GridRenderer.updateQuadLabels.computeCounts', { error: e }); }
 
         for (let i = 0; i < labels.length; i++) {
           const el = labels[i];
@@ -451,7 +454,7 @@
             }
           }
         }
-      } catch (e) { console.debug('GridRenderer.updateQuadLabels: non-fatal error', e); }
+      } catch (e) { this.errorHandler.logDebug('GridRenderer.updateQuadLabels: non-fatal error', 'GridRenderer.updateQuadLabels', { error: e }); }
     }
   }
 

@@ -8,6 +8,7 @@
      * @param {Array} stages - Array of renderer objects with render() methods to be managed
      */
     constructor(stages) {
+      this.errorHandler = global.errorHandler;
       this.stages = stages || [];
       this._enabledStages = new Set(); // Track enabled stages
       this._stageOrder = []; // Custom ordering
@@ -17,6 +18,10 @@
       this._lastRenderTime = 0;
       this._averageRenderTime = 0;
 
+      // Performance optimization: dirty flag tracking and render batching
+      this._dirtyFlags = new Set(); // Track which renderers need updating
+      this._frameScheduled = false; // Prevent multiple rAF calls
+
       // Initialize all stages as enabled by default
       this.stages.forEach((stage, index) => {
         if (stage && typeof stage.render === 'function') {
@@ -24,6 +29,68 @@
           this._stageOrder.push(stage);
         }
       });
+    }
+
+    /**
+     * Marks a specific renderer as dirty, indicating it needs re-rendering.
+     * Automatically schedules a render frame if one isn't already scheduled.
+     * @param {string} rendererName - The constructor name of the renderer to mark dirty
+     * @returns {RenderPipeline} This pipeline instance for chaining
+     */
+    markDirty(rendererName) {
+      this._dirtyFlags.add(rendererName);
+      this._scheduleRender();
+      return this;
+    }
+
+    /**
+     * Schedules a render frame using requestAnimationFrame to batch multiple render calls.
+     * Prevents excessive rendering when multiple dirty flags are set in quick succession.
+     * @private
+     */
+    _scheduleRender() {
+      if (this._frameScheduled) return;
+
+      this._frameScheduled = true;
+      requestAnimationFrame(() => {
+        this._frameScheduled = false;
+        this.render(this._dirtyFlags);
+        this._dirtyFlags.clear();
+      });
+    }
+
+    /**
+     * Forces an immediate render of all enabled stages, bypassing the dirty flag system.
+     * Useful for initial setup or when a full redraw is required.
+     * @returns {Array} Array of stage names that were successfully rendered
+     */
+    forceRender() {
+      return this.render();
+    }
+
+    /**
+     * Checks if any renderers are currently marked as dirty.
+     * @returns {boolean} True if any renderers are dirty, false otherwise
+     */
+    hasDirtyRenderers() {
+      return this._dirtyFlags.size > 0;
+    }
+
+    /**
+     * Gets the set of currently dirty renderer names.
+     * @returns {Set} Set of dirty renderer names
+     */
+    getDirtyRenderers() {
+      return new Set(this._dirtyFlags);
+    }
+
+    /**
+     * Clears all dirty flags without triggering a render.
+     * @returns {RenderPipeline} This pipeline instance for chaining
+     */
+    clearDirtyFlags() {
+      this._dirtyFlags.clear();
+      return this;
     }
 
     /**
@@ -121,9 +188,10 @@
     /**
      * Executes the rendering pipeline, calling render() on all enabled stages in order.
      * Includes performance profiling when enabled and error handling for individual stages.
+     * @param {Set} [dirtyOnly] - Optional set of renderer names to render selectively
      * @returns {Array} Array of stage names that were successfully rendered
      */
-    render() {
+    render(dirtyOnly = null) {
       const startTime = performance.now();
       this._renderCount++;
 
@@ -134,12 +202,16 @@
       for (let stage of stagesToRender) {
         if (!stage || !this._enabledStages.has(stage)) continue;
 
+        // Skip rendering if we're doing selective rendering and this stage isn't dirty
+        const stageName = stage.constructor.name || 'UnknownStage';
+        if (dirtyOnly && !dirtyOnly.has(stageName)) continue;
+
         const stageStartTime = this._profilingEnabled ? performance.now() : 0;
 
         try {
           if (typeof stage.render === 'function') {
             stage.render();
-            renderedStages.push(stage.constructor.name || 'UnknownStage');
+            renderedStages.push(stageName);
 
             if (this._profilingEnabled) {
               const stageTime = performance.now() - stageStartTime;
@@ -148,7 +220,7 @@
           }
         } catch (e) {
           const stageName = stage.constructor.name || 'UnknownStage';
-          console.debug(`RenderPipeline: ${stageName} failed`, e);
+          this.errorHandler && this.errorHandler.logDebug(`RenderPipeline: ${stageName} failed`, 'RenderPipeline.render.stage', { stageName, error: e });
 
           if (this._profilingEnabled) {
             this._recordStageError(stage, e);
@@ -163,7 +235,7 @@
 
       // Log performance warnings
       if (totalTime > 16.67 && this._profilingEnabled) { // Slower than 60fps
-        console.debug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`);
+        this.errorHandler && this.errorHandler.logDebug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
       }
 
       return renderedStages; // Return for debugging/analysis

@@ -26,6 +26,9 @@
      * Sets up internal scheduling flags and canvas size tracking for performance optimization.
      */
     init() {
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      
       // Setup an offscreen buffer and internal scheduling flags
       this.offscreenCanvas = null;
       this.offscreenCtx = null;
@@ -72,7 +75,7 @@
       this._pendingRender = true;
       requestAnimationFrame(() => {
         this._pendingRender = false;
-        try { this._renderNow(); } catch (e) { console.debug('HeatmapRenderer._renderNow failed', e); }
+        try { this._renderNow(); } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); }
       });
     }
 
@@ -108,7 +111,7 @@
                 });
               }
             });
-        } catch (e) { console.debug('HeatmapRenderer._renderNow: failed to build buckets', e); }
+        } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: failed to build buckets', 'HeatmapRenderer._renderNow.buildBuckets', { error: e }); }
 
         // Compute counts and draw soft radial blobs per marker into offscreen
         const counts = buckets.map(b => b.length);
@@ -163,9 +166,9 @@
           try { this.ctx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', e); }
           try { this.ctx.globalCompositeOperation = 'source-over'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to reset composite operation:', e); }
           this.ctx.restore();
-        } catch (e) { console.debug('HeatmapRenderer._renderNow: blit failed', e); }
+        } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
 
-      } catch (e) { console.debug('HeatmapRenderer._renderNow: non-fatal error', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }
     }
   }
 

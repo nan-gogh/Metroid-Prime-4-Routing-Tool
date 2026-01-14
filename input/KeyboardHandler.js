@@ -16,6 +16,9 @@
     }
 
     init() {
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      
       if (this.bound) return;
       this._onKeyDown = this._onKeyDown.bind(this);
       document.addEventListener('keydown', this._onKeyDown);
@@ -45,9 +48,9 @@
                 try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
               }
             }
-            try { if (typeof updateEditOverlay === 'function') updateEditOverlay(); } catch (err) {}
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+            try { if (typeof updateEditOverlay === 'function') updateEditOverlay(); } catch (err) { console.error('KeyboardHandler: Failed to update edit overlay on escape:', err); }
+          } catch (err) { console.error('KeyboardHandler: Failed to handle escape key:', err); }
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on escape:', err); }
           return;
         }
         
@@ -75,22 +78,22 @@
               }
             }
             ev.preventDefault();
-          } catch (err) {}
+          } catch (err) { console.error('KeyboardHandler: Failed to toggle sidebar:', err); }
           return;
         }
 
         // Basic zoom shortcuts
         if (ev.key === '+' || ev.key === '=') {
           if (this.map && typeof this.map.zoomIn === 'function') this.map.zoomIn();
-          try { ev.preventDefault(); } catch (err) {}
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on zoom in:', err); }
           return;
         } else if (ev.key === '-') {
           if (this.map && typeof this.map.zoomOut === 'function') this.map.zoomOut();
-          try { ev.preventDefault(); } catch (err) {}
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on zoom out:', err); }
           return;
         } else if (ev.key === '0') {
           if (this.map && typeof this.map.resetView === 'function') this.map.resetView();
-          try { ev.preventDefault(); } catch (err) {}
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on reset view:', err); }
           return;
         }
 
@@ -111,8 +114,8 @@
                 try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitRoute'); }
               }
             }
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          } catch (err) { console.error('KeyboardHandler: Failed to handle Q key (route toggle):', err); }
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on Q key:', err); }
           return;
         } else if (ev.key === 'e' || ev.key === 'E') {
           try {
@@ -130,26 +133,26 @@
                 try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitMarkers'); }
               }
             }
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          } catch (err) { console.error('KeyboardHandler: Failed to handle E key (markers toggle):', err); }
+          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on E key:', err); }
           return;
         }
 
         // Tileset shortcuts: 1=Satellite, 2=Holographic, 3=Toggle grayscale
         if (ev.key === '1') {
-          try { this.map && this.map.setTileset && this.map.setTileset('sat'); } catch (err) {}
+          try { this.map && this.map.setTileset && this.map.setTileset('sat'); } catch (err) { this.errorHandler.logError('Failed to set satellite tileset', err); }
           this._updateTilesetUI('sat');
           ev.preventDefault();
           return;
         } else if (ev.key === '2') {
-          try { this.map && this.map.setTileset && this.map.setTileset('holo'); } catch (err) {}
+          try { this.map && this.map.setTileset && this.map.setTileset('holo'); } catch (err) { this.errorHandler.logError('Failed to set holographic tileset', err); }
           this._updateTilesetUI('holo');
           ev.preventDefault();
           return;
         } else if (ev.key === '3') {
-          try { this.map && this.map.setTilesetGrayscale && this.map.setTilesetGrayscale(!this.map.tilesetGrayscale); } catch (err) {}
+          try { this.map && this.map.setTilesetGrayscale && this.map.setTilesetGrayscale(!this.map.tilesetGrayscale); } catch (err) { this.errorHandler.logError('Failed to toggle tileset grayscale', err); }
           this._updateTilesetUI('grayscale');
-          try { ev.preventDefault(); } catch (err) {}
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on tileset toggle', err); }
           return;
         }
 
@@ -158,29 +161,29 @@
           try {
             const btn = document.getElementById('clearRouteBtn');
             if (btn) btn.click(); else if (this.map && this.map.clearRoute) this.map.clearRoute();
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          } catch (err) { this.errorHandler.logError('Failed to clear route via Y key', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on Y key', err); }
           return;
         } else if (ev.key === 'x' || ev.key === 'X') {
           try {
             const btn = document.getElementById('clearCustom');
             if (btn) btn.click(); else if (this.map && this.map.markerManager && typeof this.map.markerManager.clearMarkers === 'function') this.map.markerManager.clearMarkers();
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          } catch (err) { this.errorHandler.logError('Failed to clear custom markers via X key', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on X key', err); }
           return;
         }
 
         // C/c - expand route nearby (only if no modifiers)
         if ((ev.key === 'c' || ev.key === 'C') && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.shiftKey) {
-          try { if (this.map && typeof this.map.expandRouteNearby === 'function') this.map.expandRouteNearby(); } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          try { if (this.map && typeof this.map.expandRouteNearby === 'function') this.map.expandRouteNearby(); } catch (err) { this.errorHandler.logError('Failed to expand route nearby via C key', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on C key', err); }
           return;
         }
 
         // 4 - toggle grid heatmap
         if (ev.key === '4') {
-          try { if (this.map && typeof this.map.setGridHeatmap === 'function') this.map.setGridHeatmap(!this.map._showGridHeatmap); } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          try { if (this.map && typeof this.map.setGridHeatmap === 'function') this.map.setGridHeatmap(!this.map._showGridHeatmap); } catch (err) { this.errorHandler.logError('Failed to toggle grid heatmap via 4 key', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on 4 key', err); }
           return;
         }
 
@@ -189,8 +192,8 @@
           try {
             const btn = document.getElementById('toggleRouteDirBtn');
             if (btn) btn.click();
-          } catch (err) {}
-          try { ev.preventDefault(); } catch (err) {}
+          } catch (err) { this.errorHandler.logError('Failed to reverse route direction via < key', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on < key', err); }
           return;
         }
 
@@ -215,7 +218,7 @@
             this.map.panY -= Math.round(this.map.canvas.clientHeight * stepFrac); 
             moved = true; 
           }
-        } catch (err) {}
+        } catch (err) { this.errorHandler.logError('Failed to handle arrow key panning', err); }
 
         if (moved) {
           try { 
@@ -224,11 +227,11 @@
             this.map.render();
             // Save view after keyboard pan
             try { this.map.saveViewToStorage(); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'KeyboardHandler.pan.saveViewToStorage'); }
-          } catch (err) {}
+          } catch (err) { this.errorHandler.logError('Failed to update map after keyboard pan', err); }
           return;
         }
 
-      } catch (e) { console.debug('KeyboardHandler._onKeyDown failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._onKeyDown failed', 'KeyboardHandler._onKeyDown', { error: e }); }
     }
 
     _updateEditModeUI(mode, enabled) {
@@ -241,7 +244,7 @@
             routeToggle.classList.toggle('active', enabled); 
           }
           if (miniRoute) { 
-            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', enabled); } catch(e) {} 
+            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', enabled); } catch(e) { this.errorHandler.logError('Failed to set edit toggle color for route', e); } 
             miniRoute.classList.toggle('glow', enabled); 
             miniRoute.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
           }
@@ -253,12 +256,12 @@
             markersToggle.classList.toggle('active', enabled); 
           }
           if (miniMarkers) { 
-            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', enabled); } catch(e) {} 
+            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', enabled); } catch(e) { this.errorHandler.logError('Failed to set edit toggle color for markers', e); } 
             miniMarkers.classList.toggle('glow', enabled); 
             miniMarkers.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
           }
         }
-      } catch (e) { console.debug('KeyboardHandler._updateEditModeUI failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
     }
 
     _updateTilesetUI(tileset) {
@@ -280,7 +283,7 @@
           gbtn.classList.toggle('active', !!this.map.tilesetGrayscale); 
           gbtn.setAttribute('aria-pressed', this.map.tilesetGrayscale ? 'true' : 'false'); 
         }
-      } catch (e) { console.debug('KeyboardHandler._updateTilesetUI failed', e); }
+      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._updateTilesetUI failed', 'KeyboardHandler._updateTilesetUI', { error: e }); }
     }
   }
 

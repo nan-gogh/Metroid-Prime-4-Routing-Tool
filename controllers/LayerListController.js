@@ -605,13 +605,7 @@
      * Log error with context
      */
     _logError(error, context) {
-      if (this.errorHandler) {
-        this.errorHandler.logError(error, `LayerListController: ${context}`);
-      } else if (typeof global._logError === 'function') {
-        global._logError(error, `LayerListController.${context}`);
-      } else {
-        console.debug(`LayerListController.${context}:`, error);
-      }
+      this.errorHandler.logDebug(`LayerListController.${context}`, 'LayerListController._logError', { error });
     }
   }
 

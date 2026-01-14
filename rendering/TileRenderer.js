@@ -15,6 +15,7 @@
       this.map = null;
       this.canvas = null;
       this.ctx = null;
+      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     /**
@@ -55,7 +56,7 @@
           if (!map._honeycombPatternCanvas) {
             const baseSize = 28;
             const preferred = (map._lowSpec ? Math.round(baseSize * 1.6) : baseSize);
-            try { map._createHoneycombPattern(preferred); } catch (e) { console.debug('TileRenderer: _createHoneycombPattern failed', e); }
+            try { map._createHoneycombPattern(preferred); } catch (e) { this.errorHandler.logDebug('TileRenderer: _createHoneycombPattern failed', 'TileRenderer.render.honeycomb', { error: e }); }
           }
 
           if (map._honeycombPatternCanvas) {
@@ -69,13 +70,13 @@
               ctxT.restore();
             }
           }
-        } catch (e) { console.debug('TileRenderer: honeycomb fill failed', e); }
-      } catch (e) { console.debug('TileRenderer: background fill failed', e); }
+        } catch (e) { this.errorHandler.logDebug('TileRenderer: honeycomb fill failed', 'TileRenderer.render.honeycombFill', { error: e }); }
+      } catch (e) { this.errorHandler.logDebug('TileRenderer: background fill failed', 'TileRenderer.render.backgroundFill', { error: e }); }
 
       if (this.map.currentImage) {
         const size = (this.config.MAP_SIZE || 8192) * this.mapState.zoom;
-        try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { console.debug('TileRenderer: image smoothing not supported', e.message); }
-        try { ctxT.drawImage(this.map.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', e); }
+        try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { this.errorHandler.logDebug('TileRenderer: image smoothing not supported', 'TileRenderer.render.imageSmoothing', { error: e.message }); }
+        try { ctxT.drawImage(this.map.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { this.errorHandler.logDebug('TileRenderer: drawImage failed', 'TileRenderer.render.drawImage', { error: e }); }
       }
     }
 
@@ -93,7 +94,7 @@
         const i = toPreload[p];
         // Stagger fetches to avoid a burst of work on load
         setTimeout(() => {
-          try { this.preloadResolution(i); } catch (e) { console.debug('TileRenderer.preloadAllMapImages: preloadResolution failed', e); }
+          try { this.preloadResolution(i); } catch (e) { this.errorHandler.logDebug('TileRenderer.preloadAllMapImages: preloadResolution failed', 'TileRenderer.preloadAllMapImages', { error: e, resolution: i }); }
         }, i * 150);
       }
     }
@@ -119,7 +120,7 @@
       if (this.map.images[resolutionIndex]) {
         this.map.currentImage = this.map.images[resolutionIndex];
         this.map.currentResolution = resolutionIndex;
-        try { this.map.render(); } catch (e) { console.debug('TileRenderer: render failed after tile load', e.message); }
+        try { this.map.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logDebug('TileRenderer: render failed after tile load', 'TileRenderer.loadImage.markDirty', { error: e.message }); }
         return;
       }
 
@@ -134,16 +135,16 @@
       try {
         if (window.fetch && window.createImageBitmap) {
           const controller = new AbortController();
-          try { this.map._imageControllers[resolutionIndex] = controller; } catch (e) { console.debug('TileRenderer: failed to set image controller', e.message); }
+          try { this.map._imageControllers[resolutionIndex] = controller; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to set image controller', 'TileRenderer.loadImage.setController', { error: e.message }); }
 
           let fetchTimer = null;
           try {
-            fetchTimer = setTimeout(() => { try { controller.abort(); } catch (e) { console.error('TileRenderer: Failed to abort controller in timeout:', e); } }, this.map._bitmapTimeoutMs || 15000);
+            fetchTimer = setTimeout(() => { try { controller.abort(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to abort controller in timeout'); } }, this.map._bitmapTimeoutMs || 15000);
           } catch (e) { fetchTimer = null; }
 
           const resp = await fetch(href, { signal: controller.signal });
-          try { if (fetchTimer) clearTimeout(fetchTimer); } catch (e) { console.error('TileRenderer: Failed to clear fetch timer:', e); }
-          try { delete this.map._imageControllers[resolutionIndex]; } catch (e) { console.error('TileRenderer: Failed to delete image controller:', e); }
+          try { if (fetchTimer) clearTimeout(fetchTimer); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to clear fetch timer'); }
+          try { delete this.map._imageControllers[resolutionIndex]; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to delete image controller'); }
           if (!resp.ok) throw new Error('fetch-failed');
           const blob = await resp.blob();
           if (this.map._tilesetGeneration !== gen) { this.map.loadingResolution = null; return; }
@@ -152,23 +153,23 @@
           try { bmp = await this._runBitmapTask(() => createImageBitmap(blob)); } catch (e) { bmp = null; }
 
           if (bmp) {
-            try { bmp._tilesetFolder = folder; } catch (e) { console.error('TileRenderer: Failed to set tileset folder on bitmap:', e); }
+            try { bmp._tilesetFolder = folder; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to set tileset folder on bitmap'); }
             // Close previous bitmap if safe
             try {
               const prev = this.map._imageBitmaps[resolutionIndex];
               if (prev && typeof prev.close === 'function') {
                 let safeToClose = true;
                 if (prev === this.map.currentImage) safeToClose = false;
-                try { for (const v of Object.values(this.map.images || {})) { if (v === prev) { safeToClose = false; break; } } } catch (e) { console.error('TileRenderer: Failed to check bitmap usage:', e); }
-                if (safeToClose) { try { prev.close(); } catch (e) { console.error('TileRenderer: Failed to close previous bitmap:', e); } }
+                try { for (const v of Object.values(this.map.images || {})) { if (v === prev) { safeToClose = false; break; } } } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to check bitmap usage'); }
+                if (safeToClose) { try { prev.close(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to close previous bitmap'); } }
               }
-            } catch (e) { console.error('TileRenderer: Failed to handle previous bitmap cleanup:', e); }
+            } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to handle previous bitmap cleanup'); }
 
             if (this.map._tilesetGeneration === gen) {
-              try { this.map._imageBitmaps[resolutionIndex] = bmp; } catch (e) { console.debug('TileRenderer: failed to cache bitmap', e.message); }
-              try { this.map.images[resolutionIndex] = bmp; } catch (e) { console.debug('TileRenderer: failed to cache image', e.message); }
+              try { this.map._imageBitmaps[resolutionIndex] = bmp; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to cache bitmap', 'TileRenderer.loadImage.cacheBitmap', { error: e.message }); }
+              try { this.map.images[resolutionIndex] = bmp; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to cache image', 'TileRenderer.loadImage.cacheImage', { error: e.message }); }
             } else {
-              try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { console.error('TileRenderer: Failed to close unused bitmap:', e); }
+              try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to close unused bitmap'); }
               this.map.loadingResolution = null;
               return;
             }
@@ -180,22 +181,22 @@
               if ((imgFolder && imgFolder === curFolder) || (!this.map.currentImage || resolutionIndex === this.map.getNeededResolution())) {
                 this.map.currentImage = bmp;
                 this.map.currentResolution = resolutionIndex;
-                try { this.map.render(); } catch (e) { console.error('TileRenderer: Failed to render after setting current image:', e); }
+                try { this.map.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to render after setting current image'); }
               }
-            } catch (e) { console.error('TileRenderer: Failed to set current image:', e); }
-            try { this.map.updateResolution(); } catch (e) { console.error('TileRenderer: Failed to update resolution:', e); }
+            } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to set current image'); }
+            try { this.map.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to update resolution'); }
             return;
           }
         }
       } catch (err) {
-        try { delete this.map._imageControllers[resolutionIndex]; } catch (e) { console.error('TileRenderer: Failed to delete image controller on error:', e); }
+        try { delete this.map._imageControllers[resolutionIndex]; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to delete image controller on error'); }
       }
 
       // Fallback to <img>
       try {
         const img = new Image();
-        try { img._tilesetFolder = folder; } catch (e) { console.error('TileRenderer: Failed to set tileset folder on image:', e); }
-        try { this.map._imageElements[resolutionIndex] = img; } catch (e) { console.error('TileRenderer: Failed to cache image element:', e); }
+        try { img._tilesetFolder = folder; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to set tileset folder on image'); }
+        try { this.map._imageElements[resolutionIndex] = img; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to cache image element'); }
         img.onload = () => {
           try {
             this.map.images[resolutionIndex] = img;
@@ -205,9 +206,9 @@
             if ((imgFolder && imgFolder === curFolder) || (!this.map.currentImage || resolutionIndex === this.map.getNeededResolution())) {
               this.map.currentImage = img;
               this.map.currentResolution = resolutionIndex;
-              try { this.map.render(); } catch (e) { console.debug('TileRenderer: render failed after image load', e.message); }
+              try { this.map.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logDebug('TileRenderer: render failed after image load', 'TileRenderer.loadImage.markDirtyAfterLoad', { error: e.message }); }
             }
-            try { this.map.updateResolution(); } catch (e) { console.error('TileRenderer: Failed to update resolution after image load:', e); }
+            try { this.map.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to update resolution after image load'); }
           } catch (e) { this.map.loadingResolution = null; }
         };
         img.onerror = () => { this.map.loadingResolution = null; };
@@ -221,16 +222,16 @@
     _abortAndCleanupTileLoads() {
       try {
         for (const k in this.map._imageControllers) {
-          try { this.map._imageControllers[k].abort(); } catch (e) { console.error('TileRenderer: Failed to abort image controller:', e); }
+          try { this.map._imageControllers[k].abort(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to abort image controller'); }
         }
-      } catch (e) { console.error('TileRenderer: Failed to abort image controllers:', e); }
+      } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to abort image controllers'); }
       this.map._imageControllers = {};
 
       try {
         for (const k in this.map._imageElements) {
-          try { const img = this.map._imageElements[k]; img.onload = null; img.onerror = null; try { img.src = ''; } catch (e) { console.error('TileRenderer: Failed to clear image src:', e); } } catch (e) { console.error('TileRenderer: Failed to cleanup image element:', e); }
+          try { const img = this.map._imageElements[k]; img.onload = null; img.onerror = null; try { img.src = ''; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to clear image src'); } } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to cleanup image element'); }
         }
-      } catch (e) { console.error('TileRenderer: Failed to cleanup image elements:', e); }
+      } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to cleanup image elements'); }
       this.map._imageElements = {};
 
       try {
@@ -240,12 +241,12 @@
             if (!bmp || typeof bmp.close !== 'function') continue;
             if (bmp === this.map.currentImage) continue;
             let inUse = false;
-            try { for (const v of Object.values(this.map.images || {})) { if (v === bmp) { inUse = true; break; } } } catch (e) { console.error('TileRenderer: Failed to check bitmap usage during cleanup:', e); }
+            try { for (const v of Object.values(this.map.images || {})) { if (v === bmp) { inUse = true; break; } } } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to check bitmap usage during cleanup'); }
             if (inUse) continue;
-            try { bmp.close(); } catch (e) { console.error('TileRenderer: Failed to close bitmap during cleanup:', e); }
-          } catch (e) { console.error('TileRenderer: Failed to cleanup bitmap:', e); }
+            try { bmp.close(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to close bitmap during cleanup'); }
+          } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to cleanup bitmap'); }
         }
-      } catch (e) { console.error('TileRenderer: Failed to cleanup image bitmaps:', e); }
+      } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to cleanup image bitmaps'); }
       this.map._imageBitmaps = {};
     }
 
@@ -369,9 +370,9 @@
             };
             img.onerror = () => { try { img.onload = null; img.onerror = null; } catch (e) { console.error('TileRenderer: Failed to cleanup preloaded image handlers on error:', e); } };
             img.src = href;
-          } catch (e) { }
+          } catch (e) { console.error('TileRenderer: Failed to preload tile image:', e); }
         })();
-      } catch (e) { console.debug('TileRenderer.preloadResolution failed', e); }
+      } catch (e) { this.errorHandler.logDebug('TileRenderer.preloadResolution failed', 'TileRenderer.preloadResolution', { error: e }); }
     }
 
     /**

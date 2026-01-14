@@ -58,7 +58,7 @@
           this._findMarkerAt = this.map.markerRenderer.findMarkerAt.bind(this.map.markerRenderer);
         }
         
-      } catch (e) { console.debug('PointerHandler fast accessors failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
     }
 
     init() {
@@ -85,7 +85,7 @@
         window.addEventListener('beforeunload', this._onPageUnload);
         
         this.bound = true;
-      } catch (e) { console.debug('PointerHandler.init failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler.init failed', 'PointerHandler.init', { error: e }); }
     }
 
     destroy() {
@@ -104,7 +104,7 @@
         window.removeEventListener('beforeunload', this._onPageUnload);
         
         this.bound = false;
-      } catch (e) { console.debug('PointerHandler.destroy failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler.destroy failed', 'PointerHandler.destroy', { error: e }); }
     }
 
     _onWheel(ev) {
@@ -139,7 +139,7 @@
                 try { this._saveViewToStorage(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
             }, 150);
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.setTimeout'); }
-      } catch (e) { console.debug('PointerHandler._onWheel failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
     }
 
     _onPointerDown(ev) {
@@ -161,7 +161,7 @@
             this.gestureHandler.startPinch(Array.from(this.pointers.values()));
           }
         }
-      } catch (e) { console.debug('PointerHandler._onPointerDown failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerDown failed', 'PointerHandler._onPointerDown', { error: e }); }
     }
 
     _handleSinglePointerDown(ev, localX, localY, downTime) {
@@ -210,7 +210,7 @@
           this.map.pointerDownTime = downTime; // Set on map for click handler
           this.map.canvas.style.cursor = 'grabbing';
         }
-      } catch (e) { console.debug('PointerHandler._handleSinglePointerDown failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
     }
 
     _onPointerMove(ev) {
@@ -272,7 +272,7 @@
           // Update hover state
           this._checkMarkerHover(localX, localY);
         }
-      } catch (e) { console.debug('PointerHandler._onPointerMove failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
     }
 
     _onPointerUp(ev) {
@@ -306,7 +306,7 @@
           this.routeEditHandler.handlePointerUp(ev, localX, localY);
         }
         
-      } catch (e) { console.debug('PointerHandler._onPointerUp failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
     }
 
     // ===== PERFORMANCE-OPTIMIZED EXTRACTION METHODS =====
@@ -340,7 +340,7 @@
             const oldY = global.LAYERS.customMarkers.markers[idx].y;
             global.LAYERS.customMarkers.markers[idx].x = nx;
             global.LAYERS.customMarkers.markers[idx].y = ny;
-            console.log(`Marker ${this._draggingMarker.uid} moved from (${oldX}, ${oldY}) to (${nx}, ${ny})`);
+            this.errorHandler && this.errorHandler.logDebug(`Marker ${this._draggingMarker.uid} moved from (${oldX}, ${oldY}) to (${nx}, ${ny})`, 'PointerHandler._onPointerMove.markerMoved', { markerUid: this._draggingMarker.uid, oldX, oldY, newX: nx, newY: ny });
             
             // Note: Save only happens at drag end to avoid excessive storage writes
             try { this.map.customMarkers = global.LAYERS.customMarkers.markers; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerMove.updateCustomMarkers'); }
@@ -363,7 +363,7 @@
             markerObj = layer.markers.find(m => m.uid === this.map._draggingCandidate.uid);
           }
         }
-      } catch (e) { console.debug('Failed to find marker object for drag:', e); }
+      } catch (e) { this.errorHandler.logDebug('Failed to find marker object for drag:', 'PointerHandler._promoteMarkerDrag', { error: e }); }
       
       this._draggingMarker = {
         uid: this.map._draggingCandidate.uid,
@@ -398,12 +398,12 @@
         this.map._draggingCandidate = null;
       }
       if (this._draggingMarker && ev.pointerId === this._draggingMarker.pointerId) {
-        console.log('Drag ended for marker:', this._draggingMarker.uid);
+        this.errorHandler && this.errorHandler.logDebug(`Drag ended for marker: ${this._draggingMarker.uid}`, 'PointerHandler._onPointerUp.dragEnded', { markerUid: this._draggingMarker.uid });
         try { 
           if (this.map.markerManager) {
-            console.log('Calling markerManager.saveToStorage');
+            this.errorHandler && this.errorHandler.logDebug('Calling markerManager.saveToStorage', 'PointerHandler._onPointerUp.saveToStorage.start', { markerManager: !!this.map.markerManager });
             this.map.markerManager.saveToStorage();
-            console.log('markerManager.saveToStorage completed');
+            this.errorHandler && this.errorHandler.logDebug('markerManager.saveToStorage completed', 'PointerHandler._onPointerUp.saveToStorage.completed', {});
           } else {
             NotificationUtils.showSaveError('MarkerManager not available');
           }
@@ -438,7 +438,7 @@
         if (this.routeEditHandler) {
           this.routeEditHandler.handleMouseLeave(ev);
         }
-      } catch (e) { console.debug('PointerHandler._onMouseLeave failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onMouseLeave failed', 'PointerHandler._onMouseLeave', { error: e }); }
     }
 
     _onClick(e) {
@@ -543,24 +543,24 @@
             }
           }
         }
-      } catch (e) { console.debug('PointerHandler._onClick failed', e); }
+      } catch (e) { this.errorHandler.logDebug('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }
     }
 
     // ===== PAGE UNLOAD CLEANUP =====
 
     _onPageUnload(ev) {
       try {
-        console.log('PointerHandler: Cleaning up drag state on page unload');
+        this.errorHandler && this.errorHandler.logDebug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
         
         // Cancel any active marker drag - restore original position if possible
         if (this._draggingMarker) {
-          console.log('Cancelling active marker drag for:', this._draggingMarker.uid);
+          this.errorHandler && this.errorHandler.logDebug(`Cancelling active marker drag for: ${this._draggingMarker.uid}`, 'PointerHandler._onPageUnload.cancelDrag', { markerUid: this._draggingMarker.uid });
           
           // If we have a backup position, restore it
           if (this._draggingMarker._originalX !== undefined && this._draggingMarker._originalY !== undefined) {
             this._draggingMarker.x = this._draggingMarker._originalX;
             this._draggingMarker.y = this._draggingMarker._originalY;
-            console.log('Restored marker to original position');
+            this.errorHandler && this.errorHandler.logDebug('Restored marker to original position', 'PointerHandler._onPageUnload.restorePosition', { markerUid: this._draggingMarker.uid, originalX: this._draggingMarker._originalX, originalY: this._draggingMarker._originalY });
           }
           
           // Clear drag state
@@ -578,10 +578,40 @@
         // Clear remaining transient states
         this.pointers.clear();
         
-        console.log('PointerHandler: Drag state cleanup complete');
+        this.errorHandler && this.errorHandler.logDebug('PointerHandler: Drag state cleanup complete', 'PointerHandler._onPageUnload.complete', {});
         
       } catch (e) {
-        console.warn('PointerHandler._onPageUnload failed:', e);
+        this.errorHandler && this.errorHandler.logWarning(e, 'PointerHandler._onPageUnload.failed', {});
+      }
+    }
+
+    /**
+     * Cancel any active route drag operations and clean up pooled objects
+     * @param {string} reason - Reason for cancellation
+     */
+    _cancelRouteDragOperations(reason = 'Operation cancelled') {
+      try {
+        // Delegate to RouteEditHandler if available
+        if (this.map.routeEditHandler && typeof this.map.routeEditHandler.cancelOperations === 'function') {
+          this.map.routeEditHandler.cancelOperations(reason);
+        } else {
+          // Fallback: manually clean up route insert state
+          if (this.map._routeInsert) {
+            // Release pooled objects
+            if (this.map._routeInsert.tempMarker && typeof markerPool !== 'undefined') {
+              markerPool.release(this.map._routeInsert.tempMarker);
+            }
+            if (this.map._routeInsert.tempSource && typeof routeSourcePool !== 'undefined') {
+              routeSourcePool.release(this.map._routeInsert.tempSource);
+            }
+            this.map._routeInsert = null;
+          }
+          if (this.map._routeNodeCandidate) {
+            this.map._routeNodeCandidate = null;
+          }
+        }
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logWarning(e, 'PointerHandler._cancelRouteDragOperations.failed', { reason });
       }
     }
   }

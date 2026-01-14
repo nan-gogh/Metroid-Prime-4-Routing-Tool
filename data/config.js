@@ -31,10 +31,31 @@ const MP4Config = {
     },
 
     STORAGE_KEYS: {
+        // Core data
         CUSTOM_MARKERS: 'mp4_customMarkers',
         ROUTE: 'mp4_route',
         ROUTE_LOOPING_FLAG: 'mp4_route_looping_flag',
-        SETTINGS: 'mp4_settings'
+        SETTINGS: 'mp4_settings',
+        MARKER_SCALING: 'mp4_markerScaling',
+
+        // UI state
+        TILESET: 'mp4_tileset',
+        TILESET_GRAYSCALE: 'mp4_tileset_grayscale',
+        GRID_VISIBLE: 'mp4_grid_visible',
+        GRID_HEATMAP: 'mp4_grid_heatmap',
+        LAYER_VISIBILITY: 'mp4_layerVisibility',
+        HIGHLIGHT_MULTIPLIER: 'mp4_highlightMultiplier',
+
+        // Map view
+        MAP_VIEW: 'mp4_map_view',
+
+        // State persistence
+        ROUTE_STATE: 'mp4_route_state',
+        SELECTION_STATE: 'mp4_selection_state',
+        LAYER_STATE: 'mp4_layer_state',
+
+        // Consent
+        STORAGE_CONSENT: 'mp4_storage_consent'
     },
 
     ROUTE: {

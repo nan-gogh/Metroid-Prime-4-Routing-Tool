@@ -211,50 +211,19 @@ class RenderPipeline {
 
 ---
 
-### 1.4 Implement Object Pooling for Markers
+### 1.4 Implement Object Pooling for Markers ✅ COMPLETED
 
 **Problem:** Frequent marker object creation during route editing causes GC pressure  
 **Location:** `RouteEditHandler.js`, `MarkerRenderer.js`
 
-**Current Pattern:**
-```javascript
-// Creates new objects on every drag frame
-const tempMarker = { uid: '', x: Number(worldX), y: Number(worldY) };
-const tempSource = { marker: tempMarker, layerKey: 'temp', layerIndex: -1 };
-```
+**Solution Implemented:**
+- Created `data/ObjectPool.js` with generic ObjectPool class integrated with ErrorHandler
+- Added specialized pools: `markerPool` (20 markers) and `routeSourcePool` (20 sources)
+- Updated `RouteEditHandler.js` and `map.js` to use pooled objects instead of creating new ones
+- Added proper cleanup in all cancellation/finalization paths
+- Added debug function `checkPoolStats()` for monitoring pool usage
 
-**Recommended Pool Implementation:**
-
-```javascript
-// data/ObjectPool.js
-class ObjectPool {
-    constructor(factory, reset, initialSize = 10) {
-        this._factory = factory;
-        this._reset = reset;
-        this._pool = [];
-        for (let i = 0; i < initialSize; i++) {
-            this._pool.push(factory());
-        }
-    }
-    
-    acquire() {
-        return this._pool.length > 0 
-            ? this._pool.pop() 
-            : this._factory();
-    }
-    
-    release(obj) {
-        this._reset(obj);
-        this._pool.push(obj);
-    }
-}
-
-// Usage
-const markerPool = new ObjectPool(
-    () => ({ uid: '', x: 0, y: 0 }),
-    (m) => { m.uid = ''; m.x = 0; m.y = 0; }
-);
-```
+**Performance Impact:** Reduces GC pressure during route editing operations by reusing objects instead of creating new ones on every frame.
 
 **Estimated Time:** 2 hours
 
@@ -340,51 +309,22 @@ class StorageService {
 **Location:** `map.js` lines 3300-3480 (inside `init()`)  
 **Problem:** Route computation button handlers are embedded in `init()`
 
-**Current Pattern (Problematic):**
-```javascript
-async function init() {
-    // ... 800 lines of setup ...
-    
-    const computeImprovedBtn = document.getElementById('computeRouteImprovedBtn');
-    if (computeImprovedBtn) {
-        computeImprovedBtn.addEventListener('click', () => {
-            // 100+ lines of route computation logic
-        });
-    }
-    
-    // ... 400 more lines ...
-}
-```
+**Status:** ✅ Complete  
+**Files Created/Modified:**
+- `controllers/RouteComputeController.js` (330 lines) - New controller class
+- `map.js` - Removed ~200 lines of embedded logic, added controller initialization
+- `index.html` - Added RouteComputeController script tag
 
-**Recommended Extraction:**
+**Features Implemented:**
+- `RouteComputeController` class with constructor, init() method
+- `computeImprovedRoute()` - TSP computation with marker selection support
+- `expandRouteNearby()` - Delegates to RouteComputation module
+- `clearRoute()` - Route clearing with UI state management
+- `_bindDirectionToggle()` - Route direction reversal logic
+- Mini button support for on-screen controls
+- Proper error handling and logging throughout
 
-```javascript
-// controllers/RouteComputeController.js
-class RouteComputeController {
-    constructor(map, config, errorHandler) {
-        this.map = map;
-        this.config = config;
-        this.errorHandler = errorHandler;
-    }
-    
-    init() {
-        this._bindComputeImproved();
-        this._bindComputeNearby();
-        this._bindClearRoute();
-        this._bindDirectionToggle();
-    }
-    
-    computeImprovedRoute(startMarkerIndex = -1) {
-        // Extract the TSP computation logic here
-    }
-    
-    expandRouteNearby() {
-        // Delegate to RouteComputation module
-    }
-}
-```
-
-**Estimated Time:** 2-3 hours
+**Code Reduction:** Reduced `init()` function by ~200 lines, improved maintainability
 
 ---
 

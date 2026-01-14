@@ -30,7 +30,7 @@
       } catch (e) { log('failed to setup test layer: ' + e, false); return; }
 
       // Render and allow layout to settle
-      try { map.render(); } catch (e) {}
+      try { map.render(); } catch (e) { log('Failed to render map in marker smoke test: ' + e, false); }
       await new Promise(r=>setTimeout(r,100));
 
       const marker = window.LAYERS._smoke_test.markers[0];

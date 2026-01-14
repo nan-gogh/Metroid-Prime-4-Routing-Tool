@@ -61,7 +61,7 @@
                 try {
                   location.reload();
                 } catch (e) {
-                  console.debug('SettingsController: Failed to reload after clearing data:', e);
+                  this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
                 }
               }
             }
@@ -72,7 +72,7 @@
           });
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to bind storage consent toggle:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to bind storage consent toggle', 'SettingsController._bindStorageConsentToggle', { error: e });
       }
     }
 
@@ -100,7 +100,7 @@
         this._updateTilesetButtonStates();
 
       } catch (e) {
-        console.debug('SettingsController: Failed to bind tileset controls:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to bind tileset controls', 'SettingsController._bindTilesetControls', { error: e });
       }
     }
 
@@ -137,7 +137,7 @@
         }
 
       } catch (e) {
-        console.debug('SettingsController: Failed to bind display toggles:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to bind display toggles', 'SettingsController._bindDisplayToggles', { error: e });
       }
     }
 
@@ -150,7 +150,7 @@
         // as they involve complex UI positioning and value handling
 
       } catch (e) {
-        console.debug('SettingsController: Failed to bind highlight controls:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });
       }
     }
 
@@ -166,7 +166,7 @@
           this._saveDisplaySettings();
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to set tileset:', tileset, e);
+        this.errorHandler.logDebug('SettingsController: Failed to set tileset', 'SettingsController._setTileset', { tileset, error: e });
       }
     }
 
@@ -186,7 +186,7 @@
           tilesetHoloBtn.classList.toggle('active', currentTileset === 'holo');
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update tileset button states:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update tileset button states', 'SettingsController._updateTilesetButtonStates', { error: e });
       }
     }
 
@@ -200,7 +200,7 @@
           gridHeatmapBtn.classList.toggle('active', !!this.map._showGridHeatmap);
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update grid/heatmap button state:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });
       }
     }
 
@@ -214,7 +214,7 @@
           tilesetGrayscaleBtn.classList.toggle('active', !!this.map.tilesetGrayscale);
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update grayscale button state:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update grayscale button state', 'SettingsController._updateGrayscaleButtonState', { error: e });
       }
     }
 
@@ -224,7 +224,9 @@
      */
     _getStorageConsent() {
       try {
-        if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') {
+        if (window.storageService) {
+          return window.storageService.hasConsent();
+        } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') {
           return window._mp4Storage.hasStorageConsent();
         }
         return localStorage.getItem('mp4_storage_consent') === '1';
@@ -239,7 +241,13 @@
      */
     _setStorageConsent(consent) {
       try {
-        if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') {
+        if (window.storageService) {
+          if (consent) {
+            window.storageService.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
+          } else {
+            window.storageService.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
+          }
+        } else if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') {
           window._mp4Storage.setStorageConsent(consent);
         } else {
           if (consent) {
@@ -249,7 +257,7 @@
           }
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to set storage consent:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to set storage consent', 'SettingsController._setStorageConsent', { error: e });
       }
     }
 
@@ -268,7 +276,7 @@
           label.textContent = consent ? 'Clear Savedata' : 'Save Progress';
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update consent toggle UI:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update consent toggle UI', 'SettingsController._updateConsentToggleUI', { error: e });
       }
     }
 
@@ -324,7 +332,7 @@
         }
 
       } catch (e) {
-        console.debug('SettingsController: Failed to save all settings:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to save all settings', 'SettingsController._saveAllSettings', { error: e });
       }
     }
 
@@ -339,7 +347,11 @@
           gridHeatmap: this.map ? this.map._showGridHeatmap : false
         };
 
-        if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
+        if (window.storageService) {
+          window.storageService.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
+          window.storageService.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
+          window.storageService.set(this.config.STORAGE_KEYS.GRID_HEATMAP, settings.gridHeatmap ? '1' : '0');
+        } else if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
           window._mp4Storage.saveSetting('mp4_tileset', settings.tileset);
           window._mp4Storage.saveSetting('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
           window._mp4Storage.saveSetting('mp4_grid_heatmap', settings.gridHeatmap ? '1' : '0');
@@ -349,7 +361,7 @@
           localStorage.setItem('mp4_grid_heatmap', settings.gridHeatmap ? '1' : '0');
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to save display settings:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });
       }
     }
 
@@ -358,7 +370,15 @@
      */
     _clearAllSavedData() {
       try {
-        if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
+        if (window.storageService) {
+          // Clear all storage keys using StorageService
+          const keys = Object.values(this.config.STORAGE_KEYS);
+          keys.forEach(key => {
+            try {
+              window.storageService.remove(key);
+            } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'SettingsController._clearSavedData.removeItem'); }
+          });
+        } else if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
           window._mp4Storage.clearSavedData(true);
         } else {
           const keys = [
@@ -374,7 +394,7 @@
           });
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to clear saved data:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to clear saved data', 'SettingsController._clearAllSavedData', { error: e });
       }
     }
 
@@ -387,7 +407,7 @@
           this.map.updateLayerCounts();
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update layer counts:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update layer counts', 'SettingsController._updateLayerCounts', { error: e });
       }
     }
 
@@ -402,7 +422,7 @@
           handle.classList.toggle('emphasized', !consent);
         }
       } catch (e) {
-        console.debug('SettingsController: Failed to update sidebar handle emphasis:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to update sidebar handle emphasis', 'SettingsController._updateSidebarHandleEmphasis', { error: e });
       }
     }
 
@@ -423,7 +443,7 @@
         this._updateGridHeatmapButtonState();
 
       } catch (e) {
-        console.debug('SettingsController: Failed to load saved settings:', e);
+        this.errorHandler.logDebug('SettingsController: Failed to load saved settings', 'SettingsController.loadSavedSettings', { error: e });
       }
     }
   }

@@ -25,7 +25,7 @@
       log('gridRenderer present', true);
 
       // Ensure labels exist after init
-      try { map.gridRenderer.init(); } catch (e) {}
+      try { map.gridRenderer.init(); } catch (e) { log('Failed to initialize grid renderer: ' + e, false); }
       const parent = map.canvas.parentElement;
       const container = parent.querySelector('#gridQuadLabels');
       await new Promise(r=>setTimeout(r,100));
@@ -36,15 +36,15 @@
       }
 
       // Ensure visibility toggles with highlight
-      try { map.highlightedLayers = map.highlightedLayers || new Set(); } catch (e) {}
-      try { map.highlightedLayers.add('grid'); } catch (e) {}
-      try { map.gridRenderer.updateQuadLabels(); } catch (e) {}
+      try { map.highlightedLayers = map.highlightedLayers || new Set(); } catch (e) { log('Failed to initialize highlightedLayers: ' + e, false); }
+      try { map.highlightedLayers.add('grid'); } catch (e) { log('Failed to add grid to highlightedLayers: ' + e, false); }
+      try { map.gridRenderer.updateQuadLabels(); } catch (e) { log('Failed to update quad labels when adding highlight: ' + e, false); }
       await new Promise(r=>setTimeout(r,100));
       if (container && getComputedStyle(container).display !== 'none') log('grid labels visible when highlighted', true); else log('grid labels not visible when highlighted', false);
 
       // Remove highlight -> should hide
-      try { map.highlightedLayers.delete('grid'); } catch (e) {}
-      try { map.gridRenderer.updateQuadLabels(); } catch (e) {}
+      try { map.highlightedLayers.delete('grid'); } catch (e) { log('Failed to remove grid from highlightedLayers: ' + e, false); }
+      try { map.gridRenderer.updateQuadLabels(); } catch (e) { log('Failed to update quad labels when removing highlight: ' + e, false); }
       await new Promise(r=>setTimeout(r,100));
       if (container && getComputedStyle(container).display === 'none') log('grid labels hidden when un-highlighted', true); else log('grid labels still visible when un-highlighted', false);
 

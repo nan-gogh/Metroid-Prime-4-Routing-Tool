@@ -2,6 +2,8 @@
 // Extracted from map.js to improve modularity and testability
 
 const RouteAnimation = {
+    errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
+    
     // Configuration constants for route animation
     get CONFIG() {
         return {
@@ -40,7 +42,7 @@ const RouteAnimation = {
             try {
                 if (map.render) map.render();
             } catch (e) {
-                console.debug('RouteAnimation: render failed', e);
+                this.errorHandler.logDebug('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
             }
 
             map._routeRaf = requestAnimationFrame(step);

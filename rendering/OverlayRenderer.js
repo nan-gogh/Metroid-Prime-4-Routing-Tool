@@ -14,7 +14,8 @@
     }
 
     init() {
-      // no-op for now; kept for symmetry and future state
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
     }
 
     render() {
@@ -55,7 +56,7 @@
                       }
                       nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
                   }
-              } catch (e) { console.error('OverlayRenderer.render: Failed to parse route color:', e); }
+              } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to parse route color:', e); }
               const dotSize = (map.getRouteNodeSize && typeof map.getRouteNodeSize === 'function') ? map.getRouteNodeSize() : 6;
               ctx.save();
               ctx.beginPath();
@@ -80,13 +81,13 @@
                 const parentRect = (map.canvas.parentElement && map.canvas.parentElement.getBoundingClientRect) ? map.canvas.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
                 canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
                 canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
-              } catch (e) { console.error('OverlayRenderer.render: Failed to calculate canvas offset:', e); }
+              } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to calculate canvas offset:', e); }
               const tooltipX = Math.round(canvasOffsetLeft + pos2.x + 15);
               const tooltipY = Math.round(canvasOffsetTop + pos2.y - 10);
               if (this.map.tooltipManager && typeof this.map.tooltipManager.update === 'function') {
-                try { this.map.tooltipManager.update(tooltipX, tooltipY); } catch (e) { console.debug('OverlayRenderer: tooltipManager update failed', e.message); }
+                try { this.map.tooltipManager.update(tooltipX, tooltipY); } catch (e) { this.errorHandler.logDebug('OverlayRenderer: tooltipManager update failed', 'OverlayRenderer.render.tooltipManagerUpdate', { error: e, message: e.message }); }
               } else {
-                try { this.map.showTooltip(m, pos2.x, pos2.y, this.selectionState.selectedMarkerLayer); } catch (e) { console.debug('OverlayRenderer: showTooltip failed', e.message); }
+                try { this.map.showTooltip(m, pos2.x, pos2.y, this.selectionState.selectedMarkerLayer); } catch (e) { this.errorHandler.logDebug('OverlayRenderer: showTooltip failed', 'OverlayRenderer.render.showTooltip', { error: e, message: e.message }); }
               }
             }
           }
@@ -98,11 +99,11 @@
             const m = map.selectedMarker;
             const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: map.zoom, panX: map.panX, panY: map.panY}, this.config.MAP_SIZE || 8192);
             if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-              try { map.showTooltip(m, pos.x, pos.y, map.selectedMarkerLayer); } catch (e) { console.error('OverlayRenderer.render: Failed to show selected marker tooltip:', e); }
+              try { map.showTooltip(m, pos.x, pos.y, map.selectedMarkerLayer); } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to show selected marker tooltip:', e); }
             }
           }
         } catch (e) { /* non-fatal */ }
-      } catch (e) { console.debug('OverlayRenderer.render failed', e); }
+      } catch (e) { this.errorHandler.logDebug('OverlayRenderer.render failed', 'OverlayRenderer.render', { error: e }); }
     }
   }
 

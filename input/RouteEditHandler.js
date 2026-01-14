@@ -56,7 +56,7 @@
           }
         });
       } catch (e) {
-        console.debug('RouteEditHandler fast accessors failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler fast accessors failed', 'RouteEditHandler.constructor.fastAccessors', { error: e });
       }
     }
 
@@ -87,7 +87,7 @@
 
         return false; // Not handled
       } catch (e) {
-        console.debug('RouteEditHandler.handlePointerDown failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
         return false;
       }
     }
@@ -108,7 +108,7 @@
 
         return false; // Not handled
       } catch (e) {
-        console.debug('RouteEditHandler.handlePointerMove failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
         return false;
       }
     }
@@ -118,7 +118,7 @@
         this._finalizeRouteInsert(ev);
         return false; // Continue with other handlers
       } catch (e) {
-        console.debug('RouteEditHandler.handlePointerUp failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.handlePointerUp failed', 'RouteEditHandler.handlePointerUp', { error: e });
         return false;
       }
     }
@@ -135,7 +135,7 @@
         return true; // Handled
 
       } catch (e) {
-        console.debug('RouteEditHandler.handleClick failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.handleClick failed', 'RouteEditHandler.handleClick', { error: e });
         return false;
       }
     }
@@ -157,7 +157,7 @@
 
         return false; // Continue with other handlers
       } catch (e) {
-        console.debug('RouteEditHandler.handleMouseLeave failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.handleMouseLeave failed', 'RouteEditHandler.handleMouseLeave', { error: e });
         return false;
       }
     }
@@ -231,7 +231,7 @@
           try {
             this.map.updateLayerCounts();
           } catch (e) {
-            console.debug('Failed to update layer counts after route insert drag', e);
+            this.errorHandler.logDebug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
           }
 
           // Update route length display immediately
@@ -241,7 +241,7 @@
               dev_routeLength.textContent = (typeof this.map.currentRouteLengthNormalized === 'number' && !isNaN(this.map.currentRouteLengthNormalized)) ?
                 this.map.currentRouteLengthNormalized.toFixed(3) : '—';
             }
-          } catch (e) { console.debug('Failed to update route length display on route modification', e); }
+          } catch (e) { this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
 
         this._render();
@@ -304,8 +304,17 @@
 
         const worldX = (localX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
         const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
-        const tempMarker = { uid: '', x: Number(worldX), y: Number(worldY) };
-        const tempSource = { marker: tempMarker, layerKey: 'temp', layerIndex: -1 };
+        
+        // Use pooled objects for performance
+        const tempMarker = global.markerPool ? global.markerPool.acquire() : { uid: '', x: 0, y: 0 };
+        tempMarker.x = Number(worldX);
+        tempMarker.y = Number(worldY);
+        
+        const tempSource = global.routeSourcePool ? global.routeSourcePool.acquire() : { marker: null, layerKey: '', layerIndex: -1 };
+        tempSource.marker = tempMarker;
+        tempSource.layerKey = 'temp';
+        tempSource.layerIndex = -1;
+        
         ordered[routePos] = tempSource;
 
         const newSources = ordered;
@@ -318,6 +327,7 @@
         this._routeInsert = {
           pointerId: ev.pointerId,
           tempIndex: routePos,
+          tempSource, // Store reference for cleanup
           prevSources,
           prevIndices,
           prevRouteLooping: !!this.map.routeLooping,
@@ -468,6 +478,11 @@
     _cancelRouteInsert(reason = 'Route modification cancelled') {
       try {
         if (this._routeInsert) {
+          // Release pooled objects if they exist
+          if (this._routeInsert.tempSource && global.routeSourcePool) {
+            global.routeSourcePool.release(this._routeInsert.tempSource);
+          }
+          
           if (this._routeInsert.prevSources && this._routeInsert.prevIndices) {
             const prev = this._routeInsert.prevSources || [];
             const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ?
@@ -485,7 +500,7 @@
           this._routeInsert = null;
         }
       } catch (e) {
-        console.debug('RouteEditHandler._cancelRouteInsert failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler._cancelRouteInsert failed', 'RouteEditHandler._cancelRouteInsert', { error: e });
       }
     }
 
@@ -506,7 +521,7 @@
         }
         this._routePreview = null;
       } catch (e) {
-        console.debug('RouteEditHandler.cancelOperations failed:', e);
+        this.errorHandler.logDebug('RouteEditHandler.cancelOperations failed', 'RouteEditHandler.cancelOperations', { error: e });
       }
     }
   }

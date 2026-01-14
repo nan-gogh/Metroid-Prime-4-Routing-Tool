@@ -26,6 +26,7 @@
 
       // Route preview state
       this._routePreview = null; // preview route data for temporary display
+      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     // Route data management
@@ -35,7 +36,7 @@
         this.routeLengthNormalized = lengthNormalized || 0;
         this._routeSources = routeSources || [];
       } catch (e) {
-        console.debug('RouteState.setRoute failed', e);
+        this.errorHandler.logDebug('RouteState.setRoute failed', 'RouteState.setRoute', { error: e });
       }
     }
 
@@ -46,7 +47,7 @@
         this._routeSources = [];
         this.clearRoutePreview();
       } catch (e) {
-        console.debug('RouteState.clearRoute failed', e);
+        this.errorHandler.logDebug('RouteState.clearRoute failed', 'RouteState.clearRoute', { error: e });
       }
     }
 
@@ -74,7 +75,7 @@
           this._computationProgress = 0;
         }
       } catch (e) {
-        console.debug('RouteState.setComputing failed', e);
+        this.errorHandler.logDebug('RouteState.setComputing failed', 'RouteState.setComputing', { error: e });
       }
     }
 
@@ -86,7 +87,7 @@
       try {
         this._computationProgress = Math.max(0, Math.min(1, progress));
       } catch (e) {
-        console.debug('RouteState.setComputationProgress failed', e);
+        this.errorHandler.logDebug('RouteState.setComputationProgress failed', 'RouteState.setComputationProgress', { error: e });
       }
     }
 
@@ -99,7 +100,7 @@
       try {
         this._routeDashOffset = offset;
       } catch (e) {
-        console.debug('RouteState.setAnimationOffset failed', e);
+        this.errorHandler.logDebug('RouteState.setAnimationOffset failed', 'RouteState.setAnimationOffset', { error: e });
       }
     }
 
@@ -111,7 +112,7 @@
       try {
         this._routeRaf = rafId;
       } catch (e) {
-        console.debug('RouteState.setAnimationFrameId failed', e);
+        this.errorHandler.logDebug('RouteState.setAnimationFrameId failed', 'RouteState.setAnimationFrameId', { error: e });
       }
     }
 
@@ -123,7 +124,7 @@
       try {
         this._lastRouteAnimTime = time;
       } catch (e) {
-        console.debug('RouteState.setLastAnimationTime failed', e);
+        this.errorHandler.logDebug('RouteState.setLastAnimationTime failed', 'RouteState.setLastAnimationTime', { error: e });
       }
     }
 
@@ -135,7 +136,7 @@
       try {
         this._routeAnimationSpeed = speed;
       } catch (e) {
-        console.debug('RouteState.setAnimationSpeed failed', e);
+        this.errorHandler.logDebug('RouteState.setAnimationSpeed failed', 'RouteState.setAnimationSpeed', { error: e });
       }
     }
 
@@ -151,7 +152,7 @@
           // Animation will be stopped externally
         }
       } catch (e) {
-        console.debug('RouteState.setAnimationEnabled failed', e);
+        this.errorHandler.logDebug('RouteState.setAnimationEnabled failed', 'RouteState.setAnimationEnabled', { error: e });
       }
     }
 
@@ -160,7 +161,7 @@
       try {
         this._routeInsert = insertState || null;
       } catch (e) {
-        console.debug('RouteState.setRouteInsert failed', e);
+        this.errorHandler.logDebug('RouteState.setRouteInsert failed', 'RouteState.setRouteInsert', { error: e });
       }
     }
 
@@ -172,7 +173,7 @@
       try {
         this._routeInsert = null;
       } catch (e) {
-        console.debug('RouteState.clearRouteInsert failed', e);
+        this.errorHandler.logDebug('RouteState.getRouteInsert failed', 'RouteState.getRouteInsert', { error: e });
       }
     }
 
@@ -180,7 +181,7 @@
       try {
         this.routeLooping = !!looping;
       } catch (e) {
-        console.debug('RouteState.setRouteLooping failed', e);
+        this.errorHandler.logDebug('RouteState.setRouteLooping failed', 'RouteState.setRouteLooping', { error: e });
       }
     }
 
@@ -193,7 +194,7 @@
       try {
         this._routePreview = previewRoute;
       } catch (e) {
-        console.debug('RouteState.setRoutePreview failed', e);
+        this.errorHandler.logDebug('RouteState.getRouteLooping failed', 'RouteState.getRouteLooping', { error: e });
       }
     }
 
@@ -205,14 +206,21 @@
       try {
         this._routePreview = null;
       } catch (e) {
-        console.debug('RouteState.clearRoutePreview failed', e);
+        this.errorHandler.logDebug('RouteState.clearRouteInsert failed', 'RouteState.clearRouteInsert', { error: e });
       }
     }
 
     // State persistence (consent-gated)
     saveToStorage() {
       try {
-        if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
+        if (window.storageService) {
+          const state = {
+            routeLooping: this.routeLooping,
+            routeLineWidth: this.routeLineWidth,
+            animationSpeed: this._routeAnimationSpeed
+          };
+          window.storageService.set(this.config.STORAGE_KEYS.ROUTE_STATE, state);
+        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const state = {
@@ -224,13 +232,26 @@
           }
         }
       } catch (e) {
-        console.debug('RouteState.saveToStorage failed', e);
+        this.errorHandler.logDebug('RouteState.saveToStorage failed', 'RouteState.saveToStorage', { error: e });
       }
     }
 
     loadFromStorage() {
       try {
-        if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
+        if (window.storageService) {
+          const state = window.storageService.get(this.config.STORAGE_KEYS.ROUTE_STATE);
+          if (state) {
+            if (typeof state.routeLooping === 'boolean') {
+              this.routeLooping = state.routeLooping;
+            }
+            if (typeof state.routeLineWidth === 'number') {
+              this.routeLineWidth = state.routeLineWidth;
+            }
+            if (typeof state.animationSpeed === 'number') {
+              this._routeAnimationSpeed = state.animationSpeed;
+            }
+          }
+        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const saved = localStorage.getItem('mp4_route_state');
@@ -249,7 +270,7 @@
           }
         }
       } catch (e) {
-        console.debug('RouteState.loadFromStorage failed', e);
+        this.errorHandler.logDebug('RouteState.loadFromStorage failed', 'RouteState.loadFromStorage', { error: e });
       }
     }
 
@@ -282,7 +303,7 @@
         this.setRouteLooping(false);
         this.clearRoutePreview();
       } catch (e) {
-        console.debug('RouteState.reset failed', e);
+        this.errorHandler.logDebug('RouteState.reset failed', 'RouteState.reset', { error: e });
       }
     }
 
@@ -294,7 +315,7 @@
                Array.isArray(this._routeSources) &&
                this._routeSources.length > 0;
       } catch (e) {
-        console.debug('RouteState.hasValidRoute failed', e);
+        this.errorHandler.logDebug('RouteState.hasValidRoute failed', 'RouteState.hasValidRoute', { error: e });
         return false;
       }
     }
@@ -303,7 +324,7 @@
       try {
         return this.currentRoute ? this.currentRoute.length : 0;
       } catch (e) {
-        console.debug('RouteState.getRouteWaypointCount failed', e);
+        this.errorHandler.logDebug('RouteState.getRouteWaypointCount failed', 'RouteState.getRouteWaypointCount', { error: e });
         return 0;
       }
     }

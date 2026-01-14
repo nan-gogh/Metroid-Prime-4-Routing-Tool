@@ -35,6 +35,9 @@
      * Initializes the renderer caches and performance monitoring.
      */
     init() {
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      
       // Initialize caches and performance monitoring
       this._resetCaches();
     }
@@ -67,7 +70,7 @@
       const maxIndex = this.map._routeSources.length - 1;
       for (const idx of this.routeState.currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
-          console.warn('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
+          (this.errorHandler || global.errorHandler || console).warn('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
           return false;
         }
       }
@@ -101,7 +104,7 @@
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
-          console.warn('RouteRenderer: Invalid marker at index', idx);
+          (this.errorHandler || global.errorHandler || console).warn('RouteRenderer: Invalid marker at index', idx);
           pathData.valid = false;
           continue;
         }
@@ -196,11 +199,11 @@
 
         // Log performance warnings for slow renders
         if (renderTime > 16.67) { // Slower than 60fps
-          console.debug(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`);
+          this.errorHandler.logDebug(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`, 'RouteRenderer.render.performance', { renderTime, pointCount: pathData.points.length });
         }
 
       } catch (e) {
-        console.debug('RouteRenderer.render failed', e);
+        this.errorHandler.logDebug('RouteRenderer.render failed', 'RouteRenderer.render', { error: e });
       }
     }
 
@@ -268,7 +271,7 @@
         ctx.restore();
 
       } catch (e) {
-        console.debug('RouteRenderer: Glow render failed', e);
+        this.errorHandler.logDebug('RouteRenderer: Glow render failed', 'RouteRenderer._renderGlow', { error: e });
       }
     }
 

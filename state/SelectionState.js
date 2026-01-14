@@ -11,6 +11,7 @@
       this.editRouteMode = false;
       this.highlightedLayers = new Set();
       this._previousHighlights = new Map(); // layerKey -> wasHighlighted
+      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     // Marker selection management
@@ -19,7 +20,7 @@
         this.selectedMarker = marker;
         this.selectedMarkerLayer = layerKey || null;
       } catch (e) {
-        console.debug('SelectionState.setSelectedMarker failed', e);
+        this.errorHandler.logDebug('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e });
       }
     }
 
@@ -28,7 +29,7 @@
         this.selectedMarker = null;
         this.selectedMarkerLayer = null;
       } catch (e) {
-        console.debug('SelectionState.clearSelectedMarker failed', e);
+        this.errorHandler.logDebug('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e });
       }
     }
 
@@ -38,7 +39,7 @@
                this.selectedMarkerLayer === layerKey &&
                this.selectedMarker.uid === marker.uid;
       } catch (e) {
-        console.debug('SelectionState.isMarkerSelected failed', e);
+        this.errorHandler.logDebug('SelectionState.isMarkerSelected failed', 'SelectionState.isMarkerSelected', { error: e });
         return false;
       }
     }
@@ -52,7 +53,7 @@
         }
         this.editMarkersMode = !!enabled;
       } catch (e) {
-        console.debug('SelectionState.setEditMarkersMode failed', e);
+        this.errorHandler.logDebug('SelectionState.setEditMarkersMode failed', 'SelectionState.setEditMarkersMode', { error: e });
       }
     }
 
@@ -64,7 +65,7 @@
         }
         this.editRouteMode = !!enabled;
       } catch (e) {
-        console.debug('SelectionState.setEditRouteMode failed', e);
+        this.errorHandler.logDebug('SelectionState.setEditRouteMode failed', 'SelectionState.setEditRouteMode', { error: e });
       }
     }
 
@@ -87,7 +88,7 @@
           this.highlightedLayers.delete(layerKey);
         }
       } catch (e) {
-        console.debug('SelectionState.setLayerHighlight failed', e);
+        this.errorHandler.logDebug('SelectionState.setLayerHighlight failed', 'SelectionState.setLayerHighlight', { error: e });
       }
     }
 
@@ -99,7 +100,7 @@
           this.highlightedLayers.add(layerKey);
         }
       } catch (e) {
-        console.debug('SelectionState.toggleLayerHighlight failed', e);
+        this.errorHandler.logDebug('SelectionState.toggleLayerHighlight failed', 'SelectionState.toggleLayerHighlight', { error: e });
       }
     }
 
@@ -107,7 +108,7 @@
       try {
         return this.highlightedLayers.has(layerKey);
       } catch (e) {
-        console.debug('SelectionState.isLayerHighlighted failed', e);
+        this.errorHandler.logDebug('SelectionState.isLayerHighlighted failed', 'SelectionState.isLayerHighlighted', { error: e });
         return false;
       }
     }
@@ -116,7 +117,7 @@
       try {
         this.highlightedLayers.clear();
       } catch (e) {
-        console.debug('SelectionState.clearAllHighlights failed', e);
+        this.errorHandler.logDebug('SelectionState.clearAllHighlights failed', 'SelectionState.clearAllHighlights', { error: e });
       }
     }
 
@@ -136,7 +137,7 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState.enterEditMode failed', e);
+        this.errorHandler.logDebug('SelectionState.enterEditMode failed', 'SelectionState.enterEditMode', { error: e });
       }
     }
 
@@ -149,14 +150,21 @@
           row.style.removeProperty('--edit-mode-outline-color');
         }
       } catch (e) {
-        console.debug('SelectionState.exitEditMode failed', e);
+        this.errorHandler.logDebug('SelectionState.exitEditMode failed', 'SelectionState.exitEditMode', { error: e });
       }
     }
 
     // State persistence (consent-gated)
     saveToStorage() {
       try {
-        if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
+        if (window.storageService) {
+          const state = {
+            highlightedLayers: Array.from(this.highlightedLayers),
+            editMarkersMode: this.editMarkersMode,
+            editRouteMode: this.editRouteMode
+          };
+          window.storageService.set(this.config.STORAGE_KEYS.SELECTION_STATE, state);
+        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const state = {
@@ -168,13 +176,26 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState.saveToStorage failed', e);
+        this.errorHandler.logDebug('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e });
       }
     }
 
     loadFromStorage() {
       try {
-        if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
+        if (window.storageService) {
+          const state = window.storageService.get(this.config.STORAGE_KEYS.SELECTION_STATE);
+          if (state) {
+            if (state.highlightedLayers && Array.isArray(state.highlightedLayers)) {
+              this.highlightedLayers = new Set(state.highlightedLayers);
+            }
+            if (typeof state.editMarkersMode === 'boolean') {
+              this.editMarkersMode = state.editMarkersMode;
+            }
+            if (typeof state.editRouteMode === 'boolean') {
+              this.editRouteMode = state.editRouteMode;
+            }
+          }
+        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const saved = localStorage.getItem('mp4_selection_state');
@@ -193,7 +214,7 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState.loadFromStorage failed', e);
+        this.errorHandler.logDebug('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e });
       }
     }
 
@@ -217,7 +238,7 @@
         this.clearAllHighlights();
         this._previousHighlights.clear();
       } catch (e) {
-        console.debug('SelectionState.reset failed', e);
+        this.errorHandler.logDebug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
       }
     }
   }

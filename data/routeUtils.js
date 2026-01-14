@@ -2,11 +2,12 @@
 
 const RouteUtils = {
     _manager: null,
+    errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
 
     // Factory method to create manager with dependencies
     createManager(markerManager, storage, notifications) {
         if (this._manager) {
-            console.warn('RouteManager already exists, returning existing instance');
+            this.errorHandler.logWarning('RouteManager already exists, returning existing instance', 'RouteUtils.createManager.duplicate', {});
             return this._manager;
         }
 
@@ -18,7 +19,7 @@ const RouteUtils = {
                 try {
                     this._onRouteChanged();
                 } catch (e) {
-                    console.debug('RouteUtils._notifyRouteChanged failed:', e);
+                    this.errorHandler.logDebug('RouteUtils._notifyRouteChanged failed', 'RouteUtils._notifyRouteChanged', { error: e });
                 }
             }
         });

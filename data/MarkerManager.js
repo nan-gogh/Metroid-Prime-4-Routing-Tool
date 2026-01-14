@@ -6,6 +6,9 @@ class MarkerManager {
         this.config = config || { maxMarkers: 50, layerPrefix: 'cm' };
         this.storage = storage;
         this.notifications = notifications;
+        
+        // Error handling
+        this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
 
         // Internal state
         this.markers = [];
@@ -31,7 +34,7 @@ class MarkerManager {
             try {
                 this.onChanged();
             } catch (e) {
-                console.debug('MarkerManager._notifyChanged failed:', e);
+                this.errorHandler.logDebug('MarkerManager._notifyChanged failed', 'MarkerManager._notifyChanged', { error: e });
             }
         }
     }
@@ -51,7 +54,7 @@ class MarkerManager {
                 return true;
             }
         } catch (e) {
-            console.warn('Failed to load markers from storage:', e);
+            this.errorHandler.logWarning(e, 'MarkerManager.loadFromStorage.failed', {});
         }
         return false;
     }
@@ -64,7 +67,7 @@ class MarkerManager {
                 this.storage.saveMarkers(this.markers);
             }
         } catch (e) {
-            console.warn('Failed to save markers to storage:', e);
+            this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.failed', {});
         }
     }
 
@@ -118,7 +121,7 @@ class MarkerManager {
             try {
                 this.onCleanupRouteReferences(uid);
             } catch (e) {
-                console.debug('MarkerManager cleanup callback failed:', e);
+                this.errorHandler.logDebug('MarkerManager cleanup callback failed', 'MarkerManager.deleteMarker.cleanupCallback', { error: e });
             }
         }
 

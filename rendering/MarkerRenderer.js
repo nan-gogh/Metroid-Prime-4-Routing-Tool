@@ -30,6 +30,9 @@
      * Prepares internal caches to ensure hit detection matches visual rendering.
      */
     init() {
+      // Initialize error handler from map reference
+      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      
       // Prepare any caches
       this._markerSizeFrame = {};
     }
@@ -79,7 +82,7 @@
               ctx.fillStyle = color;
               ctx.fill();
               ctx.restore();
-            } catch (e) { console.debug('MarkerRenderer: failed to draw selection halo', e); }
+            } catch (e) { this.errorHandler && this.errorHandler.logDebug('MarkerRenderer: failed to draw selection halo', 'MarkerRenderer.render.selectionHalo', { error: e }); }
           }
 
           try {
@@ -87,7 +90,7 @@
             ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
-          } catch (e) { console.debug('MarkerRenderer: failed to draw marker', e); }
+          } catch (e) { this.errorHandler && this.errorHandler.logDebug('MarkerRenderer: failed to draw marker', 'MarkerRenderer.render.marker', { error: e }); }
         }
       }
     }
