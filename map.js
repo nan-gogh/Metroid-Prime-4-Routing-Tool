@@ -2236,6 +2236,15 @@ async function init() {
         console.warn('Failed to initialize StorageService:', e);
     }
 
+    // Initialize EventBus for cross-module communication
+    try {
+        if (typeof eventBus !== 'undefined') {
+            eventBus.setErrorHandler(moduleErrorHandler);
+        }
+    } catch (e) {
+        console.warn('Failed to initialize EventBus:', e);
+    }
+
     // Create map
     map = new InteractiveMap('mapCanvas');
         // Highlighting runtime state: set of layer keys currently highlighted
@@ -2395,7 +2404,7 @@ async function init() {
     let layerListController;
     try {
         if (typeof LayerListController !== 'undefined') {
-            layerListController = new LayerListController(map, MP4Config, this.errorHandler);
+            layerListController = new LayerListController(map, MP4Config, this.errorHandler, eventBus);
             await layerListController.init();
         }
     } catch (e) {
@@ -2406,15 +2415,15 @@ async function init() {
     let sidebarController, toolbarController, settingsController;
     try {
         if (typeof SidebarController !== 'undefined') {
-            sidebarController = new SidebarController(map, MP4Config, this.errorHandler);
+            sidebarController = new SidebarController(map, MP4Config, this.errorHandler, eventBus);
             sidebarController.init();
         }
         if (typeof ToolbarController !== 'undefined') {
-            toolbarController = new ToolbarController(map, MP4Config, this.errorHandler);
+            toolbarController = new ToolbarController(map, MP4Config, this.errorHandler, eventBus);
             toolbarController.init();
         }
         if (typeof SettingsController !== 'undefined') {
-            settingsController = new SettingsController(map, MP4Config, this.errorHandler);
+            settingsController = new SettingsController(map, MP4Config, this.errorHandler, eventBus);
             settingsController.init();
             // Load saved settings after controller is initialized
             settingsController.loadSavedSettings();
@@ -3025,7 +3034,7 @@ async function init() {
     // Initialize route computation controller
     try {
         if (typeof RouteComputeController !== 'undefined') {
-            const routeComputeController = new RouteComputeController(map, MP4Config, this.errorHandler);
+            const routeComputeController = new RouteComputeController(map, MP4Config, this.errorHandler, eventBus);
             routeComputeController.init();
         } else {
             this.errorHandler.logError('RouteComputeController not available', 'InteractiveMap.init.initializeRouteComputeController');

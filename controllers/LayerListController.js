@@ -3,10 +3,11 @@
 
 (function (global) {
   class LayerListController {
-    constructor(map, config, errorHandler) {
+    constructor(map, config, errorHandler, eventBus) {
       this.map = map;
       this.config = config || global.MP4Config || {};
       this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.eventBus = eventBus || global.eventBus;
 
       // Gesture tracking state
       this._gestureActive = false;

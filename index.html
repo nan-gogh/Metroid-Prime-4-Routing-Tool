@@ -198,6 +198,10 @@
     <!-- Error handling utility - load early -->
     <script src="utils/ErrorHandler.js"></script>
     
+    <!-- Event bus for cross-module communication - load early -->
+    <script src="utils/EventBus.js"></script>
+    <script src="utils/EventTypes.js"></script>
+    
     <script src="data/layers/lamornStatue.js"></script>
     <script src="data/layers/gfDebris.js"></script>
     <script src="data/layers/tokabisCamp.js"></script>
@@ -264,6 +268,9 @@
 
     <script src="map.js"></script>
     <script src="data/ripple.js"></script>
+
+    <!-- Test scripts -->
+    <script src="tests/eventbus_test.js"></script>
     <script>
     // Prevent double-click zoom on the entire page
     (function(){

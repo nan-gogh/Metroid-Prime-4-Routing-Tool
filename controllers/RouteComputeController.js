@@ -2,10 +2,11 @@
 // Handles route computation UI interactions and delegates to RouteComputation module
 
 class RouteComputeController {
-    constructor(map, config, errorHandler) {
+    constructor(map, config, errorHandler, eventBus) {
         this.map = map;
         this.config = config;
         this.errorHandler = errorHandler;
+        this.eventBus = eventBus || window.eventBus;
         this.moduleErrorHandler = errorHandler; // For compatibility with extracted code
     }
 
