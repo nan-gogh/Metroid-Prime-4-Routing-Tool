@@ -1625,18 +1625,33 @@ class InteractiveMap {
             }
             this.tooltip.style.left = `${desiredLeft}px`;
             this.tooltip.style.top = `${desiredTop}px`;
-        } catch (e) { try { this.tooltip.style.left = `${x + 15}px`; this.tooltip.style.top = `${y - 10}px`; } catch (e) {} }
+        } catch (e) { 
+            this.errorHandler.logError(e, 'InteractiveMap.showTooltip.positioning');
+            try { this.tooltip.style.left = `${x + 15}px`; this.tooltip.style.top = `${y - 10}px`; } catch (e) { 
+                this.errorHandler.logError(e, 'InteractiveMap.showTooltip.fallbackPositioning');
+            }
+        }
         // Style tooltip using the layer's color when available
         try {
             const layerCol = (key && LAYERS && LAYERS[key] && LAYERS[key].color) ? LAYERS[key].color : null;
             if (layerCol) {
-                try { this.tooltip.style.borderColor = layerCol; } catch (e) {}
-                try { if (typeof colorToRgba === 'function') this.tooltip.style.background = colorToRgba(layerCol, 0.12) || this.tooltip.style.background; } catch (e) {}
+                try { this.tooltip.style.borderColor = layerCol; } catch (e) { 
+                    this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setBorderColor');
+                }
+                try { if (typeof colorToRgba === 'function') this.tooltip.style.background = colorToRgba(layerCol, 0.12) || this.tooltip.style.background; } catch (e) { 
+                    this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setBackgroundColor');
+                }
             } else {
-                try { this.tooltip.style.borderColor = '#22d3ee'; } catch (e) {}
-                try { this.tooltip.style.background = 'rgba(10, 25, 41, 0.95)'; } catch (e) {}
+                try { this.tooltip.style.borderColor = '#22d3ee'; } catch (e) { 
+                    this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setDefaultBorderColor');
+                }
+                try { this.tooltip.style.background = 'rgba(10, 25, 41, 0.95)'; } catch (e) { 
+                    this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setDefaultBackground');
+                }
             }
-        } catch (e) {}
+        } catch (e) { 
+            this.errorHandler.logError(e, 'InteractiveMap.showTooltip.styling');
+        }
         this.tooltip.style.display = 'block';
     }
     
@@ -1701,9 +1716,13 @@ class InteractiveMap {
                 return;
             }
             // Ensure DOM quadrant labels are updated
-            try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) {}
+            try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { 
+                this.errorHandler.logError(e, 'InteractiveMap.render.updateQuadLabels');
+            }
             // Update tooltip position (keeps selected marker tooltip anchored during pan/zoom)
-            try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
+            try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) { 
+                this.errorHandler.logError(e, 'InteractiveMap.render.updateTooltipPosition');
+            }
             return;
         }
 
@@ -1715,9 +1734,13 @@ class InteractiveMap {
         try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(); } catch (e) { console.debug('renderRoute: routeRenderer.render failed', e); }
         try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(); } catch (e) { console.debug('renderOverlay: overlayRenderer.render failed', e); }
         // Ensure DOM quadrant labels are updated
-        try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) {}
+        try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { 
+            this.errorHandler.logError(e, 'InteractiveMap.render.fallback.updateQuadLabels');
+        }
         // Update tooltip position
-        try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) {}
+        try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) { 
+            this.errorHandler.logError(e, 'InteractiveMap.render.fallback.updateTooltipPosition');
+        }
     }
 
     // Draw only the overlay contents (route, markers, tooltip).
@@ -2052,48 +2075,48 @@ function exitEditModeForLayer(layerKey) {
     try {
         if (layerKey === 'customMarkers' && map && map.editMarkersMode) {
             map.editMarkersMode = false;
-            try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) {}
+            try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) { console.error('exitEditModeForLayer: Failed to exit custom markers edit mode:', e); }
             try {
                 const editToggle = document.getElementById('editMarkersToggle');
                 if (editToggle) {
                     editToggle.setAttribute('aria-pressed', 'false');
                     editToggle.classList.remove('active');
                 }
-            } catch (e) {}
+            } catch (e) { console.error('exitEditModeForLayer: Failed to update edit markers toggle:', e); }
             try {
                 const mini = document.getElementById('editMarkersToggleMini');
                 if (mini) {
                     mini.classList.remove('glow');
                     mini.setAttribute('aria-pressed', 'false');
                 }
-            } catch (e) {}
+            } catch (e) { console.error('exitEditModeForLayer: Failed to update mini edit markers toggle:', e); }
             // Properly hide edit overlay with full cleanup
             hideEditOverlayProperly();
-            try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+            try { if (map && typeof map.render === 'function') map.render(); } catch (e) { console.error('exitEditModeForLayer: Failed to render after exiting custom markers edit mode:', e); }
         } else if (layerKey === 'route' && map && map.editRouteMode) {
             map.editRouteMode = false;
-            try { map._exitEditMode && map._exitEditMode('route'); } catch (e) {}
+            try { map._exitEditMode && map._exitEditMode('route'); } catch (e) { console.error('exitEditModeForLayer: Failed to exit route edit mode:', e); }
             try {
                 const routeEditToggle = document.getElementById('editRouteToggle');
                 if (routeEditToggle) {
                     routeEditToggle.setAttribute('aria-pressed', 'false');
                     routeEditToggle.classList.remove('active');
                 }
-            } catch (e) {}
+            } catch (e) { console.error('exitEditModeForLayer: Failed to update route edit toggle:', e); }
             try {
                 const mini = document.getElementById('editRouteToggleMini');
                 if (mini) {
                     mini.classList.remove('glow');
                     mini.setAttribute('aria-pressed', 'false');
                 }
-            } catch (e) {}
+            } catch (e) { console.error('exitEditModeForLayer: Failed to update mini route edit toggle:', e); }
             // Reset cursor to grab when exiting route edit mode
-            try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) {}
+            try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { console.error('exitEditModeForLayer: Failed to reset cursor:', e); }
             // Properly hide edit overlay with full cleanup
             hideEditOverlayProperly();
-            try { if (map && typeof map.render === 'function') map.render(); } catch (e) {}
+            try { if (map && typeof map.render === 'function') map.render(); } catch (e) { console.error('exitEditModeForLayer: Failed to render after exiting route edit mode:', e); }
         }
-    } catch (e) {}
+    } catch (e) { console.error('exitEditModeForLayer: Unexpected error:', e); }
 }
 
 // Utility: attach pressed-state handlers to any element matching selector

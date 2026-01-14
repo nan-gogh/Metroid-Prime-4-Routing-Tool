@@ -216,12 +216,12 @@
         // Prevent pointer/touch on the icon backdrop from bubbling to the row
         try {
           iconDiv.addEventListener('pointerdown', (ev) => {
-            try { ev.stopPropagation(); } catch (e) {}
+            try { ev.stopPropagation(); } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.pointerdown.stopPropagation'); }
           });
           iconDiv.addEventListener('touchstart', (ev) => {
-            try { ev.stopPropagation(); } catch (e) {}
+            try { ev.stopPropagation(); } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.touchstart.stopPropagation'); }
           }, { passive: true });
-        } catch (e) {}
+        } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.eventListeners'); }
 
         const _handleIconActivate = (ev) => {
           this._handleIconClick(ev, iconDiv);
@@ -229,7 +229,7 @@
 
         try {
           iconDiv._lastActivate = 0;
-        } catch (e) {}
+        } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.setLastActivate'); }
 
         try {
           iconDiv.addEventListener('click', (ev) => {
@@ -237,9 +237,9 @@
               const last = iconDiv._lastActivate || 0;
               if (Date.now() - last < 500) return;
               _handleIconActivate(ev);
-            } catch (e) {}
+            } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.click.handler'); }
           });
-        } catch (e) {}
+        } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.click.listener'); }
 
         try {
           iconDiv.addEventListener('pointerup', (ev) => {
@@ -248,9 +248,9 @@
               if (ev && ev.stopPropagation) ev.stopPropagation();
               iconDiv._lastActivate = Date.now();
               _handleIconActivate(ev);
-            } catch (e) {}
+            } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.pointerup.handler'); }
           });
-        } catch (e) {}
+        } catch (e) { this._logError(e, 'LayerListController._bindHighlightControls.pointerup.listener'); }
       });
     }
 
@@ -261,11 +261,11 @@
       try {
         // Only track primary pointers
         if (ev.isPrimary === false) return;
-        try { ev.preventDefault(); } catch (e) {}
+        try { ev.preventDefault(); } catch (e) { this._logError(e, 'LayerListController._handleLayerTogglePointerDown.preventDefault'); }
 
         // Temporarily disable sidebar scrolling while interacting with layer rows
         const controlsEl = document.querySelector('.controls');
-        try { if (controlsEl) controlsEl.style.touchAction = 'none'; } catch (e) {}
+        try { if (controlsEl) controlsEl.style.touchAction = 'none'; } catch (e) { this._logError(e, 'LayerListController._handleLayerTogglePointerDown.touchAction'); }
 
         this._gestureActive = true;
         this._gesturePointerId = ev.pointerId;
@@ -418,7 +418,7 @@
         const layer = global.LAYERS && global.LAYERS[k];
         this.map._highlightConfig[k] = { scale: (layer && typeof layer.highlightScale === 'number') ? layer.highlightScale : 2.0 };
       }
-      try { if (typeof this.map.render === 'function') this.map.render(); } catch (e) {}
+      try { if (typeof this.map.render === 'function') this.map.render(); } catch (e) { this._logError(e, 'LayerListController._handleLegacyHighlight.render'); }
     }
 
     /**
@@ -442,8 +442,8 @@
     _updateHighlightVisuals(iconDiv, label, layerKey, layer) {
       try {
         const isHighlighted = !!(this.map && this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey));
-        try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) {}
-        try { label.classList.toggle('has-inline-highlight', isHighlighted); } catch (e) {}
+        try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) { this._logError(e, 'LayerListController._updateHighlightVisuals.iconClassToggle'); }
+        try { label.classList.toggle('has-inline-highlight', isHighlighted); } catch (e) { this._logError(e, 'LayerListController._updateHighlightVisuals.labelClassToggle'); }
         try {
           if (isHighlighted) {
             const col = (layer && layer.color) ? layer.color : iconDiv.style.backgroundColor;
@@ -477,7 +477,7 @@
               try {
                 if (k === 'route') {
                   this.map.layerVisibility = Object.assign({}, this.map.layerVisibility || {}, { route: v });
-                  try { this.map.render(); } catch (e) {}
+                  try { this.map.render(); } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.route.render'); }
                 } else {
                   if (typeof this.map.toggleLayer === 'function') {
                     this.map.toggleLayer(k, v);
