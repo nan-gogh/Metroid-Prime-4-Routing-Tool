@@ -1681,7 +1681,7 @@ class InteractiveMap {
                     canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
                     canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
                 }
-            } catch (e) {}
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._updateTooltipPosition.computeOffsets'); }
 
             const margin = 6;
             let desiredLeft = Math.round(canvasOffsetLeft + mx + 15);
@@ -1696,7 +1696,7 @@ class InteractiveMap {
             this.tooltip.style.top = `${desiredTop}px`;
             // Ensure visible when following
             if (this.tooltip.style.display !== 'block') this.tooltip.style.display = 'block';
-        } catch (e) {}
+        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._updateTooltipPosition'); }
     }
     
     render() {
@@ -1898,10 +1898,10 @@ class InteractiveMap {
         try {
             const el = document.getElementById('routeLength');
             if (el) this.updateLayerCounts();
-        } catch (e) {}
+        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setRoute.updateLayerCounts'); }
 
         // Update loop UI if route looping state changed
-        try { this.updateLoopUI(); } catch (e) {}
+        try { this.updateLoopUI(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setRoute.updateLoopUI'); }
 
         this.render();
         // Start animated route when a route is set
@@ -1913,10 +1913,10 @@ class InteractiveMap {
             try {
                 const cb = document.getElementById('toggle_route');
                 if (cb) cb.checked = true;
-            } catch (e) {}
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setRoute.updateRouteToggle'); }
             this.startRouteAnimation();
             // Persist the route so it survives reloads
-            try { this.saveRouteToStorage(); } catch (e) {}
+            try { this.saveRouteToStorage(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setRoute.saveRouteToStorage'); }
         } else {
             this.stopRouteAnimation();
         }
@@ -1943,16 +1943,16 @@ class InteractiveMap {
         }
 
         // Update UI counts via the central updater so it shows '0'
-        try { this.updateLayerCounts(); } catch (e) {}
+        try { this.updateLayerCounts(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.updateLayerCounts'); }
         this.render();
         // Stop animated route when cleared
         this.stopRouteAnimation();
         // If we were in route edit mode, exit via canonical helper so visuals cleanly update
-        try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('route'); } catch (e) {}
+        try { if (typeof exitEditModeForLayer === 'function') exitEditModeForLayer('route'); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.exitEditModeForLayer'); }
         // Remove persisted route when cleared
         try {
             this.routeManager.clearRoute();
-        } catch (e) {}
+        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.clearRoute'); }
     }
 
     // Persist the current route to localStorage as an ordered list of positions with uid and layer info
@@ -1989,6 +1989,7 @@ function loadLayerVisibilityFromStorage() {
         }
         return null;
     } catch (e) {
+        console.error('loadLayerVisibilityFromStorage: Failed to load layer visibility:', e);
         return null;
     }
 }
@@ -1998,7 +1999,7 @@ function saveLayerVisibilityToStorage(obj) {
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_layerVisibility', obj || {});
         }
-    } catch (e) {}
+    } catch (e) { console.error('saveLayerVisibilityToStorage: Failed to save layer visibility:', e); }
 }
 
 // Highlight multiplier persistence
@@ -2008,7 +2009,7 @@ function loadHighlightMultiplierFromStorage() {
         const v = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlightMultiplier') : null;
         if (v === null || typeof v === 'undefined') return null;
         return (typeof v === 'string') ? parseFloat(v) : Number(v);
-    } catch (e) { return null; }
+    } catch (e) { console.error('loadHighlightMultiplierFromStorage: Failed to load highlight multiplier:', e); return null; }
 }
 
 function saveHighlightMultiplierToStorage(v) {
@@ -2017,7 +2018,7 @@ function saveHighlightMultiplierToStorage(v) {
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_highlightMultiplier', v);
         }
-    } catch (e) {}
+    } catch (e) { console.error('saveHighlightMultiplierToStorage: Failed to save highlight multiplier:', e); }
 }
 
 // Highlighted layers persistence (consent-gated)
@@ -2027,7 +2028,7 @@ function loadHighlightedLayersFromStorage() {
         const s = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlighted_layers') : null;
         if (!s) return null;
         return s;
-    } catch (e) { return null; }
+    } catch (e) { console.error('loadHighlightedLayersFromStorage: Failed to load highlighted layers:', e); return null; }
 }
 
 function saveHighlightedLayersToStorage(obj) {
@@ -2036,7 +2037,7 @@ function saveHighlightedLayersToStorage(obj) {
         if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
             window._mp4Storage.saveSetting('mp4_highlighted_layers', obj || {});
         }
-    } catch (e) {}
+    } catch (e) { console.error('saveHighlightedLayersToStorage: Failed to save highlighted layers:', e); }
 }
 
 // Module-scoped variables for edit overlay RAF and timer (shared with init() updateEditOverlay)
@@ -2050,22 +2051,22 @@ function hideEditOverlayProperly() {
         const ov = document.getElementById('editOverlay');
         if (!ov) return;
         // Cancel any ongoing RAF
-        if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) {} _editOverlayRaf_module = null; }
+        if (_editOverlayRaf_module) { try { cancelAnimationFrame(_editOverlayRaf_module); } catch (e) { console.error('hideEditOverlayProperly: Failed to cancel animation frame:', e); } _editOverlayRaf_module = null; }
         // Start fade-out by removing visible class
         ov.classList.remove('visible');
         // Keep aria-hidden=false during fade; only mark hidden after transition completes
-        try { ov.setAttribute('aria-hidden', 'false'); } catch (e) {}
-        if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) {} }
+        try { ov.setAttribute('aria-hidden', 'false'); } catch (e) { console.error('hideEditOverlayProperly: Failed to set aria-hidden:', e); }
+        if (_overlayHideTimer_module) { try { clearTimeout(_overlayHideTimer_module); } catch (e) { console.error('hideEditOverlayProperly: Failed to clear timeout:', e); } }
         _overlayHideTimer_module = setTimeout(() => {
             try {
                 // If overlay was re-enabled in the meantime, don't clear
                 if (map && (map.editMarkersMode || map.editRouteMode)) { _overlayHideTimer_module = null; return; }
-                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) {}
-                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) {}
-            } catch (e) {}
+                try { ov.setAttribute('aria-hidden', 'true'); } catch (e) { console.error('hideEditOverlayProperly: Failed to set aria-hidden true:', e); }
+                try { ov.style.left = ''; ov.style.top = ''; ov.style.width = ''; ov.style.height = ''; ov.style.backgroundColor = ''; } catch (e) { console.error('hideEditOverlayProperly: Failed to reset overlay styles:', e); }
+            } catch (e) { console.error('hideEditOverlayProperly: Failed in timeout callback:', e); }
             _overlayHideTimer_module = null;
         }, 220);
-    } catch (e) {}
+    } catch (e) { console.error('hideEditOverlayProperly: Unexpected error:', e); }
 }
 
 // Helper: exit edit mode for a layer if it's currently in edit mode
