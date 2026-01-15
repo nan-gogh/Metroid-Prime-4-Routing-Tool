@@ -74,7 +74,6 @@
           }
         }
 
-        console.log(`[getNeededResolution] zoom=${zoom}, canvas=${canvasWidth}x${canvasHeight}, dpr=${dpr}, pixelsNeeded=${pixelsNeeded.toFixed(0)}, bestIndex=${bestIndex} (${bestResolution}px)`);
         return bestIndex;
       } catch (e) {
         this.errorHandler.logError(e, 'ImageState.getNeededResolution failed');

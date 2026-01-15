@@ -185,11 +185,6 @@ const MarkerUtils = {
     // UID generation
     generateUID(x, y, prefix = 'm') {
         return MarkerUtilsCore.generateUID(x, y, prefix);
-    },
-
-    // Unified marker size calculator
-    computeMarkerSize(opts) {
-        return MarkerUtilsCore.computeMarkerSize(opts);
     }
 };
 

@@ -273,8 +273,9 @@
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+          // Skip hover check during pan - it's expensive and unnecessary
         } else {
-          // Update hover state
+          // Update hover state (only when not panning)
           this._checkMarkerHover(localX, localY);
         }
       } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }

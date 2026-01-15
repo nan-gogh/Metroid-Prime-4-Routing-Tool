@@ -30,6 +30,9 @@
     init() {
       // Prepare any caches
       this._markerSizeFrame = {};
+      // Cache layer keys to avoid repeated Object.entries calls in render()
+      this._layerKeyCache = null;
+      this._lastLayersRef = null;
     }
 
     /**
@@ -46,7 +49,14 @@
       const canvasSize = renderContext.getCanvasSize();
       const cssWidth = canvasSize.width;
       const cssHeight = canvasSize.height;
-      const entries = Object.entries(this.layers || {});
+      
+      // Cache layer keys to avoid repeated Object.entries calls
+      if (this._lastLayersRef !== this.layers) {
+        this._layerKeyCache = Object.entries(this.layers || {});
+        this._lastLayersRef = this.layers;
+      }
+      
+      const entries = this._layerKeyCache;
       for (let li = 0; li < entries.length; li++) {
         const layerKey = entries[li][0];
         const layer = entries[li][1];
@@ -68,7 +78,7 @@
           if (screenX < -20 || screenX > cssWidth + 20 || screenY < -20 || screenY > cssHeight + 20) continue;
           const isSelected = this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
           const size = this.getMarkerRenderSize(marker, layerKey);
-          try { const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i)); this._markerSizeFrame[key] = size; } catch (e) { console.error('MarkerRenderer.render: Failed to cache marker size:', e); }
+          try { const key = (layerKey || '') + '|' + (marker && marker.uid ? String(marker.uid) : String(i)); this._markerSizeFrame[key] = size; } catch (e) { /* silently ignore cache failures */ }
 
           if (isSelected) {
             try {
@@ -111,28 +121,36 @@
         const zoomShrinkThreshold = config.zoomShrinkThreshold || 0.5;
         const zoomShrinkRate = config.zoomShrinkRate || 0.75;
 
-        // Start with base size
-        let size = baseSize * userScaleMultiplier;
-
-        // Apply zoom scaling with shrink logic
-        if (zoom >= zoomShrinkThreshold) {
-          size *= zoom;
+        // Step 1: Apply zoom scaling
+        // Use zoom = 0.1 as reference point where markers show at baseSize
+        const referenceZoom = 0.1;
+        let zoomScaling;
+        if (zoom <= zoomShrinkThreshold) {
+          // Normal growth up to zoom = zoomShrinkThreshold
+          zoomScaling = Math.max(0.01, zoom) / referenceZoom;
         } else {
-          // Shrink markers below threshold
-          const shrinkFactor = 1 - zoomShrinkRate * (zoomShrinkThreshold - zoom) / zoomShrinkThreshold;
-          size *= zoom * shrinkFactor;
+          // Behavior beyond zoomShrinkThreshold depends on zoomShrinkRate
+          const normalGrowth = Math.max(0.01, zoom) / referenceZoom;
+          const maxShrinking = (zoomShrinkThreshold / referenceZoom) * (zoomShrinkThreshold / zoom);
+          
+          // Linear interpolation between normal growth (rate=0) and maximum shrinking (rate=1)
+          zoomScaling = normalGrowth + zoomShrinkRate * (maxShrinking - normalGrowth);
         }
-
-        // Apply highlight multiplier
-        if (isHighlighted) {
-          size *= highlightMultiplier;
-        }
-
-        // Apply selection multiplier
+        let size = baseSize * zoomScaling;
+        
+        // Step 2: Apply user scale multiplier
+        size *= userScaleMultiplier;
+        
+        // Step 3: Apply selection bonus
         if (isSelected) {
           size *= selectionMultiplier;
         }
-
+        
+        // Step 4: Apply highlight multiplier (only increases size, never decreases)
+        if (isHighlighted) {
+          size *= highlightMultiplier;
+        }
+        
         // Ensure minimum size
         return Math.max(size, 1);
       } catch (e) {
@@ -178,7 +196,7 @@
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to get cached size:', e); }
         const base = this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 6;
-        const detailScale = this.mapState.zoom || 1;
+        const detailScale = 1; // Static detail scale - zoom scaling is handled in computeMarkerSize
         const markerShrinkFactor = 0.6; // Default, could be from config
 
         let highlighted = false;

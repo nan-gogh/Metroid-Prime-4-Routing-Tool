@@ -896,159 +896,11 @@ class InteractiveMap {
         }
     }
     
-    zoomIn() {
-        if (this.mapState) {
-            this.mapState.zoomIn();
-            this.imageState.updateResolution();
-            this.updateResolution();
-            this.render();
-            // Update cursor hover after programmatic zoom
-            try {
-                const rect = this.canvas.getBoundingClientRect();
-                let localX, localY;
-                if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
-                    localX = this.lastMouseX - rect.left;
-                    localY = this.lastMouseY - rect.top;
-                } else {
-                    localX = rect.width / 2;
-                    localY = rect.height / 2;
-                }
-                this.checkMarkerHover(localX, localY);
-                try { this.saveViewToStorage(); } catch (err) {
-                    this.errorHandler.logDebug('Failed to save view after zoom in', 'InteractiveMap.zoomIn.saveView', { error: err });
-                }
-            } catch (err) {
-                this.errorHandler.logDebug('Failed to update cursor hover after zoom in', 'InteractiveMap.zoomIn.cursorHover', { error: err });
-            }
-        } else {
-            // Fallback
-            const centerX = this.canvas.clientWidth / 2;
-            const centerY = this.canvas.clientHeight / 2;
-            const worldX = (centerX - this.panX) / this.zoom;
-            const worldY = (centerY - this.panY) / this.zoom;
 
-            this.zoom = Math.min(this.mapState ? this.mapState.maxZoom : (MP4Config.ZOOM ? MP4Config.ZOOM.MAX || 4 : 4), this.zoom * 1.3);
-
-            this.panX = centerX - worldX * this.zoom;
-            this.panY = centerY - worldY * this.zoom;
-
-            this.updateResolution();
-            this.render();
-            // Update cursor hover after programmatic zoom
-            try {
-                const rect = this.canvas.getBoundingClientRect();
-                let localX, localY;
-                if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
-                    localX = this.lastMouseX - rect.left;
-                    localY = this.lastMouseY - rect.top;
-                } else {
-                    localX = rect.width / 2;
-                    localY = rect.height / 2;
-                }
-                this.checkMarkerHover(localX, localY);
-                try { this.saveViewToStorage(); } catch (err) {
-                    this.errorHandler.logDebug('Failed to save view after zoom in', 'InteractiveMap.zoomIn.fallback.saveView', { error: err });
-                }
-            } catch (err) {
-                this.errorHandler.logDebug('Failed to update cursor hover after zoom in', 'InteractiveMap.zoomIn.fallback.cursorHover', { error: err });
-            }
-        }
-    }
     
-    zoomOut() {
-        if (this.mapState) {
-            this.mapState.zoomOut();
-            this.imageState.updateResolution();
-            this.updateResolution();
-            this.render();
-            // Update cursor hover after programmatic zoom
-            try {
-                const rect = this.canvas.getBoundingClientRect();
-                let localX, localY;
-                if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
-                    localX = this.lastMouseX - rect.left;
-                    localY = this.lastMouseY - rect.top;
-                } else {
-                    localX = rect.width / 2;
-                    localY = rect.height / 2;
-                }
-                this.checkMarkerHover(localX, localY);
-                try { this.saveViewToStorage(); } catch (err) {
-                    this.errorHandler.logDebug('Failed to save view after zoom out', 'InteractiveMap.zoomOut.saveView', { error: err });
-                }
-            } catch (err) {
-                this.errorHandler.logDebug('Failed to update cursor hover after zoom out', 'InteractiveMap.zoomOut.cursorHover', { error: err });
-            }
-        } else {
-            // Fallback
-            const centerX = this.canvas.clientWidth / 2;
-            const centerY = this.canvas.clientHeight / 2;
-            const worldX = (centerX - this.panX) / this.zoom;
-            const worldY = (centerY - this.panY) / this.zoom;
 
-            this.zoom = Math.max(this.mapState ? this.mapState.minZoom : (MP4Config.ZOOM ? MP4Config.ZOOM.DEFAULT_MIN || 0.05 : 0.05), this.zoom / 1.3);
-
-            this.panX = centerX - worldX * this.zoom;
-            this.panY = centerY - worldY * this.zoom;
-
-            this.updateResolution();
-            this.render();
-            // Update cursor hover after programmatic zoom
-            try {
-                const rect = this.canvas.getBoundingClientRect();
-                let localX, localY;
-                if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
-                    localX = this.lastMouseX - rect.left;
-                    localY = this.lastMouseY - rect.top;
-                } else {
-                    localX = rect.width / 2;
-                    localY = rect.height / 2;
-                }
-                this.checkMarkerHover(localX, localY);
-                try { this.saveViewToStorage(); } catch (err) {
-                    this.errorHandler.logDebug('Failed to save view after zoom out', 'InteractiveMap.zoomOut.fallback.saveView', { error: err });
-                }
-            } catch (err) {
-                this.errorHandler.logDebug('Failed to update cursor hover after zoom out', 'InteractiveMap.zoomOut.fallback.cursorHover', { error: err });
-            }
-        }
-    }
     
-    resetView() {
-        // Reset view to the same initial fit used on page load (fit full map into container)
-        const cssWidth = this.canvas.parentElement.clientWidth;
-        const cssHeight = this.canvas.parentElement.clientHeight;
-        // Reserve padding for axis labels (match constructor logic)
-        const labelFontMax = 48;
-        const labelPadding = 8;
-        const halfW = labelFontMax * 0.6;
-        const halfH = labelFontMax / 2;
-        const availW = Math.max(32, cssWidth - 2 * (labelPadding + halfW));
-        const availH = Math.max(32, cssHeight - 2 * (labelPadding + halfH));
-        const fitZoom = Math.min(availW / MP4Config.MAP_SIZE, availH / MP4Config.MAP_SIZE);
-        this.zoom = Math.max(this.minZoom || MP4Config.ZOOM.DEFAULT_MIN, Math.min(MP4Config.ZOOM.MAX, fitZoom));
-        this.centerMap();
-        this.updateResolution();
-        // Ensure an appropriately-sized tile image is loaded for the reset view
-        try { this.loadInitialImage(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.resetView.loadInitialImage'); }
-        this.render();
-        // Update cursor hover after resetting view
-        try {
-            const rect = this.canvas.getBoundingClientRect();
-            let localX, localY;
-            if (Number.isFinite(this.lastMouseX) && Number.isFinite(this.lastMouseY)) {
-                localX = this.lastMouseX - rect.left;
-                localY = this.lastMouseY - rect.top;
-            } else {
-                localX = rect.width / 2;
-                localY = rect.height / 2;
-            }
-            this.checkMarkerHover(localX, localY);
-            try { this.saveViewToStorage(); } catch (err) { this.errorHandler.logError(err, 'InteractiveMap.resetView.saveViewToStorage'); }
-        } catch (err) {
-            this.errorHandler.logError(err, 'InteractiveMap.resetView');
-        }
-    }
+
     
     saveViewToStorage() {
         try {
@@ -1289,13 +1141,8 @@ class InteractiveMap {
         const current = this.imageState.currentResolution;
         const loading = this.imageState.loadingResolution;
         
-        console.log(`[updateResolution] needed=${needed}, current=${current}, loading=${loading}, zoom=${this.zoom}`);
-        
         if (needed !== current && loading !== needed) {
-            console.log(`[updateResolution] Loading new resolution: ${needed}`);
             this.tileRenderer.loadImage(needed);
-        } else {
-            console.log(`[updateResolution] Skipping load: needed===current=${needed === current}, loading===needed=${loading === needed}`);
         }
         
         // Update status display
@@ -1427,10 +1274,12 @@ class InteractiveMap {
             }
         }
 
-        this.canvas.style.cursor = foundCursor ? 'pointer' : 'grab';
-        // Only re-render when necessary (cursor state change may not require a full redraw,
-        // but keep render for simplicity to ensure any visual selection overlay remains correct).
-        this.render();
+        const newCursor = foundCursor ? 'pointer' : 'grab';
+        // Only update cursor if it changed (avoid DOM thrashing)
+        if (this.canvas.style.cursor !== newCursor) {
+            this.canvas.style.cursor = newCursor;
+        }
+        // Don't render on hover - that's handled by pan/zoom events via EventBus
     }
 
     // findMarkerAt fully delegated to MarkerRenderer (removed legacy fallback)
@@ -1624,9 +1473,9 @@ class InteractiveMap {
             if (!this.tooltip) return;
             if (!this.selectedMarker || !this.selectedMarkerLayer) return;
             // Compute marker screen position
-            const pos = this.markerManager ? this.markerManager.getScreenPosition(this.selectedMarker, {zoom: this.zoom, panX: this.panX, panY: this.panY}, MAP_SIZE) : null;
-            const mx = (pos && typeof pos.x === 'number') ? pos.x : (this.selectedMarker && typeof this.selectedMarker.x === 'number' ? this.selectedMarker.x * MAP_SIZE * this.zoom + this.panX : null);
-            const my = (pos && typeof pos.y === 'number') ? pos.y : (this.selectedMarker && typeof this.selectedMarker.y === 'number' ? this.selectedMarker.y * MAP_SIZE * this.zoom + this.panY : null);
+            const pos = this.markerManager ? this.markerManager.getScreenPosition(this.selectedMarker, {zoom: this.zoom, panX: this.panX, panY: this.panY}, MP4Config.MAP_SIZE) : null;
+            const mx = (pos && typeof pos.x === 'number') ? pos.x : (this.selectedMarker && typeof this.selectedMarker.x === 'number' ? this.selectedMarker.x * MP4Config.MAP_SIZE * this.zoom + this.panX : null);
+            const my = (pos && typeof pos.y === 'number') ? pos.y : (this.selectedMarker && typeof this.selectedMarker.y === 'number' ? this.selectedMarker.y * MP4Config.MAP_SIZE * this.zoom + this.panY : null);
             if (mx === null || my === null) return;
             // Compute offsets of canvas inside parent container so absolute positioning aligns
             const parent = this.tooltip.parentElement;
@@ -2231,7 +2080,14 @@ async function init() {
             // Set up event listeners for cross-module communication
             eventBus.on(window.EventTypes.RENDER_REQUESTED, (data) => {
                 try {
-                    if (map && typeof map.render === 'function') {
+                    // Use renderPipeline's batching system instead of direct render()
+                    // This ensures multiple render requests in one frame are batched together
+                    if (map && map.renderPipeline && typeof map.renderPipeline.markDirty === 'function') {
+                        // Mark all renderers dirty for a full render, batched via rAF
+                        const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+                        allRenderers.forEach(name => map.renderPipeline.markDirty(name));
+                    } else if (map && typeof map.render === 'function') {
+                        // Fallback if pipeline is not available
                         map.render();
                     }
                 } catch (e) {
@@ -2397,13 +2253,14 @@ async function init() {
             // State synchronization listeners
             eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
                 try {
-                    // Update selection state
-                    if (data && typeof data.marker !== 'undefined') {
-                        map.selectedMarker = data.marker;
-                    }
-                    if (data && typeof data.layer !== 'undefined') {
-                        map.selectedMarkerLayer = data.layer;
-                    }
+                    // NOTE: Do NOT try to sync back to SelectionState here!
+                    // The SELECTION_CHANGED event was GENERATED BY SelectionState
+                    // Syncing back would create an infinite loop:
+                    // Event fired → setSelectedMarker called → SelectionState emits event → back to here → loop
+                    
+                    // Only perform side effects: rendering and UI updates
+                    // The actual state is already updated in SelectionState
+                    
                     // Trigger render for selection changes
                     if (map && typeof map.render === 'function') {
                         map.render();
@@ -3583,7 +3440,7 @@ async function init() {
         // heavy decoding work while the page is already unfaded.
         // This polls for either `map.images[needed]` or `map.currentImage`.
         try {
-            const waitForInitialImage = (timeoutMs = 4000) => new Promise((resolve) => {
+            const waitForInitialImage = (timeoutMs = 500) => new Promise((resolve) => {
                 const start = Date.now();
                 (function check() {
                     try {
@@ -3594,16 +3451,16 @@ async function init() {
                         }
                     } catch (e) { moduleErrorHandler.logError(e, 'waitForInitialImage.checkImageAvailability', { needed, mapImages: map.images, currentImage: map.currentImage }); }
                     if (Date.now() - start >= timeoutMs) return resolve(false);
-                    setTimeout(check, 80);
+                    setTimeout(check, 30);
                 })();
             });
             // await initial image (short timeout) but don't block startup forever
-            await waitForInitialImage(4000);
+            await waitForInitialImage(500);
             // Do one overlay render now that the initial image is available
             try {
                 if (map && typeof map.render === 'function') map.render();
                 // Give the browser a chance to paint and finish any decode work
-                await new Promise(res => requestAnimationFrame(() => setTimeout(res, 140)));
+                await new Promise(res => requestAnimationFrame(() => setTimeout(res, 50)));
             } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to render initial overlay'); }
         } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to wait for initial image'); }
         try { window._mp4Ready = true; } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to set _mp4Ready flag'); }
