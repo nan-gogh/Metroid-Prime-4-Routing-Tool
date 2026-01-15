@@ -6,10 +6,12 @@
     /**
      * Creates a new RenderPipeline instance for orchestrating multiple rendering stages.
      * @param {Array} stages - Array of renderer objects with render() methods to be managed
+     * @param {RenderContext} renderContext - The render context providing canvas access
      */
-    constructor(stages) {
+    constructor(stages, renderContext) {
       this.errorHandler = global.errorHandler;
       this.stages = stages || [];
+      this.renderContext = renderContext; // Store render context for passing to renderers
       this._enabledStages = new Set(); // Track enabled stages
       this._stageOrder = []; // Custom ordering
       this._profilingEnabled = false;
@@ -39,6 +41,10 @@
      */
     markDirty(rendererName) {
       this._dirtyFlags.add(rendererName);
+      // Emit event to notify other modules that a renderer needs updating
+      if (window.eventBus) {
+        window.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: rendererName });
+      }
       this._scheduleRender();
       return this;
     }
@@ -195,6 +201,11 @@
       const startTime = performance.now();
       this._renderCount++;
 
+      // Emit event when selective rendering is requested
+      if (dirtyOnly && window.eventBus) {
+        window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: Array.from(dirtyOnly) });
+      }
+
       // Use custom order if set, otherwise use original stages array
       const stagesToRender = this._stageOrder.length > 0 ? this._stageOrder : this.stages;
       const renderedStages = [];
@@ -210,7 +221,8 @@
 
         try {
           if (typeof stage.render === 'function') {
-            stage.render();
+            // Pass renderContext to renderer for clean canvas access
+            stage.render(this.renderContext);
             renderedStages.push(stageName);
 
             if (this._profilingEnabled) {

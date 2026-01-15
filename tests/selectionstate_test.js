@@ -31,9 +31,18 @@
     customMarkers: { color: '#00ff00' }
   };
 
-  // Load SelectionState
+  // Load dependencies
   const fs = require('fs');
   const path = require('path');
+
+  // Load ErrorHandler first
+  const errorHandlerScript = fs.readFileSync(path.join(__dirname, '../utils/ErrorHandler.js'), 'utf8');
+  eval(errorHandlerScript);
+
+  // Make ErrorHandler globally available
+  global.ErrorHandler = ErrorHandler;
+
+  // Load SelectionState
   const script = fs.readFileSync(path.join(__dirname, '../state/SelectionState.js'), 'utf8');
   eval(script);
 

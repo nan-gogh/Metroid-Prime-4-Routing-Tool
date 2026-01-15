@@ -3,11 +3,21 @@
 
 (function (global) {
   class SidebarController {
-    constructor(map, config, errorHandler, eventBus) {
-      this.map = map;
-      this.config = config || global.MP4Config || {};
-      this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
-      this.eventBus = eventBus || global.eventBus;
+    constructor(options) {
+      // Required dependencies
+      this.layerState = options.layerState;
+      this.selectionState = options.selectionState;
+      this.editModeState = options.editModeState;
+      this.eventBus = options.eventBus;
+
+      // Optional dependencies
+      this.config = options.config || global.MP4Config || {};
+      this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.eventTypes = window.EventTypes || {};
+
+      // Keep map reference for UI operations (temporary)
+      this.map = options.map;
+
       this._renderScheduled = false;
       this._scheduleRender = this._scheduleRender.bind(this);
     }
@@ -54,7 +64,7 @@
           // Preserve disabled rows (edit-locked) when hiding
           if (!show && row.classList && row.classList.contains('disabled')) {
             try {
-              newVisibility[key] = !!(this.map && this.map.layerVisibility && this.map.layerVisibility[key]);
+              newVisibility[key] = !!(this.layerState && this.layerState.layerVisibility && this.layerState.layerVisibility[key]);
             } catch (e) {
               newVisibility[key] = false;
             }
@@ -71,12 +81,13 @@
           }
         });
 
-        // Apply new visibility
-        try {
-          this.map.layerVisibility = Object.assign({}, this.map.layerVisibility || {}, newVisibility);
-        } catch (e) {
-          this.map.layerVisibility = Object.assign({}, newVisibility);
-        }
+        // Apply new visibility (handled by event listener)
+        // Emit layer visibility changed event
+        this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
+          layerVisibility: newVisibility,
+          triggeredBy: 'sidebar-toggle-all',
+          showAll: show
+        });
 
         // Exit edit modes when hiding layers
         if (!show) {
@@ -84,12 +95,10 @@
         }
 
         // Save to storage
-        try {
-          if (typeof saveLayerVisibilityToStorage === 'function') {
-            saveLayerVisibilityToStorage(this.map.layerVisibility);
-          }
-        } catch (e) {
-          if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to save layer visibility to storage');
+        if (this.layerState) {
+          this.eventBus.emit(EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, {
+            layerVisibility: this.layerState.layerVisibility
+          });
         }
 
         // Deselect markers when hiding all layers
@@ -97,7 +106,8 @@
           this._deselectHiddenMarkers();
         }
 
-        this._scheduleRender();
+        // Emit render requested event
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to apply layer toggle');
       }
@@ -110,14 +120,10 @@
     _exitEditModesForHiddenLayers(newVisibility) {
       try {
         if (newVisibility && newVisibility.customMarkers === false) {
-          if (typeof exitEditModeForLayer === 'function') {
-            exitEditModeForLayer('customMarkers');
-          }
+          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' });
         }
         if (newVisibility && newVisibility.route === false) {
-          if (typeof exitEditModeForLayer === 'function') {
-            exitEditModeForLayer('route');
-          }
+          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'route' });
         }
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to exit edit modes');
@@ -129,14 +135,13 @@
      */
     _deselectHiddenMarkers() {
       try {
-        if (this.map) {
-          this.map.selectedMarker = null;
-          this.map.selectedMarkerLayer = null;
-          if (typeof this.map.hideTooltip === 'function') {
-            this.map.hideTooltip();
-          }
-          this.map.render();
+        if (this.selectionState) {
+          this.selectionState.clearSelectedMarker();
         }
+        // Emit selection cleared event instead of direct render
+        this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
+          triggeredBy: 'layer-hide-all'
+        });
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to deselect markers');
       }
@@ -170,33 +175,32 @@
      */
     _handleLayerCheckboxChange(layerKey, checked) {
       try {
-        if (this.map && this.map.layerVisibility) {
-          this.map.layerVisibility[layerKey] = checked;
+        // Update layer visibility via event (handled by map listener)
+        const newVisibility = { ...this.layerState.layerVisibility };
+        newVisibility[layerKey] = checked;
 
-          // Exit edit mode if hiding the layer being edited
-          if (!checked) {
-            if (layerKey === 'customMarkers' && this.map.editMarkersMode) {
-              if (typeof exitEditModeForLayer === 'function') {
-                exitEditModeForLayer('customMarkers');
-              }
-            } else if (layerKey === 'route' && this.map.editRouteMode) {
-              if (typeof exitEditModeForLayer === 'function') {
-                exitEditModeForLayer('route');
-              }
-            }
+        // Exit edit mode if hiding the layer being edited
+        if (!checked) {
+          if (layerKey === 'customMarkers' && this.selectionState && this.selectionState.editMarkersMode) {
+            this.selectionState.setEditMarkersMode(false);
+          } else if (layerKey === 'route' && this.selectionState && this.selectionState.editRouteMode) {
+            this.selectionState.setEditRouteMode(false);
           }
+        }
 
-          // Save to storage
-          try {
-            if (typeof saveLayerVisibilityToStorage === 'function') {
-              saveLayerVisibilityToStorage(this.map.layerVisibility);
-            }
-          } catch (e) {
-            if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to save layer visibility to storage');
-          }
+        // Emit layer visibility changed event
+        this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
+          layerVisibility: newVisibility,
+          triggeredBy: 'sidebar-checkbox',
+          layerKey: layerKey,
+          visible: checked
+        });
 
-          this._updateLayerCounts();
-          this._scheduleRender();
+        // Save to storage
+        if (this.layerState) {
+          this.eventBus.emit(EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, {
+            layerVisibility: this.layerState.layerVisibility
+          });
         }
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to handle layer checkbox change');
@@ -208,9 +212,10 @@
      */
     _updateLayerCounts() {
       try {
-        if (this.map && typeof this.map.updateLayerCounts === 'function') {
-          this.map.updateLayerCounts();
-        }
+        // Emit layer counts update event instead of direct call
+        this.eventBus.emit(this.eventTypes.LAYER_COUNTS_CHANGED, {
+          triggeredBy: 'sidebar-controller'
+        });
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to update layer counts');
       }
@@ -226,7 +231,10 @@
       requestAnimationFrame(() => {
         this._renderScheduled = false;
         try {
-          if (this.map) this.map.render();
+          // Emit render requested event instead of direct render
+          this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
+            triggeredBy: 'sidebar-controller'
+          });
         } catch (e) {
           if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Scheduled render failed');
         }
@@ -241,7 +249,7 @@
         const layerRows = document.querySelectorAll('#layerList .layer-toggle');
         layerRows.forEach(row => {
           const layerKey = row.dataset.layer;
-          const isVisible = this.map && this.map.layerVisibility && this.map.layerVisibility[layerKey];
+          const isVisible = this.layerState ? this.layerState.isLayerVisible(layerKey) : false;
           const checkbox = row.querySelector('input[type="checkbox"]');
 
           if (checkbox) {

@@ -105,7 +105,9 @@ const MP4Config = {
         minSize: 2,
         maxSize: 50
         */
-    }
+    },
+
+    TOUCH_PADDING: 4
 };
 
 // Convenience top-level constant used by map.js for quick access

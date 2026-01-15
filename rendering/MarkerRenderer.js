@@ -19,10 +19,8 @@
       this.markerManager = markerManager;
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
-      // Keep map reference for canvas access during transition
-      this.map = null;
-      this.canvas = null;
-      this.ctx = null;
+      this.errorHandler = global.errorHandler;
+      // No direct map reference needed - all access through state managers and renderContext
     }
 
     /**
@@ -30,9 +28,6 @@
      * Prepares internal caches to ensure hit detection matches visual rendering.
      */
     init() {
-      // Initialize error handler from map reference
-      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
-      
       // Prepare any caches
       this._markerSizeFrame = {};
     }
@@ -41,13 +36,16 @@
      * Renders all visible markers for enabled layers.
      * Draws circular markers with appropriate sizing, colors, and selection highlights.
      * Selected markers get a glowing shadow effect for emphasis.
+     * @param {RenderContext} renderContext - The render context providing canvas access
      */
-    render() {
+    render(renderContext) {
+      if (!renderContext || !renderContext.ctx) return;
+
       // Fully migrated marker rendering from map.renderMarkers()
-      const ctx = this.ctx;
-      if (!ctx) return;
-      const cssWidth = this.canvas.clientWidth;
-      const cssHeight = this.canvas.clientHeight;
+      const ctx = renderContext.ctx;
+      const canvasSize = renderContext.getCanvasSize();
+      const cssWidth = canvasSize.width;
+      const cssHeight = canvasSize.height;
       const entries = Object.entries(this.layers || {});
       for (let li = 0; li < entries.length; li++) {
         const layerKey = entries[li][0];
@@ -96,6 +94,54 @@
     }
 
     /**
+     * Computes marker size based on zoom, highlighting, selection, and configuration.
+     * @param {Object} params - Parameters for size calculation
+     * @param {number} params.zoom - Current zoom level
+     * @param {boolean} params.isHighlighted - Whether marker is highlighted
+     * @param {boolean} params.isSelected - Whether marker is selected
+     * @param {number} params.baseSize - Base marker size
+     * @param {number} params.userScaleMultiplier - User scale multiplier
+     * @param {number} params.highlightMultiplier - Highlight multiplier
+     * @returns {number} Computed marker size
+     */
+    computeMarkerSize({ zoom = 1, isHighlighted = false, isSelected = false, baseSize = 4, userScaleMultiplier = 1.0, highlightMultiplier = 2.0 }) {
+      try {
+        const config = this.config.MARKER_SCALING || {};
+        const selectionMultiplier = config.selectionMultiplier || 1.3;
+        const zoomShrinkThreshold = config.zoomShrinkThreshold || 0.5;
+        const zoomShrinkRate = config.zoomShrinkRate || 0.75;
+
+        // Start with base size
+        let size = baseSize * userScaleMultiplier;
+
+        // Apply zoom scaling with shrink logic
+        if (zoom >= zoomShrinkThreshold) {
+          size *= zoom;
+        } else {
+          // Shrink markers below threshold
+          const shrinkFactor = 1 - zoomShrinkRate * (zoomShrinkThreshold - zoom) / zoomShrinkThreshold;
+          size *= zoom * shrinkFactor;
+        }
+
+        // Apply highlight multiplier
+        if (isHighlighted) {
+          size *= highlightMultiplier;
+        }
+
+        // Apply selection multiplier
+        if (isSelected) {
+          size *= selectionMultiplier;
+        }
+
+        // Ensure minimum size
+        return Math.max(size, 1);
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('MarkerRenderer.computeMarkerSize failed', 'MarkerRenderer.computeMarkerSize', { error: e });
+        return baseSize || 4;
+      }
+    }
+
+    /**
      * Returns the base hit radius used for marker interaction detection.
      * Accounts for zoom scaling, marker shrinking, and touch padding.
      * @returns {number} The computed hit radius in pixels
@@ -103,14 +149,14 @@
     getHitRadius() {
       try {
         // Use same size calculation as render size but add touch padding
-        const renderSize = MarkerUtilsCore.computeMarkerSize({
+        const renderSize = this.computeMarkerSize({
           zoom: this.mapState.zoom || 1,
-          baseSize: this.map.getMarkerBaseSize()
+          baseSize: this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 4
         });
-        const touchPadding = this.map.touchPadding || 4;
+        const touchPadding = this.config.TOUCH_PADDING || 4;
         return renderSize + touchPadding;
       } catch (e) { 
-        return MP4Config.MARKER_SCALING.baseSize + 4; 
+        return (this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 4) + 4; 
       }
     }
 
@@ -128,32 +174,32 @@
           if (this._markerSizeFrame && marker && marker.uid) {
             const key = (layerKey || '') + '|' + String(marker.uid);
             const last = this._markerSizeFrame[key];
-            if (typeof last === 'number' && last > 0) return last + (this.map.touchPadding || 0);
+            if (typeof last === 'number' && last > 0) return last + (this.config.TOUCH_PADDING || 0);
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to get cached size:', e); }
-        const base = (typeof this.map.getBaseMarkerRadius === 'function') ? this.map.getBaseMarkerRadius() : 6;
-        const detailScale = (typeof this.map.getDetailScale === 'function') ? this.map.getDetailScale() : 1;
-        const markerShrinkFactor = (typeof this.map.markerShrinkFactor === 'number') ? this.map.markerShrinkFactor : 0.6;
+        const base = this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 6;
+        const detailScale = this.mapState.zoom || 1;
+        const markerShrinkFactor = 0.6; // Default, could be from config
 
         let highlighted = false;
         let highlightScale = undefined;
         try {
-          if (this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey)) {
+          if (this.layerState.highlightedLayers && this.layerState.highlightedLayers.has(layerKey)) {
             highlighted = true;
-            const cfg = (this.map._highlightConfig && this.map._highlightConfig[layerKey]) ? this.map._highlightConfig[layerKey] : null;
+            const cfg = (this.layerState.highlightConfig && this.layerState.highlightConfig[layerKey]) ? this.layerState.highlightConfig[layerKey] : null;
             highlightScale = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to check highlight state:', e); }
 
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
-        const size = MarkerUtilsCore.computeMarkerSize({
+        const size = this.computeMarkerSize({
           baseSize: base,
-          zoom: 1, // Hit radius doesn't scale with zoom
+          zoom: detailScale,
           isHighlighted: highlighted,
           isSelected: isSelected,
-          highlightMultiplier: highlightScale
+          highlightMultiplier: highlightScale || (this.config.MARKER_SCALING ? this.config.MARKER_SCALING.highlightMultiplier : 2.0)
         });
-        return size + (this.map.touchPadding || 0);
+        return size + (this.config.TOUCH_PADDING || 0);
       } catch (e) {
         return this.getHitRadius();
       }
@@ -169,12 +215,12 @@
     getMarkerRenderSize(marker, layerKey) {
       try {
         // Get current zoom
-        const zoom = this.map.zoom || 1;
+        const zoom = this.mapState.zoom || 1;
         
         // Check highlight state
         let isHighlighted = false;
         try {
-          if (this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey)) {
+          if (this.layerState.highlightedLayers && this.layerState.highlightedLayers.has(layerKey)) {
             isHighlighted = true;
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerRenderSize: Failed to check highlight state:', e); }
@@ -183,16 +229,16 @@
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
         
         // Use unified calculator
-        return MarkerUtilsCore.computeMarkerSize({
+        return this.computeMarkerSize({
           zoom,
           isHighlighted,
           isSelected,
-          baseSize: this.map.getMarkerBaseSize(),
-          userScaleMultiplier: this.map.getMarkerUserScaleMultiplier(),
-          highlightMultiplier: this.map.getMarkerHighlightMultiplier()
+          baseSize: this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 4,
+          userScaleMultiplier: this.config.MARKER_SCALING ? this.config.MARKER_SCALING.userScaleMultiplier : 1.0,
+          highlightMultiplier: this.config.MARKER_SCALING ? this.config.MARKER_SCALING.highlightMultiplier : 2.0
         });
       } catch (e) { 
-        return MP4Config.MARKER_SCALING.baseSize; 
+        return this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 4; 
       }
     }
 

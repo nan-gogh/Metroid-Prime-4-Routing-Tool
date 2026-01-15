@@ -3,10 +3,12 @@
 
 (function (global) {
   class PointerHandler {
-    constructor(map, config) {
+    constructor(map, config, eventBus) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
+      this.eventBus = eventBus || window.eventBus;
+      this.eventTypes = window.EventTypes || {};
       this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
       this.bound = false;
 
@@ -15,10 +17,11 @@
       this.selectionState = map.selectionState;
       this.routeState = map.routeState;
       this.layerState = map.layerState;
+      this.imageState = map.imageState;
 
       // Create route edit handler for route-specific interactions
       if (typeof RouteEditHandler !== 'undefined') {
-        this.routeEditHandler = new RouteEditHandler(map, this.config);
+        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus);
       }
 
       // Performance optimization: Create fast property accessors
@@ -47,8 +50,8 @@
         });
 
         // Pre-bind frequently called methods (eliminates lookup overhead)
-        this._render = this.map.render.bind(this.map);
-        this._updateResolution = this.map.updateResolution.bind(this.map);
+        // Note: _render binding removed - now using EventBus for render requests
+        this._updateResolution = this.imageState.updateResolution.bind(this.imageState);
         this._checkMarkerHover = this.map.checkMarkerHover.bind(this.map);
         this._findMarkerAt = this.map.checkMarkerHover.bind(this.map);
         this._saveViewToStorage = this.map.saveViewToStorage.bind(this.map);
@@ -129,7 +132,8 @@
         this.panY = mouseY - worldY * this.zoom;
         
         this._updateResolution();
-        this._render();
+        this.map.updateResolution();
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         // Update hover/cursor state after zoom so cursor matches visual marker size
         try { this._checkMarkerHover(mouseX, mouseY); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._onWheel.checkMarkerHover'); }
         // Debounce wheel until it stops, then save once
@@ -250,7 +254,8 @@
           this.panY = updatedView.panY;
           this.zoom = updatedView.zoom;
           this._updateResolution();
-          this._render();
+          this.map.updateResolution();
+          this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
           
           // Update marker hover during pinch
           try {
@@ -267,7 +272,7 @@
           this.panY += ev.clientY - this.lastMouseY;
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
-          this._render();
+          this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         } else {
           // Update hover state
           this._checkMarkerHover(localX, localY);
@@ -344,7 +349,7 @@
             
             // Note: Save only happens at drag end to avoid excessive storage writes
             try { this.map.customMarkers = global.LAYERS.customMarkers.markers; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerMove.updateCustomMarkers'); }
-            this._render();
+            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
             try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerMove.setCursor'); }
           }
         }
@@ -488,7 +493,7 @@
                 this.map.selectedMarker = null;
                 this.map.selectedMarkerLayer = null;
                 this.map.hideTooltip();
-                this._render();
+                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
               } else {
                 // select
                 this.map.selectedMarker = hit.marker;
@@ -497,7 +502,7 @@
                 const screenX = hit.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX;
                 const screenY = hit.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY;
                 this.map.showTooltip(hit.marker, screenX, screenY, layerKey);
-                this._render();
+                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
               }
             }
           }
@@ -509,7 +514,7 @@
             this.map.selectedMarker = null;
             this.map.selectedMarkerLayer = null;
             try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onClick.hideTooltip'); }
-            try { this._render(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onClick.render'); }
+            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
             return;
           }
           // Quick tap on empty space - place custom marker

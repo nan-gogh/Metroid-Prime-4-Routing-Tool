@@ -4,10 +4,12 @@
 
 (function (global) {
   class RouteEditHandler {
-    constructor(map, config) {
+    constructor(map, config, eventBus) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
+      this.eventBus = eventBus || window.eventBus;
+      this.eventTypes = window.EventTypes || {};
 
       // Get state managers from map
       this.mapState = map.mapState;
@@ -21,8 +23,7 @@
       this._routeInsert = null;
       this._routePreview = null;
 
-      // Bind methods for performance
-      this._render = this.map.render.bind(this.map);
+      // Bind methods for performance (removed _render binding - now using EventBus)
       this._findRouteSegmentAt = this.map.findRouteSegmentAt.bind(this.map);
       this._setRoute = this.map._setRoute ? this.map._setRoute.bind(this.map) : null;
       this._computeRouteLengthNormalized = this.map._computeRouteLengthNormalized ?
@@ -229,7 +230,8 @@
 
           // Update UI display
           try {
-            this.map.updateLayerCounts();
+            // Emit layer counts changed event instead of direct call
+            this.eventBus.emit(this.eventTypes.LAYER_COUNTS_CHANGED);
           } catch (e) {
             this.errorHandler.logDebug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
           }
@@ -244,7 +246,7 @@
           } catch (e) { this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
 
-        this._render();
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
     }
 
@@ -274,7 +276,7 @@
                 const worldY = (py - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
                 this._routePreview = { index: seg.index, t, worldX, worldY, screenX: px, screenY: py };
                 try { this.canvas.style.cursor = 'pointer'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerMove.setCursor'); }
-                this._render();
+                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
                 return;
               }
             }
@@ -404,7 +406,7 @@
             } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.restoreRoute'); }
           }
           this._routeInsert = null;
-          this._render();
+          this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         }
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.main'); }
     }
@@ -467,7 +469,7 @@
         if (this._setRoute) {
           this._setRoute(newIndices, lengthNormalized, newSources);
         }
-        this._render();
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
       } catch (err) {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showRouteError) {
           NotificationUtils.showRouteError('Route edit tap failed: ' + err.message);

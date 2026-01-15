@@ -1,5 +1,5 @@
 // state/RouteState.js
-// Manages route data, computation state, animation, and editing state
+// Manages route data and basic route state (no animation or computation)
 
 (function (global) {
   class RouteState {
@@ -8,17 +8,6 @@
       this.currentRoute = null; // array of indices into _routeSources
       this.routeLengthNormalized = 0; // normalized route length (0-1)
       this._routeSources = []; // array of source objects {marker, layerKey}
-
-      // Route computation state
-      this._computingRoute = false;
-      this._computationProgress = 0; // 0-1 progress indicator
-
-      // Route animation state
-      this._routeDashOffset = 0; // px offset for animated dashes
-      this._routeRaf = null; // requestAnimationFrame ID
-      this._lastRouteAnimTime = 0;
-      this._routeAnimationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
-      this.routeLineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
 
       // Route editing state
       this._routeInsert = null; // insertion state {pointerId, tempIndex, prevSources, prevIndices, prevRouteLooping, hoverMarker, hoverOccupied}
@@ -35,6 +24,11 @@
         this.currentRoute = routeIndices;
         this.routeLengthNormalized = lengthNormalized || 0;
         this._routeSources = routeSources || [];
+        this._emitChange(window.EventTypes.ROUTE_UPDATED, {
+          route: routeIndices,
+          lengthNormalized: lengthNormalized || 0,
+          sources: routeSources || []
+        });
       } catch (e) {
         this.errorHandler.logDebug('RouteState.setRoute failed', 'RouteState.setRoute', { error: e });
       }
@@ -46,6 +40,7 @@
         this.routeLengthNormalized = 0;
         this._routeSources = [];
         this.clearRoutePreview();
+        this._emitChange(window.EventTypes.ROUTE_CLEARED);
       } catch (e) {
         this.errorHandler.logDebug('RouteState.clearRoute failed', 'RouteState.clearRoute', { error: e });
       }
@@ -65,95 +60,6 @@
 
     getRouteSources() {
       return this._routeSources;
-    }
-
-    // Route computation state
-    setComputing(isComputing) {
-      try {
-        this._computingRoute = !!isComputing;
-        if (!isComputing) {
-          this._computationProgress = 0;
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setComputing failed', 'RouteState.setComputing', { error: e });
-      }
-    }
-
-    isComputing() {
-      return this._computingRoute;
-    }
-
-    setComputationProgress(progress) {
-      try {
-        this._computationProgress = Math.max(0, Math.min(1, progress));
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setComputationProgress failed', 'RouteState.setComputationProgress', { error: e });
-      }
-    }
-
-    getComputationProgress() {
-      return this._computationProgress;
-    }
-
-    // Route animation state
-    setAnimationOffset(offset) {
-      try {
-        this._routeDashOffset = offset;
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setAnimationOffset failed', 'RouteState.setAnimationOffset', { error: e });
-      }
-    }
-
-    getAnimationOffset() {
-      return this._routeDashOffset;
-    }
-
-    setAnimationFrameId(rafId) {
-      try {
-        this._routeRaf = rafId;
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setAnimationFrameId failed', 'RouteState.setAnimationFrameId', { error: e });
-      }
-    }
-
-    getAnimationFrameId() {
-      return this._routeRaf;
-    }
-
-    setLastAnimationTime(time) {
-      try {
-        this._lastRouteAnimTime = time;
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setLastAnimationTime failed', 'RouteState.setLastAnimationTime', { error: e });
-      }
-    }
-
-    getLastAnimationTime() {
-      return this._lastRouteAnimTime;
-    }
-
-    setAnimationSpeed(speed) {
-      try {
-        this._routeAnimationSpeed = speed;
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setAnimationSpeed failed', 'RouteState.setAnimationSpeed', { error: e });
-      }
-    }
-
-    getAnimationSpeed() {
-      return this._routeAnimationSpeed;
-    }
-
-    setAnimationEnabled(enabled) {
-      try {
-        if (enabled && !this._routeRaf) {
-          // Animation will be started externally
-        } else if (!enabled && this._routeRaf) {
-          // Animation will be stopped externally
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('RouteState.setAnimationEnabled failed', 'RouteState.setAnimationEnabled', { error: e });
-      }
     }
 
     // Route editing state
@@ -180,6 +86,12 @@
     setRouteLooping(looping) {
       try {
         this.routeLooping = !!looping;
+        this._emitChange(window.EventTypes.ROUTE_UPDATED, {
+          route: this.currentRoute,
+          lengthNormalized: this.routeLengthNormalized,
+          sources: this._routeSources,
+          looping: !!looping
+        });
       } catch (e) {
         this.errorHandler.logDebug('RouteState.setRouteLooping failed', 'RouteState.setRouteLooping', { error: e });
       }
@@ -215,18 +127,14 @@
       try {
         if (window.storageService) {
           const state = {
-            routeLooping: this.routeLooping,
-            routeLineWidth: this.routeLineWidth,
-            animationSpeed: this._routeAnimationSpeed
+            routeLooping: this.routeLooping
           };
           window.storageService.set(this.config.STORAGE_KEYS.ROUTE_STATE, state);
         } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const state = {
-              routeLooping: this.routeLooping,
-              routeLineWidth: this.routeLineWidth,
-              animationSpeed: this._routeAnimationSpeed
+              routeLooping: this.routeLooping
             };
             localStorage.setItem('mp4_route_state', JSON.stringify(state));
           }
@@ -244,12 +152,6 @@
             if (typeof state.routeLooping === 'boolean') {
               this.routeLooping = state.routeLooping;
             }
-            if (typeof state.routeLineWidth === 'number') {
-              this.routeLineWidth = state.routeLineWidth;
-            }
-            if (typeof state.animationSpeed === 'number') {
-              this._routeAnimationSpeed = state.animationSpeed;
-            }
           }
         } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
@@ -259,12 +161,6 @@
               const state = JSON.parse(saved);
               if (typeof state.routeLooping === 'boolean') {
                 this.routeLooping = state.routeLooping;
-              }
-              if (typeof state.routeLineWidth === 'number') {
-                this.routeLineWidth = state.routeLineWidth;
-              }
-              if (typeof state.animationSpeed === 'number') {
-                this._routeAnimationSpeed = state.animationSpeed;
               }
             }
           }
@@ -280,11 +176,6 @@
         currentRoute: this.currentRoute,
         routeLengthNormalized: this.routeLengthNormalized,
         routeSourcesCount: this._routeSources.length,
-        computingRoute: this._computingRoute,
-        computationProgress: this._computationProgress,
-        routeDashOffset: this._routeDashOffset,
-        routeAnimationSpeed: this._routeAnimationSpeed,
-        routeLineWidth: this.routeLineWidth,
         routeLooping: this.routeLooping,
         hasRouteInsert: !!this._routeInsert,
         hasRoutePreview: !!this._routePreview
@@ -295,15 +186,22 @@
     reset() {
       try {
         this.clearRoute();
-        this.setComputing(false);
-        this.setAnimationOffset(0);
-        this.setAnimationFrameId(null);
-        this.setLastAnimationTime(0);
         this.clearRouteInsert();
         this.setRouteLooping(false);
         this.clearRoutePreview();
       } catch (e) {
         this.errorHandler.logDebug('RouteState.reset failed', 'RouteState.reset', { error: e });
+      }
+    }
+
+    // Event emission helper
+    _emitChange(event, data) {
+      try {
+        if (window.eventBus) {
+          window.eventBus.emit(event, data);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('RouteState._emitChange failed', 'RouteState._emitChange', { error: e, event });
       }
     }
 

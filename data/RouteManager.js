@@ -2,10 +2,11 @@
 // Handles all route operations without global state dependencies
 
 class RouteManager {
-    constructor(markerManager, storage, notifications) {
+    constructor(markerManager, storage, notifications, eventBus) {
         this.markerManager = markerManager;
         this.storage = storage;
         this.notifications = notifications;
+        this.eventBus = eventBus;
         
         // Error handling
         this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
@@ -32,6 +33,19 @@ class RouteManager {
                 this.onRouteChanged();
             } catch (e) {
                 this.errorHandler.logDebug('RouteManager._notifyRouteChanged failed', 'RouteManager._notifyRouteChanged', { error: e });
+            }
+        }
+
+        // Emit EventBus event for cross-module communication
+        if (this.eventBus && window.EventTypes) {
+            try {
+                this.eventBus.emit(window.EventTypes.ROUTE_UPDATED, {
+                    routeLength: this.currentRouteLengthNormalized,
+                    pointCount: this.currentRoute.length,
+                    looping: this.routeLooping
+                });
+            } catch (e) {
+                this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager._notifyRouteChanged', { error: e });
             }
         }
     }
@@ -87,6 +101,16 @@ class RouteManager {
         this.currentRouteLengthNormalized = 0;
 
         this.saveToStorage();
+
+        // Emit ROUTE_CLEARED event before calling _notifyRouteChanged
+        if (this.eventBus && window.EventTypes) {
+            try {
+                this.eventBus.emit(window.EventTypes.ROUTE_CLEARED);
+            } catch (e) {
+                this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager.clearRoute', { error: e });
+            }
+        }
+
         this._notifyRouteChanged();
     }
 

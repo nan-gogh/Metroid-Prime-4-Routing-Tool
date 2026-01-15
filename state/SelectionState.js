@@ -1,5 +1,5 @@
 // state/SelectionState.js
-// Manages marker selection, edit modes, and layer highlighting state
+// Manages marker selection state
 
 (function (global) {
   class SelectionState {
@@ -7,10 +7,7 @@
       this.config = config || (global.MP4Config || {});
       this.selectedMarker = null;
       this.selectedMarkerLayer = null;
-      this.editMarkersMode = false;
-      this.editRouteMode = false;
-      this.highlightedLayers = new Set();
-      this._previousHighlights = new Map(); // layerKey -> wasHighlighted
+      this.multiSelectedMarkers = new Set(); // For future multi-selection support
       this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
@@ -19,6 +16,10 @@
       try {
         this.selectedMarker = marker;
         this.selectedMarkerLayer = layerKey || null;
+        this._emitChange(window.EventTypes.SELECTION_CHANGED, {
+          marker: marker,
+          layer: layerKey || null
+        });
       } catch (e) {
         this.errorHandler.logDebug('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e });
       }
@@ -28,6 +29,7 @@
       try {
         this.selectedMarker = null;
         this.selectedMarkerLayer = null;
+        this._emitChange(window.EventTypes.SELECTION_CLEARED);
       } catch (e) {
         this.errorHandler.logDebug('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e });
       }
@@ -44,114 +46,71 @@
       }
     }
 
-    // Edit mode management
-    setEditMarkersMode(enabled) {
+    // Multi-selection support (for future use)
+    addToMultiSelection(marker, layerKey) {
       try {
-        if (enabled && this.editRouteMode) {
-          // Exit route edit mode first
-          this.setEditRouteMode(false);
+        if (marker && layerKey) {
+          const key = `${layerKey}:${marker.uid}`;
+          this.multiSelectedMarkers.add(key);
+          this._emitChange(window.EventTypes.MARKER_MULTI_SELECTED, {
+            action: 'add',
+            marker: marker,
+            layer: layerKey,
+            multiSelectedCount: this.multiSelectedMarkers.size
+          });
         }
-        this.editMarkersMode = !!enabled;
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.setEditMarkersMode failed', 'SelectionState.setEditMarkersMode', { error: e });
+        this.errorHandler.logDebug('SelectionState.addToMultiSelection failed', 'SelectionState.addToMultiSelection', { error: e });
       }
     }
 
-    setEditRouteMode(enabled) {
+    removeFromMultiSelection(marker, layerKey) {
       try {
-        if (enabled && this.editMarkersMode) {
-          // Exit markers edit mode first
-          this.setEditMarkersMode(false);
+        if (marker && layerKey) {
+          const key = `${layerKey}:${marker.uid}`;
+          this.multiSelectedMarkers.delete(key);
+          this._emitChange(window.EventTypes.MARKER_MULTI_SELECTED, {
+            action: 'remove',
+            marker: marker,
+            layer: layerKey,
+            multiSelectedCount: this.multiSelectedMarkers.size
+          });
         }
-        this.editRouteMode = !!enabled;
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.setEditRouteMode failed', 'SelectionState.setEditRouteMode', { error: e });
+        this.errorHandler.logDebug('SelectionState.removeFromMultiSelection failed', 'SelectionState.removeFromMultiSelection', { error: e });
       }
     }
 
-    isInEditMode() {
-      return this.editMarkersMode || this.editRouteMode;
-    }
-
-    getCurrentEditMode() {
-      if (this.editMarkersMode) return 'markers';
-      if (this.editRouteMode) return 'route';
-      return null;
-    }
-
-    // Layer highlighting management
-    setLayerHighlight(layerKey, highlighted) {
+    clearMultiSelection() {
       try {
-        if (highlighted) {
-          this.highlightedLayers.add(layerKey);
-        } else {
-          this.highlightedLayers.delete(layerKey);
+        const hadSelections = this.multiSelectedMarkers.size > 0;
+        this.multiSelectedMarkers.clear();
+        if (hadSelections) {
+          this._emitChange(window.EventTypes.MARKER_MULTI_SELECTED, {
+            action: 'clear',
+            multiSelectedCount: 0
+          });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.setLayerHighlight failed', 'SelectionState.setLayerHighlight', { error: e });
+        this.errorHandler.logDebug('SelectionState.clearMultiSelection failed', 'SelectionState.clearMultiSelection', { error: e });
       }
     }
 
-    toggleLayerHighlight(layerKey) {
+    isInMultiSelection(marker, layerKey) {
       try {
-        if (this.highlightedLayers.has(layerKey)) {
-          this.highlightedLayers.delete(layerKey);
-        } else {
-          this.highlightedLayers.add(layerKey);
+        if (marker && layerKey) {
+          const key = `${layerKey}:${marker.uid}`;
+          return this.multiSelectedMarkers.has(key);
         }
+        return false;
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.toggleLayerHighlight failed', 'SelectionState.toggleLayerHighlight', { error: e });
-      }
-    }
-
-    isLayerHighlighted(layerKey) {
-      try {
-        return this.highlightedLayers.has(layerKey);
-      } catch (e) {
-        this.errorHandler.logDebug('SelectionState.isLayerHighlighted failed', 'SelectionState.isLayerHighlighted', { error: e });
+        this.errorHandler.logDebug('SelectionState.isInMultiSelection failed', 'SelectionState.isInMultiSelection', { error: e });
         return false;
       }
     }
 
-    clearAllHighlights() {
-      try {
-        this.highlightedLayers.clear();
-      } catch (e) {
-        this.errorHandler.logDebug('SelectionState.clearAllHighlights failed', 'SelectionState.clearAllHighlights', { error: e });
-      }
-    }
-
-    // Edit mode UI helpers (called by InteractiveMap)
-    enterEditMode(layerKey, scale = 2.0) {
-      try {
-        // Add edit-mode-outline class for editable layers
-        const editableLayers = ['route', 'customMarkers', 'greenCrystals'];
-        if (editableLayers.includes(layerKey)) {
-          const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-          if (row) {
-            // Set edit-mode outline color from layer's configured color
-            const layerColor = (typeof LAYERS !== 'undefined' && LAYERS && LAYERS[layerKey] && LAYERS[layerKey].color)
-              ? LAYERS[layerKey].color : '#a78bfa';
-            row.style.setProperty('--edit-mode-outline-color', layerColor);
-            row.classList.add('edit-mode-outline');
-          }
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('SelectionState.enterEditMode failed', 'SelectionState.enterEditMode', { error: e });
-      }
-    }
-
-    exitEditMode(layerKey) {
-      try {
-        // Remove edit-mode-outline class
-        const row = document.querySelector('#layerList .layer-toggle[data-layer="' + layerKey + '"]');
-        if (row) {
-          row.classList.remove('edit-mode-outline');
-          row.style.removeProperty('--edit-mode-outline-color');
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('SelectionState.exitEditMode failed', 'SelectionState.exitEditMode', { error: e });
-      }
+    getMultiSelectedCount() {
+      return this.multiSelectedMarkers.size;
     }
 
     // State persistence (consent-gated)
@@ -159,18 +118,26 @@
       try {
         if (window.storageService) {
           const state = {
-            highlightedLayers: Array.from(this.highlightedLayers),
-            editMarkersMode: this.editMarkersMode,
-            editRouteMode: this.editRouteMode
+            selectedMarker: this.selectedMarker ? {
+              uid: this.selectedMarker.uid,
+              x: this.selectedMarker.x,
+              y: this.selectedMarker.y
+            } : null,
+            selectedMarkerLayer: this.selectedMarkerLayer,
+            multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
           };
           window.storageService.set(this.config.STORAGE_KEYS.SELECTION_STATE, state);
         } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
           if (consent) {
             const state = {
-              highlightedLayers: Array.from(this.highlightedLayers),
-              editMarkersMode: this.editMarkersMode,
-              editRouteMode: this.editRouteMode
+              selectedMarker: this.selectedMarker ? {
+                uid: this.selectedMarker.uid,
+                x: this.selectedMarker.x,
+                y: this.selectedMarker.y
+              } : null,
+              selectedMarkerLayer: this.selectedMarkerLayer,
+              multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
             };
             localStorage.setItem('mp4_selection_state', JSON.stringify(state));
           }
@@ -185,14 +152,14 @@
         if (window.storageService) {
           const state = window.storageService.get(this.config.STORAGE_KEYS.SELECTION_STATE);
           if (state) {
-            if (state.highlightedLayers && Array.isArray(state.highlightedLayers)) {
-              this.highlightedLayers = new Set(state.highlightedLayers);
+            if (state.selectedMarker && typeof state.selectedMarker === 'object') {
+              this.selectedMarker = state.selectedMarker;
             }
-            if (typeof state.editMarkersMode === 'boolean') {
-              this.editMarkersMode = state.editMarkersMode;
+            if (typeof state.selectedMarkerLayer === 'string') {
+              this.selectedMarkerLayer = state.selectedMarkerLayer;
             }
-            if (typeof state.editRouteMode === 'boolean') {
-              this.editRouteMode = state.editRouteMode;
+            if (state.multiSelectedMarkers && Array.isArray(state.multiSelectedMarkers)) {
+              this.multiSelectedMarkers = new Set(state.multiSelectedMarkers);
             }
           }
         } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -201,14 +168,14 @@
             const saved = localStorage.getItem('mp4_selection_state');
             if (saved) {
               const state = JSON.parse(saved);
-              if (state.highlightedLayers && Array.isArray(state.highlightedLayers)) {
-                this.highlightedLayers = new Set(state.highlightedLayers);
+              if (state.selectedMarker && typeof state.selectedMarker === 'object') {
+                this.selectedMarker = state.selectedMarker;
               }
-              if (typeof state.editMarkersMode === 'boolean') {
-                this.editMarkersMode = state.editMarkersMode;
+              if (typeof state.selectedMarkerLayer === 'string') {
+                this.selectedMarkerLayer = state.selectedMarkerLayer;
               }
-              if (typeof state.editRouteMode === 'boolean') {
-                this.editRouteMode = state.editRouteMode;
+              if (state.multiSelectedMarkers && Array.isArray(state.multiSelectedMarkers)) {
+                this.multiSelectedMarkers = new Set(state.multiSelectedMarkers);
               }
             }
           }
@@ -218,14 +185,27 @@
       }
     }
 
+    // Event emission helper
+    _emitChange(event, data) {
+      try {
+        if (window.eventBus) {
+          window.eventBus.emit(event, data);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('SelectionState._emitChange failed', 'SelectionState._emitChange', { error: e, event });
+      }
+    }
+
     // State serialization for debugging/testing
     toJSON() {
       return {
-        selectedMarker: this.selectedMarker ? { uid: this.selectedMarker.uid, x: this.selectedMarker.x, y: this.selectedMarker.y } : null,
+        selectedMarker: this.selectedMarker ? {
+          uid: this.selectedMarker.uid,
+          x: this.selectedMarker.x,
+          y: this.selectedMarker.y
+        } : null,
         selectedMarkerLayer: this.selectedMarkerLayer,
-        editMarkersMode: this.editMarkersMode,
-        editRouteMode: this.editRouteMode,
-        highlightedLayers: Array.from(this.highlightedLayers)
+        multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
       };
     }
 
@@ -233,10 +213,7 @@
     reset() {
       try {
         this.clearSelectedMarker();
-        this.editMarkersMode = false;
-        this.editRouteMode = false;
-        this.clearAllHighlights();
-        this._previousHighlights.clear();
+        this.clearMultiSelection();
       } catch (e) {
         this.errorHandler.logDebug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
       }

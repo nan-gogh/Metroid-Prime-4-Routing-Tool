@@ -386,60 +386,92 @@ this.eventBus.on('layer:counts-changed', () => {
 });
 ```
 
-#### Step 4.3: Add State Synchronization Listeners
+#### Step 4.3: Add State Synchronization Listeners ✅ **COMPLETED**
 ```javascript
-this.eventBus.on('selection:changed', (data) => {
-    this.selectedMarker = data.marker;
-    this.selectedMarkerLayer = data.layer;
+// Added to map.js init() function:
+eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
+    // Update selection state and trigger render
+});
+
+eventBus.on(window.EventTypes.MAP_VIEW_CHANGED, (data) => {
+    // Update map view state (pan, zoom) and trigger render
+});
+
+eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
+    // Update route state and trigger render
 });
 ```
 
 ### Phase 5: State Manager Enhancement
 
-#### Step 5.1: Add Event Emission to State Managers
+#### Step 5.1: Add Event Emission to State Managers ✅ **COMPLETED**
 ```javascript
-// state/LayerState.js
-setLayerVisibility(layerKey, visible) {
-    this.layerVisibility[layerKey] = visible;
-    this._emitChange('layer:visibility-changed', {
-        layerKey,
-        visible,
-        layerVisibility: { ...this.layerVisibility }
-    });
+// state/LayerState.js - Added event emission to:
+setLayerVisible(layerKey, visible) {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, { layerKey, visible, layerVisibility: {...} });
 }
 
-_emitChange(event, data) {
-    if (window.eventBus) {
-        window.eventBus.emit(event, data);
-    }
+toggleLayer(layerKey) {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, { layerKey, visible: !current, layerVisibility: {...} });
+}
+
+// state/RouteState.js - Added event emission to:
+setRoute(routeIndices, lengthNormalized, routeSources) {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.ROUTE_UPDATED, { route: routeIndices, lengthNormalized, sources: routeSources });
+}
+
+clearRoute() {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.ROUTE_CLEARED);
+}
+
+// state/SelectionState.js - Added event emission to:
+setSelectedMarker(marker, layerKey) {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.SELECTION_CHANGED, { marker, layer });
+}
+
+// state/MapState.js - Added event emission to:
+setZoom(zoom, centerX, centerY) {
+    // ... existing logic ...
+    this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.panX, panY: this.panY, zoom: this.zoom });
 }
 ```
 
-#### Step 5.2: RouteState Enhancement
-Add event emission for route changes.
+#### Step 5.2: RouteState Enhancement ✅ **COMPLETED**
+Event emission for route changes was implemented as part of Step 5.1. RouteState now emits `ROUTE_UPDATED` and `ROUTE_CLEARED` events.
 
-#### Step 5.3: SelectionState Enhancement
-Add event emission for selection changes.
+#### Step 5.3: SelectionState Enhancement ✅ **COMPLETED**
+Event emission for selection changes was implemented as part of Step 5.1. SelectionState now emits `SELECTION_CHANGED`, `SELECTION_CLEARED`, `EDIT_MODE_CHANGED`, and `LAYER_HIGHLIGHT_CHANGED` events.
 
 ### Phase 6: Renderer Integration
 
-#### Step 6.1: RenderPipeline Dirty Flags
+#### Step 6.1: RenderPipeline Dirty Flags ✅ **COMPLETED**
 ```javascript
 // rendering/RenderPipeline.js
-markRendererDirty(rendererName) {
-    this._dirtyRenderers.add(rendererName);
+markDirty(rendererName) {
+    this._dirtyFlags.add(rendererName);
+    // Emit event to notify other modules that a renderer needs updating
     if (window.eventBus) {
-        window.eventBus.emit('render:pipeline-dirty', { renderer: rendererName });
+        window.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: rendererName });
     }
+    this._scheduleRender();
+    return this;
 }
 ```
 
-#### Step 6.2: Selective Rendering
+#### Step 6.2: Selective Rendering ✅ **COMPLETED**
 ```javascript
 render(dirtyOnly = null) {
-    // If specific renderers are dirty, only render those
+    const startTime = performance.now();
+    this._renderCount++;
+
+    // Emit event when selective rendering is requested
     if (dirtyOnly && window.eventBus) {
-        window.eventBus.emit('render:selective-requested', { renderers: dirtyOnly });
+        window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: Array.from(dirtyOnly) });
     }
     // ... existing render logic
 }
@@ -672,10 +704,10 @@ describe('SidebarController with EventBus', () => {
 - [ ] Update initialization logic
 
 ### Phase 5: State Manager Enhancement (Week 5)
-- [ ] Add event emission to LayerState
-- [ ] Add event emission to RouteState
-- [ ] Add event emission to SelectionState
-- [ ] Add event emission to MapState
+- [x] Add event emission to LayerState
+- [x] Add event emission to RouteState
+- [x] Add event emission to SelectionState
+- [x] Add event emission to MapState
 
 ### Phase 6: Testing and Validation (Week 6)
 - [ ] Update all unit tests

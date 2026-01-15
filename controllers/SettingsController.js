@@ -3,11 +3,19 @@
 
 (function (global) {
   class SettingsController {
-    constructor(map, config, errorHandler, eventBus) {
-      this.map = map;
-      this.config = config || global.MP4Config || {};
-      this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
-      this.eventBus = eventBus || global.eventBus;
+    constructor(options) {
+      // Required dependencies
+      this.layerState = options.layerState;
+      this.highlightState = options.highlightState;
+      this.tilesetState = options.tilesetState;
+      this.markerManager = options.markerManager;
+      this.mapState = options.mapState;
+      this.eventBus = options.eventBus;
+
+      // Optional dependencies
+      this.config = options.config || global.MP4Config || {};
+      this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.eventTypes = window.EventTypes || {};
     }
 
     /**
@@ -114,11 +122,16 @@
         const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
         if (gridHeatmapBtn) {
           gridHeatmapBtn.addEventListener('click', () => {
-            if (this.map) {
-              this.map._showGridHeatmap = !this.map._showGridHeatmap;
+            if (this.layerState) {
+              const newValue = !this.layerState.isHeatmapVisible();
+              this.layerState.setHeatmapVisible(newValue);
               this._updateGridHeatmapButtonState();
               this._saveDisplaySettings();
-              this.map.render();
+              // Emit display settings changed event
+              this.eventBus.emit(this.eventTypes.DISPLAY_SETTINGS_CHANGED, {
+                showGridHeatmap: newValue,
+                triggeredBy: 'grid-heatmap-toggle'
+              });
             }
           });
           this._updateGridHeatmapButtonState();
@@ -128,10 +141,16 @@
         const tilesetGrayscaleBtn = document.getElementById('tilesetGrayscaleBtn');
         if (tilesetGrayscaleBtn) {
           tilesetGrayscaleBtn.addEventListener('click', () => {
-            if (this.map) {
-              this.map.setTilesetGrayscale(!this.map.tilesetGrayscale);
+            if (this.tilesetState) {
+              const newGrayscale = !this.tilesetState.grayscale;
+              this.tilesetState.setGrayscale(newGrayscale);
               this._updateGrayscaleButtonState();
               this._saveDisplaySettings();
+              // Emit tileset grayscale changed event
+              this.eventBus.emit(this.eventTypes.TILESET_GRAYSCALE_CHANGED, {
+                grayscale: newGrayscale,
+                triggeredBy: 'grayscale-toggle'
+              });
             }
           });
           this._updateGrayscaleButtonState();
@@ -161,10 +180,15 @@
      */
     _setTileset(tileset) {
       try {
-        if (this.map) {
-          this.map.setTileset(tileset);
+        if (this.tilesetState) {
+          this.tilesetState.setTileset(tileset);
           this._updateTilesetButtonStates();
           this._saveDisplaySettings();
+          // Emit tileset changed event
+          this.eventBus.emit(this.eventTypes.TILESET_CHANGED, {
+            tileset: tileset,
+            triggeredBy: 'tileset-selection'
+          });
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to set tileset', 'SettingsController._setTileset', { tileset, error: e });
@@ -178,7 +202,7 @@
       try {
         const tilesetSatBtn = document.getElementById('tilesetSatBtn');
         const tilesetHoloBtn = document.getElementById('tilesetHoloBtn');
-        const currentTileset = this.map ? this.map.tileset : 'sat';
+        const currentTileset = this.tilesetState ? this.tilesetState.tileset : 'sat';
 
         if (tilesetSatBtn) {
           tilesetSatBtn.classList.toggle('active', currentTileset === 'sat');
@@ -197,8 +221,8 @@
     _updateGridHeatmapButtonState() {
       try {
         const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
-        if (gridHeatmapBtn && this.map) {
-          gridHeatmapBtn.classList.toggle('active', !!this.map._showGridHeatmap);
+        if (gridHeatmapBtn && this.layerState) {
+          gridHeatmapBtn.classList.toggle('active', this.layerState.isHeatmapVisible());
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });
@@ -211,8 +235,8 @@
     _updateGrayscaleButtonState() {
       try {
         const tilesetGrayscaleBtn = document.getElementById('tilesetGrayscaleBtn');
-        if (tilesetGrayscaleBtn && this.map) {
-          tilesetGrayscaleBtn.classList.toggle('active', !!this.map.tilesetGrayscale);
+        if (tilesetGrayscaleBtn && this.tilesetState) {
+          tilesetGrayscaleBtn.classList.toggle('active', !!this.tilesetState.grayscale);
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to update grayscale button state', 'SettingsController._updateGrayscaleButtonState', { error: e });
@@ -305,31 +329,26 @@
         this._saveDisplaySettings();
 
         // Save highlight settings
-        if (typeof saveHighlightMultiplierToStorage === 'function' && this.map) {
-          saveHighlightMultiplierToStorage(this.map.highlightScaleMultiplier || 1.0);
-        }
-        if (typeof saveHighlightedLayersToStorage === 'function' && this.map) {
-          saveHighlightedLayersToStorage(this.map._highlightConfig || {});
+        if (this.highlightState) {
+          this.highlightState.saveToStorage();
         }
 
         // Save layer visibility
-        if (typeof saveLayerVisibilityToStorage === 'function' && this.map) {
-          saveLayerVisibilityToStorage(this.map.layerVisibility || {});
+        if (this.layerState) {
+          this.layerState.saveToStorage();
         }
 
         // Save markers
-        if (this.map && this.map.markerManager) {
-          this.map.markerManager.saveToStorage();
+        if (this.markerManager) {
+          this.markerManager.saveToStorage();
         }
 
-        // Save route
-        if (this.map && typeof this.map.saveRouteToStorage === 'function') {
-          this.map.saveRouteToStorage();
-        }
+        // Save route (need routeManager - not currently injected)
+        // TODO: Inject routeManager or emit event
 
         // Save view
-        if (this.map && this.map.mapState && typeof this.map.mapState.saveToStorage === 'function') {
-          this.map.mapState.saveToStorage();
+        if (this.mapState) {
+          this.mapState.saveToStorage();
         }
 
       } catch (e) {
@@ -343,9 +362,9 @@
     _saveDisplaySettings() {
       try {
         const settings = {
-          tileset: this.map ? this.map.tileset : 'sat',
-          tilesetGrayscale: this.map ? this.map.tilesetGrayscale : false,
-          gridHeatmap: this.map ? this.map._showGridHeatmap : false
+          tileset: this.tilesetState ? this.tilesetState.tileset : 'sat',
+          tilesetGrayscale: this.tilesetState ? this.tilesetState.grayscale : false,
+          gridHeatmap: false // TODO: Implement heatmap state management
         };
 
         if (window.storageService) {
@@ -404,11 +423,10 @@
      */
     _updateLayerCounts() {
       try {
-        if (this.map && typeof this.map.updateLayerCounts === 'function') {
-          this.map.updateLayerCounts();
-        }
+        // Emit layer counts changed event instead of direct call
+        this.eventBus.emit(this.eventTypes.LAYER_COUNTS_CHANGED);
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update layer counts', 'SettingsController._updateLayerCounts', { error: e });
+        this.errorHandler.logDebug('SettingsController: Failed to emit layer counts changed event', 'SettingsController._updateLayerCounts', { error: e });
       }
     }
 

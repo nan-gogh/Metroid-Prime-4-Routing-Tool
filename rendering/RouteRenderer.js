@@ -13,15 +13,18 @@
      * @param {Object} mapState - The map state manager
      * @param {Object} layerState - The layer state manager
      * @param {Object} routeState - The route state manager
+     * @param {Object} routeAnimationState - The route animation state manager
      * @param {Object} config - Configuration object from MP4Config
      * @param {string} routeColor - Route color (defaults to LAYERS.route.color)
      */
-    constructor(mapState, layerState, routeState, config, routeColor) {
+    constructor(mapState, layerState, routeState, routeAnimationState, config, routeColor) {
       this.mapState = mapState;
       this.layerState = layerState;
       this.routeState = routeState;
+      this.routeAnimationState = routeAnimationState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
+      this.errorHandler = global.errorHandler;
       this._lastRenderTime = 0;
       this._renderCount = 0;
       this._cachedPath = null;
@@ -29,15 +32,13 @@
       this._glowCache = null;
       this._glowCacheValid = false;
       this._colorCache = {}; // Cache for hex to rgba conversions
+      // No direct map reference needed - all access through state managers and renderContext
     }
 
     /**
      * Initializes the renderer caches and performance monitoring.
      */
     init() {
-      // Initialize error handler from map reference
-      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
-      
       // Initialize caches and performance monitoring
       this._resetCaches();
     }
@@ -158,8 +159,9 @@
     /**
      * Renders the route path to the map canvas.
      * Includes performance monitoring and automatic cache invalidation.
+     * @param {RenderContext} renderContext - The render context providing canvas access
      */
-    render() {
+    render(renderContext) {
       const startTime = performance.now();
       this._renderCount++;
 
@@ -168,7 +170,7 @@
           return;
         }
 
-        const ctx = this.map.ctx;
+        const ctx = renderContext ? renderContext.ctx : this.map.ctx;
         const pathData = this._computePathData();
 
         if (!pathData.valid || pathData.points.length < 2) {

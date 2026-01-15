@@ -82,7 +82,7 @@ const RouteComputation = {
             const layerKey = layerEntries[li][0];
             const layer = layerEntries[li][1];
             if (layerKey === 'route') continue;
-            if (!map.layerVisibility[layerKey]) continue;
+            if (!map.layerState || !map.layerState.isLayerVisible(layerKey)) continue;
             if (!Array.isArray(layer.markers)) continue;
 
             for (let mi = 0; mi < layer.markers.length; mi++) {

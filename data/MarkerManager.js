@@ -2,10 +2,11 @@
 // Handles all marker operations without global state dependencies
 
 class MarkerManager {
-    constructor(config, storage, notifications) {
+    constructor(config, storage, notifications, eventBus) {
         this.config = config || { maxMarkers: 50, layerPrefix: 'cm' };
         this.storage = storage;
         this.notifications = notifications;
+        this.eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
         
         // Error handling
         this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
@@ -29,7 +30,17 @@ class MarkerManager {
     }
 
     // Internal notification method
-    _notifyChanged() {
+    _notifyChanged(eventType, eventData) {
+        // Emit EventBus event if available
+        if (this.eventBus && eventType) {
+            try {
+                this.eventBus.emit(eventType, eventData);
+            } catch (e) {
+                this.errorHandler.logDebug('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
+            }
+        }
+
+        // Call legacy callback
         if (this.onChanged) {
             try {
                 this.onChanged();
@@ -104,7 +115,7 @@ class MarkerManager {
         this.markers.push(marker);
 
         this.saveToStorage();
-        this._notifyChanged();
+        this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, { marker, layerKey: this.config.layerPrefix });
 
         return marker;
     }
@@ -126,7 +137,7 @@ class MarkerManager {
         }
 
         this.saveToStorage();
-        this._notifyChanged();
+        this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_REMOVED : null, { uid, layerKey: this.config.layerPrefix });
 
         return true;
     }
@@ -140,7 +151,7 @@ class MarkerManager {
     clearMarkers() {
         this.markers = [];
         this.saveToStorage();
-        this._notifyChanged();
+        this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_REMOVED : null, { all: true, layerKey: this.config.layerPrefix });
     }
 
     // Get marker count
@@ -169,7 +180,7 @@ class MarkerManager {
         
         this.markers = validMarkers;
         this.saveToStorage();
-        this._notifyChanged();
+        this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_EDITED : null, { all: true, layerKey: this.config.layerPrefix });
     }
 
     // Check if marker exists by UID (alias for markerExists)
@@ -252,7 +263,7 @@ class MarkerManager {
 
                     // Persist to storage and notify
                     this.saveToStorage();
-                    this._notifyChanged();
+                    this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, { markers: imported, layerKey: this.config.layerPrefix });
 
                     resolve(imported);
                 } catch (error) {
@@ -284,7 +295,7 @@ class MarkerManager {
         // Only save and notify if we actually added markers
         if (addedCount > 0) {
             this.saveToStorage();
-            this._notifyChanged();
+            this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, { count: addedCount, layerKey: this.config.layerPrefix });
         }
 
         return this.markers;

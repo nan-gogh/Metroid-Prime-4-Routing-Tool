@@ -156,3 +156,9 @@ const errorHandler = new ErrorHandler({
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { ErrorHandler, errorHandler };
 }
+
+// Make globally available in browser environment
+if (typeof window !== 'undefined') {
+    window.ErrorHandler = ErrorHandler;
+    window.errorHandler = errorHandler;
+}

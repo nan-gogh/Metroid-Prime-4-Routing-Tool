@@ -9,18 +9,17 @@
       this.routeState = routeState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
-      // Keep map reference for canvas access during transition
-      this.map = null;
+      this.errorHandler = global.errorHandler;
+      // No direct map reference needed - all access through state managers and renderContext
     }
 
     init() {
-      // Initialize error handler from map reference
-      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      // No initialization needed beyond constructor
     }
 
-    render() {
+    render(renderContext) {
       try {
-        const ctx = this.map.ctx;
+        const ctx = renderContext.ctx;
         if (!ctx) return;
 
         // Draw transient route preview dot (when editing route)
@@ -57,7 +56,7 @@
                       nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
                   }
               } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to parse route color:', e); }
-              const dotSize = (map.getRouteNodeSize && typeof map.getRouteNodeSize === 'function') ? map.getRouteNodeSize() : 6;
+              const dotSize = (this.map.getRouteNodeSize && typeof this.map.getRouteNodeSize === 'function') ? this.map.getRouteNodeSize() : 6;
               ctx.save();
               ctx.beginPath();
               ctx.fillStyle = nodeFill || 'rgba(34, 211, 238, 1)';
@@ -77,8 +76,8 @@
               // Compute canvas-local coords and offset into container
               let canvasOffsetLeft = 0, canvasOffsetTop = 0;
               try {
-                const canvasRect = map.canvas.getBoundingClientRect();
-                const parentRect = (map.canvas.parentElement && map.canvas.parentElement.getBoundingClientRect) ? map.canvas.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
+                const canvasRect = renderContext.canvas.getBoundingClientRect();
+                const parentRect = (renderContext.canvas.parentElement && renderContext.canvas.parentElement.getBoundingClientRect) ? renderContext.canvas.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
                 canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
                 canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
               } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to calculate canvas offset:', e); }
@@ -95,11 +94,11 @@
 
         // Position selected marker tooltip (DOM)
         try {
-          if (map.selectedMarker && map.selectedMarkerLayer) {
-            const m = map.selectedMarker;
-            const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: map.zoom, panX: map.panX, panY: map.panY}, this.config.MAP_SIZE || 8192);
+          if (this.map.selectedMarker && this.map.selectedMarkerLayer) {
+            const m = this.map.selectedMarker;
+            const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
             if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-              try { map.showTooltip(m, pos.x, pos.y, map.selectedMarkerLayer); } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to show selected marker tooltip:', e); }
+              try { this.map.showTooltip(m, pos.x, pos.y, this.map.selectedMarkerLayer); } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to show selected marker tooltip:', e); }
             }
           }
         } catch (e) { /* non-fatal */ }

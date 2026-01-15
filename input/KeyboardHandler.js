@@ -3,9 +3,11 @@
 
 (function (global) {
   class KeyboardHandler {
-    constructor(map, config) {
+    constructor(map, config, eventBus) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
+      this.eventBus = eventBus || window.eventBus;
+      this.eventTypes = window.EventTypes || {};
       this.bound = false;
 
       // Get state managers from map
@@ -13,6 +15,8 @@
       this.selectionState = map.selectionState;
       this.routeState = map.routeState;
       this.layerState = map.layerState;
+      this.tilesetState = map.tilesetState;
+      this.imageState = map.imageState;
     }
 
     init() {
@@ -48,7 +52,7 @@
                 try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
               }
             }
-            try { if (typeof updateEditOverlay === 'function') updateEditOverlay(); } catch (err) { console.error('KeyboardHandler: Failed to update edit overlay on escape:', err); }
+            try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (err) { console.error('KeyboardHandler: Failed to update edit overlay on escape:', err); }
           } catch (err) { console.error('KeyboardHandler: Failed to handle escape key:', err); }
           try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on escape:', err); }
           return;
@@ -61,12 +65,13 @@
         // Toggle sidebar with Space
         if (ev.code === 'Space' || ev.key === ' ') {
           try {
-            const app = document.querySelector('.app-container');
-            const collapsed = app.classList.contains('sidebar-collapsed');
-            // Call setSidebarCollapsed if it exists, otherwise toggle manually
-            if (typeof setSidebarCollapsed === 'function') {
-              setSidebarCollapsed(!collapsed);
+            // Emit event to toggle sidebar visibility
+            if (window.eventBus) {
+              window.eventBus.emit(window.EventTypes.SIDEBAR_VISIBILITY_TOGGLE_REQUESTED);
             } else {
+              // Fallback to direct manipulation if eventBus not available
+              const app = document.querySelector('.app-container');
+              const collapsed = app.classList.contains('sidebar-collapsed');
               if (collapsed) {
                 app.classList.remove('sidebar-collapsed');
                 const handle = document.getElementById('sidebarHandle') || document.getElementById('sidebarToggle');
@@ -140,17 +145,17 @@
 
         // Tileset shortcuts: 1=Satellite, 2=Holographic, 3=Toggle grayscale
         if (ev.key === '1') {
-          try { this.map && this.map.setTileset && this.map.setTileset('sat'); } catch (err) { this.errorHandler.logError('Failed to set satellite tileset', err); }
+          try { this.tilesetState && this.tilesetState.setTileset && this.tilesetState.setTileset('sat'); } catch (err) { this.errorHandler.logError('Failed to set satellite tileset', err); }
           this._updateTilesetUI('sat');
           ev.preventDefault();
           return;
         } else if (ev.key === '2') {
-          try { this.map && this.map.setTileset && this.map.setTileset('holo'); } catch (err) { this.errorHandler.logError('Failed to set holographic tileset', err); }
+          try { this.tilesetState && this.tilesetState.setTileset && this.tilesetState.setTileset('holo'); } catch (err) { this.errorHandler.logError('Failed to set holographic tileset', err); }
           this._updateTilesetUI('holo');
           ev.preventDefault();
           return;
         } else if (ev.key === '3') {
-          try { this.map && this.map.setTilesetGrayscale && this.map.setTilesetGrayscale(!this.map.tilesetGrayscale); } catch (err) { this.errorHandler.logError('Failed to toggle tileset grayscale', err); }
+          try { this.tilesetState && this.tilesetState.setGrayscale && this.tilesetState.setGrayscale(!this.tilesetState.getGrayscale()); } catch (err) { this.errorHandler.logError('Failed to toggle tileset grayscale', err); }
           this._updateTilesetUI('grayscale');
           try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on tileset toggle', err); }
           return;
@@ -224,7 +229,13 @@
           try { 
             ev.preventDefault(); 
             this.map.updateResolution(); 
-            this.map.render();
+            // Emit events instead of direct render call
+            this.eventBus.emit(this.eventTypes.MAP_VIEW_CHANGED, {
+              panX: this.map.panX,
+              panY: this.map.panY,
+              triggeredBy: 'keyboard-pan'
+            });
+            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
             // Save view after keyboard pan
             try { this.map.saveViewToStorage(); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'KeyboardHandler.pan.saveViewToStorage'); }
           } catch (err) { this.errorHandler.logError('Failed to update map after keyboard pan', err); }

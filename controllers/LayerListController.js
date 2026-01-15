@@ -3,11 +3,16 @@
 
 (function (global) {
   class LayerListController {
-    constructor(map, config, errorHandler, eventBus) {
-      this.map = map;
-      this.config = config || global.MP4Config || {};
-      this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
-      this.eventBus = eventBus || global.eventBus;
+    constructor(options) {
+      // Required dependencies
+      this.layerState = options.layerState;
+      this.highlightState = options.highlightState;
+      this.eventBus = options.eventBus;
+
+      // Optional dependencies
+      this.config = options.config || global.MP4Config || {};
+      this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.eventTypes = window.EventTypes || {};
 
       // Gesture tracking state
       this._gestureActive = false;
@@ -99,7 +104,7 @@
       // Determine initial checked state: preference order -> saved storage -> runtime map state -> default false
       const initialChecked = (savedVisibility && Object.prototype.hasOwnProperty.call(savedVisibility, layerKey))
         ? !!savedVisibility[layerKey]
-        : !!(this.map && this.map.layerVisibility && this.map.layerVisibility[layerKey]);
+        : !!(this.layerState && this.layerState.isLayerVisible(layerKey));
 
       // Reflect active visual state on the row
       if (initialChecked) label.classList.add('active');
@@ -132,7 +137,7 @@
       } else if (Array.isArray(layer.markers)) {
         const configuredMax = (typeof layer.maxMarkers === 'number')
           ? layer.maxMarkers
-          : (this.map && this.map.layerConfig && this.map.layerConfig[layerKey] && this.map.layerConfig[layerKey].maxMarkers);
+          : (this.layerState && this.layerState.layerConfig && this.layerState.layerConfig[layerKey] && this.layerState.layerConfig[layerKey].maxMarkers);
         if (typeof configuredMax === 'number') {
           countSpan.textContent = `${layer.markers.length} / ${configuredMax}`;
         } else {
@@ -282,10 +287,7 @@
           this._logError(e, 'LayerListController._handleLayerTogglePointerDown.setAttribute');
         }
 
-        // Update runtime visibility object so other code reads the new state
-        try { if (!this.map.layerVisibility) this.map.layerVisibility = {}; this.map.layerVisibility[layerKey] = !!checked; } catch (e) {
-          this._logError(e, 'LayerListController._handleLayerTogglePointerDown.setVisibility');
-        }
+        // Visibility update is handled by the LAYER_VISIBILITY_CHANGED event listener
 
         // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
         if (!checked) {
@@ -330,9 +332,7 @@
         try { row.setAttribute('aria-pressed', willChecked ? 'true' : 'false'); } catch (e) {
           this._logError(e, 'LayerListController._handleSwipePointerMove.setAttribute');
         }
-        try { if (!this.map.layerVisibility) this.map.layerVisibility = {}; this.map.layerVisibility[k] = !!willChecked; } catch (e) {
-          this._logError(e, 'LayerListController._handleSwipePointerMove.setVisibility');
-        }
+        // Visibility update is handled by the LAYER_VISIBILITY_CHANGED event listener
 
         // If turning off a layer that's in edit mode, exit edit mode after visibility is updated
         if (!willChecked) {
@@ -365,11 +365,11 @@
         const k = label && label.dataset && label.dataset.layer;
         if (!k) return;
 
-        if (this.map && typeof this.map.toggleLayerHighlight === 'function') {
+        if (this.highlightState && typeof this.highlightState.toggleLayerHighlight === 'function') {
           const layer = global.LAYERS && global.LAYERS[k];
-          this.map.toggleLayerHighlight(k, (layer && layer.highlightScale) ? layer.highlightScale : 2.0);
+          this.highlightState.toggleLayerHighlight(k);
           this._handleHighlightFlow(k, layer, label);
-        } else if (this.map) {
+        } else {
           this._handleLegacyHighlight(k, iconDiv, label);
         }
         this._updateHighlightVisuals(iconDiv, label, k, global.LAYERS && global.LAYERS[k]);
@@ -383,22 +383,15 @@
      */
     _handleHighlightFlow(k, layer, label) {
       try {
-        if (this.map.highlightedLayers && this.map.highlightedLayers.has(k)) {
-          if (!this.map.layerVisibility || !this.map.layerVisibility[k]) {
-            if (typeof this.map.toggleLayer === 'function') {
-              try { this.map.toggleLayer(k, true); } catch (e) { /* suppressed */ }
-            } else {
-              try { if (!this.map.layerVisibility) this.map.layerVisibility = {}; this.map.layerVisibility[k] = true; } catch (e) {
-                this._logError(e, 'LayerListController._handleHighlightFlow.setVisibility');
-              }
-              try { if (this.map && typeof this.map.render === 'function') this.map.render(); } catch (e) {
-                this._logError(e, 'LayerListController._handleHighlightFlow.renderAfterVisibility');
-              }
+        if (this.highlightState && this.highlightState.isLayerHighlighted(k)) {
+          if (!this.layerState || !this.layerState.isLayerVisible(k)) {
+            if (this.layerState && typeof this.layerState.setLayerVisible === 'function') {
+              try { this.layerState.setLayerVisible(k, true); } catch (e) { /* suppressed */ }
             }
-            this._updateRowUIAfterHighlight(k);
-            try { this._scheduleSaveLayerVisibility(); } catch (e) {
-              this._logError(e, 'LayerListController._handleHighlightFlow.saveLayers');
-            }
+          }
+          this._updateRowUIAfterHighlight(k);
+          try { this._scheduleSaveLayerVisibility(); } catch (e) {
+            this._logError(e, 'LayerListController._handleHighlightFlow.saveLayers');
           }
         }
       } catch (e) {
@@ -410,16 +403,15 @@
      * Handle legacy highlight system
      */
     _handleLegacyHighlight(k, iconDiv, label) {
-      this.map.highlightedLayers = this.map.highlightedLayers || new Set();
-      if (this.map.highlightedLayers.has(k)) {
-        this.map.highlightedLayers.delete(k);
-      } else {
-        this.map.highlightedLayers.add(k);
-        this.map._highlightConfig = this.map._highlightConfig || {};
-        const layer = global.LAYERS && global.LAYERS[k];
-        this.map._highlightConfig[k] = { scale: (layer && typeof layer.highlightScale === 'number') ? layer.highlightScale : 2.0 };
+      if (this.highlightState) {
+        this.highlightState.toggleLayerHighlight(k);
       }
-      try { if (typeof this.map.render === 'function') this.map.render(); } catch (e) { this._logError(e, 'LayerListController._handleLegacyHighlight.render'); }
+      // Emit events instead of direct render call
+      this.eventBus.emit(this.eventTypes.LAYER_HIGHLIGHT_CHANGED, {
+        highlightedLayers: this.highlightState ? Array.from(this.highlightState.highlightedLayers) : [],
+        triggeredBy: 'legacy-highlight'
+      });
+      this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
     }
 
     /**
@@ -442,7 +434,7 @@
      */
     _updateHighlightVisuals(iconDiv, label, layerKey, layer) {
       try {
-        const isHighlighted = !!(this.map && this.map.highlightedLayers && this.map.highlightedLayers.has(layerKey));
+        const isHighlighted = !!(this.highlightState && this.highlightState.isLayerHighlighted(layerKey));
         try { iconDiv.classList.toggle('highlighted', isHighlighted); } catch (e) { this._logError(e, 'LayerListController._updateHighlightVisuals.iconClassToggle'); }
         try { label.classList.toggle('has-inline-highlight', isHighlighted); } catch (e) { this._logError(e, 'LayerListController._updateHighlightVisuals.labelClassToggle'); }
         try {
@@ -472,24 +464,13 @@
         this._pendingLayerToggles = {};
         this._layerToggleRaf = null;
         try {
-          if (this.map) {
-            // Apply each pending toggle via the existing map API so side-effects run
-            for (const [k, v] of Object.entries(toApply)) {
-              try {
-                if (k === 'route') {
-                  this.map.layerVisibility = Object.assign({}, this.map.layerVisibility || {}, { route: v });
-                  try { this.map.render(); } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.route.render'); }
-                } else {
-                  if (typeof this.map.toggleLayer === 'function') {
-                    this.map.toggleLayer(k, v);
-                  } else {
-                    if (!this.map.layerVisibility) this.map.layerVisibility = {};
-                    this.map.layerVisibility[k] = v;
-                  }
-                }
-              } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.applyToggle'); }
-            }
-            try { if (this.map) this.map.render(); } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.render'); }
+          // Apply each pending toggle via the layerState
+          for (const [k, v] of Object.entries(toApply)) {
+            try {
+              if (this.layerState && typeof this.layerState.setLayerVisible === 'function') {
+                this.layerState.setLayerVisible(k, v);
+              }
+            } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.applyToggle'); }
           }
         } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles'); }
       });
@@ -503,7 +484,10 @@
         this._logError(e, 'LayerListController._scheduleSaveLayerVisibility.clearTimeout');
       }
       this._layerToggleSaveTimeout = setTimeout(() => {
-        try { this._saveLayerVisibilityToStorage(this.map && this.map.layerVisibility ? this.map.layerVisibility : {}); } catch (e) {
+        try {
+          const layerVisibility = this.layerState ? this.layerState.layerVisibility : {};
+          this._saveLayerVisibilityToStorage(layerVisibility);
+        } catch (e) {
           this._logError(e, 'LayerListController._scheduleSaveLayerVisibility.saveStorage');
         }
         this._layerToggleSaveTimeout = null;
@@ -581,9 +565,9 @@
      */
     _saveLayerVisibilityToStorage(obj) {
       try {
-        if (typeof global.saveLayerVisibilityToStorage === 'function') {
-          global.saveLayerVisibilityToStorage(obj);
-        }
+        this.eventBus.emit(EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, {
+          layerVisibility: obj
+        });
       } catch (e) {
         this._logError(e, 'LayerListController._saveLayerVisibilityToStorage');
       }
@@ -594,9 +578,7 @@
      */
     _exitEditModeForLayer(layerKey) {
       try {
-        if (typeof global.exitEditModeForLayer === 'function') {
-          global.exitEditModeForLayer(layerKey);
-        }
+        this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: layerKey });
       } catch (e) {
         this._logError(e, 'LayerListController._exitEditModeForLayer');
       }
@@ -606,7 +588,7 @@
      * Log error with context
      */
     _logError(error, context) {
-      this.errorHandler.logDebug(`LayerListController.${context}`, 'LayerListController._logError', { error });
+      this.errorHandler.logError(error, `LayerListController.${context}`);
     }
   }
 

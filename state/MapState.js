@@ -83,6 +83,13 @@
 
       this.panX = centerX - worldX * this.zoom;
       this.panY = centerY - worldY * this.zoom;
+      
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'centerOn'
+      });
     }
 
     centerMap() {
@@ -92,6 +99,13 @@
       const mapHeight = this.mapSize * this.zoom;
       this.panX = (this.canvasWidth - mapWidth) / 2;
       this.panY = (this.canvasHeight - mapHeight) / 2;
+      
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'centerMap'
+      });
     }
 
     // Zoom methods
@@ -103,16 +117,30 @@
 
       this.panX = center.x - worldPoint.x * this.zoom;
       this.panY = center.y - worldPoint.y * this.zoom;
+      
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'zoomIn'
+      });
     }
 
     zoomOut(centerX, centerY) {
       const center = this._getZoomCenter(centerX, centerY);
       const worldPoint = this.screenToWorld(center.x, center.y);
 
-      this.zoom = Math.max(this.minZoom, this.zoom / 1.3);
+      this.zoom = Math.max(this.minZoom, this.zoom / 1.5);
 
       this.panX = center.x - worldPoint.x * this.zoom;
       this.panY = center.y - worldPoint.y * this.zoom;
+      
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'zoomOut'
+      });
     }
 
     setZoom(zoom, centerX, centerY) {
@@ -123,6 +151,13 @@
 
       this.panX = center.x - worldPoint.x * this.zoom;
       this.panY = center.y - worldPoint.y * this.zoom;
+      
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'setZoom'
+      });
     }
 
     // Pan methods
@@ -134,6 +169,12 @@
     setPan(x, y) {
       this.panX = x;
       this.panY = y;
+      this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        triggeredBy: 'setPan'
+      });
     }
 
     // View state management
@@ -191,6 +232,17 @@
              screen.x <= this.canvasWidth + padding &&
              screen.y >= -padding &&
              screen.y <= this.canvasHeight + padding;
+    }
+
+    // Event emission helper
+    _emitChange(event, data) {
+      try {
+        if (window.eventBus) {
+          window.eventBus.emit(event, data);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('MapState._emitChange failed', 'MapState._emitChange', { error: e, event });
+      }
     }
 
     // State persistence (consent-gated)

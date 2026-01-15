@@ -6,19 +6,19 @@
     /**
      * Creates a new HeatmapRenderer instance for rendering green crystal density heatmaps.
      * @param {Object} mapState - The map state manager
+     * @param {Object} layerState - The layer state manager
      * @param {Object} config - Configuration object (defaults to global MP4Config)
      * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
      * @param {Array} greenCrystalLayers - Array of green crystal layer keys (defaults to GREEN_CRYSTAL_LAYERS)
      */
-    constructor(mapState, config, layers, greenCrystalLayers) {
+    constructor(mapState, layerState, config, layers, greenCrystalLayers) {
       this.mapState = mapState;
+      this.layerState = layerState;
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
       this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
-      // Keep map reference for canvas access during transition
-      this.map = null;
-      this.canvas = null;
-      this.ctx = null;
+      this.errorHandler = global.errorHandler;
+      // No direct map reference needed - all access through state managers and renderContext
     }
 
     /**
@@ -26,9 +26,6 @@
      * Sets up internal scheduling flags and canvas size tracking for performance optimization.
      */
     init() {
-      // Initialize error handler from map reference
-      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
-      
       // Setup an offscreen buffer and internal scheduling flags
       this.offscreenCanvas = null;
       this.offscreenCtx = null;
@@ -36,10 +33,9 @@
       this._lastCanvasSize = { w: 0, h: 0, dpr: 1 };
     }
 
-    _ensureBufferSize() {
+    _ensureBufferSize(renderContext) {
       try {
-        const cssWidth = this.map.canvas.clientWidth;
-        const cssHeight = this.map.canvas.clientHeight;
+        const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
         const dpr = window.devicePixelRatio || 1;
         const pw = Math.max(1, Math.round(cssWidth * dpr));
         const ph = Math.max(1, Math.round(cssHeight * dpr));
@@ -59,14 +55,15 @@
      * Schedules a throttled render of the green crystal heatmap using requestAnimationFrame.
      * Clears the canvas if heatmap is disabled, otherwise delegates to _renderNow() for actual rendering.
      * Uses offscreen buffering and DPR-aware scaling for crisp rendering at all zoom levels.
+     * @param {RenderContext} renderContext - The render context providing canvas access
      */
-    render() {
+    render(renderContext) {
       // Schedule rAF-based render to throttle heavy work
-      if (!this.ctx || !this.canvas) return;
+      if (!renderContext.ctx || !renderContext.canvas) return;
       // Clear visible canvas quickly if heatmap disabled
       try {
-        if (!this.map._showGridHeatmap) {
-          try { const cssWidth = this.map.canvas.clientWidth; const cssHeight = this.map.canvas.clientHeight; this.ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer.render: Failed to clear canvas:', e); }
+        if (!this.layerState || !this.layerState.isHeatmapVisible()) {
+          try { const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize(); renderContext.ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer.render: Failed to clear canvas:', e); }
           return;
         }
       } catch (e) { console.error('HeatmapRenderer.render: Failed to check heatmap visibility:', e); }
@@ -75,17 +72,16 @@
       this._pendingRender = true;
       requestAnimationFrame(() => {
         this._pendingRender = false;
-        try { this._renderNow(); } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); }
+        try { this._renderNow(renderContext); } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); }
       });
     }
 
-    _renderNow() {
+    _renderNow(renderContext) {
       try {
-        this._ensureBufferSize();
+        this._ensureBufferSize(renderContext);
         if (!this.offscreenCtx) return;
         const hmCtx = this.offscreenCtx;
-        const cssWidth = this.map.canvas.clientWidth;
-        const cssHeight = this.map.canvas.clientHeight;
+        const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
         const dpr = window.devicePixelRatio || 1;
         const pw = Math.round(cssWidth * dpr);
         const ph = Math.round(cssHeight * dpr);

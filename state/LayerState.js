@@ -12,6 +12,8 @@
       this.layerVisibility = {};
       this.layerConfig = {};
       this._showGridHeatmap = false;
+      this.highlightedLayers = new Set();
+      this.highlightConfig = {};
 
       // Initialize layer visibility
       this._initializeLayers(layerKeys || []);
@@ -85,6 +87,11 @@
       try {
         if (layerKey && typeof layerKey === 'string') {
           this.layerVisibility[layerKey] = !!visible;
+          this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
+            layerKey,
+            visible: !!visible,
+            layerVisibility: { ...this.layerVisibility }
+          });
         }
       } catch (e) {
         this.errorHandler.logDebug('LayerState.setLayerVisible failed', 'LayerState.setLayerVisible', { error: e });
@@ -96,6 +103,11 @@
         if (layerKey && typeof layerKey === 'string') {
           const current = !!this.layerVisibility[layerKey];
           this.layerVisibility[layerKey] = !current;
+          this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
+            layerKey,
+            visible: !current,
+            layerVisibility: { ...this.layerVisibility }
+          });
         }
       } catch (e) {
         this.errorHandler.logDebug('LayerState.toggleLayer failed', 'LayerState.toggleLayer', { error: e });
@@ -156,6 +168,10 @@
     setGridVisible(visible) {
       try {
         this.layerVisibility.grid = !!visible;
+        this._emitChange(window.EventTypes.DISPLAY_SETTINGS_CHANGED, {
+          gridVisible: !!visible,
+          heatmapVisible: this._showGridHeatmap
+        });
       } catch (e) {
         this.errorHandler.logDebug('LayerState.setGridVisible failed', 'LayerState.setGridVisible', { error: e });
       }
@@ -173,6 +189,10 @@
     setHeatmapVisible(visible) {
       try {
         this._showGridHeatmap = !!visible;
+        this._emitChange(window.EventTypes.DISPLAY_SETTINGS_CHANGED, {
+          gridVisible: !!this.layerVisibility.grid,
+          heatmapVisible: !!visible
+        });
       } catch (e) {
         this.errorHandler.logDebug('LayerState.setHeatmapVisible failed', 'LayerState.setHeatmapVisible', { error: e });
       }
@@ -248,6 +268,10 @@
       try {
         Object.keys(visibilityMap).forEach(key => {
           this.layerVisibility[key] = !!visibilityMap[key];
+        });
+        this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
+          layerVisibility: { ...this.layerVisibility },
+          triggeredBy: 'bulk-update'
         });
       } catch (e) {
         this.errorHandler.logDebug('LayerState.setMultipleLayers failed', 'LayerState.setMultipleLayers', { error: e });
@@ -364,6 +388,17 @@
         delete this.layerConfig[layerKey];
       } catch (e) {
         this.errorHandler.logDebug('LayerState.removeLayer failed', 'LayerState.removeLayer', { error: e });
+      }
+    }
+
+    // Event emission helper
+    _emitChange(event, data) {
+      try {
+        if (window.eventBus) {
+          window.eventBus.emit(event, data);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('LayerState._emitChange failed', 'LayerState._emitChange', { error: e, event });
       }
     }
   }

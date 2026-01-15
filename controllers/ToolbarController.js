@@ -3,11 +3,20 @@
 
 (function (global) {
   class ToolbarController {
-    constructor(map, config, errorHandler, eventBus) {
-      this.map = map;
-      this.config = config || global.MP4Config || {};
-      this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
-      this.eventBus = eventBus || global.eventBus;
+    constructor(options) {
+      // Required dependencies
+      this.layerState = options.layerState;
+      this.selectionState = options.selectionState;
+      this.editModeState = options.editModeState;
+      this.markerManager = options.markerManager;
+      this.eventBus = options.eventBus;
+
+      // Optional dependencies
+      this.config = options.config || global.MP4Config || {};
+      this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.eventTypes = window.EventTypes || {};
+
+      // NO map reference needed anymore
     }
 
     /**
@@ -32,25 +41,28 @@
 
         if (zoomInBtn) {
           zoomInBtn.addEventListener('click', () => {
-            if (this.map && typeof this.map.zoomIn === 'function') {
-              this.map.zoomIn();
-            }
+            // Emit zoom in requested event instead of direct call
+            this.eventBus.emit(this.eventTypes.MAP_ZOOM_IN_REQUESTED, {
+              triggeredBy: 'toolbar-zoom-in'
+            });
           });
         }
 
         if (zoomOutBtn) {
           zoomOutBtn.addEventListener('click', () => {
-            if (this.map && typeof this.map.zoomOut === 'function') {
-              this.map.zoomOut();
-            }
+            // Emit zoom out requested event instead of direct call
+            this.eventBus.emit(this.eventTypes.MAP_ZOOM_OUT_REQUESTED, {
+              triggeredBy: 'toolbar-zoom-out'
+            });
           });
         }
 
         if (resetViewBtn) {
           resetViewBtn.addEventListener('click', () => {
-            if (this.map && typeof this.map.resetView === 'function') {
-              this.map.resetView();
-            }
+            // Emit view reset requested event instead of direct call
+            this.eventBus.emit(this.eventTypes.MAP_VIEW_RESET_REQUESTED, {
+              triggeredBy: 'toolbar-reset-view'
+            });
           });
         }
 
@@ -77,11 +89,11 @@
         if (editMarkersToggle && this.map) {
           // Reflect initial state
           try {
-            editMarkersToggle.setAttribute('aria-pressed', this.map.editMarkersMode ? 'true' : 'false');
-            editMarkersToggle.classList.toggle('active', !!this.map.editMarkersMode);
+            editMarkersToggle.setAttribute('aria-pressed', this.selectionState ? this.selectionState.editMarkersMode : false ? 'true' : 'false');
+            editMarkersToggle.classList.toggle('active', !!(this.selectionState && this.selectionState.editMarkersMode));
             if (editMarkersToggleMini) {
-              editMarkersToggleMini.setAttribute('aria-pressed', this.map.editMarkersMode ? 'true' : 'false');
-              editMarkersToggleMini.classList.toggle('glow', !!this.map.editMarkersMode);
+              editMarkersToggleMini.setAttribute('aria-pressed', this.selectionState ? this.selectionState.editMarkersMode : false ? 'true' : 'false');
+              editMarkersToggleMini.classList.toggle('glow', !!(this.selectionState && this.selectionState.editMarkersMode));
             }
           } catch (e) {
             if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to set initial marker edit toggle state');
@@ -100,49 +112,48 @@
               if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle marker edit button state');
             }
 
-            if (this.map) {
-              this.map.editMarkersMode = on;
-              if (on) {
-                // Exit route edit mode when entering marker edit mode
-                this.map.editRouteMode = false;
-                try {
-                  const routeToggle = document.getElementById('editRouteToggle');
-                  const routeToggleMini = document.getElementById('editRouteToggleMini');
-                  if (routeToggle) {
-                    routeToggle.setAttribute('aria-pressed', 'false');
-                    routeToggle.classList.remove('active');
-                  }
-                  if (routeToggleMini) {
-                    routeToggleMini.setAttribute('aria-pressed', 'false');
-                    routeToggleMini.classList.remove('glow');
-                  }
-                } catch (e) {
-                  if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit route edit mode when entering marker edit');
+            if (this.selectionState) {
+              this.selectionState.setEditMarkersMode(on);
+              try {
+                const routeToggle = document.getElementById('editRouteToggle');
+                const routeToggleMini = document.getElementById('editRouteToggleMini');
+                if (routeToggle) {
+                  routeToggle.setAttribute('aria-pressed', 'false');
+                  routeToggle.classList.remove('active');
                 }
+                if (routeToggleMini) {
+                  routeToggleMini.setAttribute('aria-pressed', 'false');
+                  routeToggleMini.classList.remove('glow');
+                }
+              } catch (e) {
+                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit route edit mode when entering marker edit');
               }
 
               // Update edit overlay
-              try {
-                if (typeof updateEditOverlay === 'function') {
-                  updateEditOverlay();
-                }
-              } catch (e) {
-                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to update edit overlay');
-              }
+              this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
 
               // Update layer visibility for custom markers
-              if (this.map.layerVisibility) {
-                this.map.layerVisibility.customMarkers = on;
-                try {
-                  if (typeof saveLayerVisibilityToStorage === 'function') {
-                    saveLayerVisibilityToStorage(this.map.layerVisibility);
-                  }
-                } catch (e) {
-                  if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to save layer visibility to storage');
-                }
+              if (this.layerState && this.layerState.layerVisibility) {
+                const newVisibility = { ...this.layerState.layerVisibility };
+                newVisibility.customMarkers = on;
+                this.eventBus.emit(EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, {
+                  layerVisibility: newVisibility
+                });
               }
 
-              this.map.render();
+              // Emit events instead of direct render call
+              this.eventBus.emit(this.eventTypes.EDIT_MODE_CHANGED, {
+                mode: 'markers',
+                enabled: on,
+                triggeredBy: 'toolbar-toggle'
+              });
+              if (this.layerState) {
+                this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
+                  layerVisibility: { ...this.layerState.layerVisibility, customMarkers: on },
+                  triggeredBy: 'edit-mode-toggle'
+                });
+              }
+              this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
             }
           };
 
@@ -155,14 +166,14 @@
         // Edit route toggle
         const editRouteToggle = document.getElementById('editRouteToggle');
         const editRouteToggleMini = document.getElementById('editRouteToggleMini');
-        if (editRouteToggle && this.map) {
+        if (editRouteToggle && this.selectionState) {
           // Reflect initial state
           try {
-            editRouteToggle.setAttribute('aria-pressed', this.map.editRouteMode ? 'true' : 'false');
-            editRouteToggle.classList.toggle('active', !!this.map.editRouteMode);
+            editRouteToggle.setAttribute('aria-pressed', this.selectionState.editRouteMode ? 'true' : 'false');
+            editRouteToggle.classList.toggle('active', !!this.selectionState.editRouteMode);
             if (editRouteToggleMini) {
-              editRouteToggleMini.setAttribute('aria-pressed', this.map.editRouteMode ? 'true' : 'false');
-              editRouteToggleMini.classList.toggle('glow', !!this.map.editRouteMode);
+              editRouteToggleMini.setAttribute('aria-pressed', this.selectionState.editRouteMode ? 'true' : 'false');
+              editRouteToggleMini.classList.toggle('glow', !!this.selectionState.editRouteMode);
             }
           } catch (e) {
             if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to set initial route edit toggle state');
@@ -181,37 +192,32 @@
               if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle route edit button state');
             }
 
-            if (this.map) {
-              this.map.editRouteMode = on;
-              if (on) {
-                // Exit marker edit mode when entering route edit mode
-                this.map.editMarkersMode = false;
-                try {
-                  const markersToggle = document.getElementById('editMarkersToggle');
-                  const markersToggleMini = document.getElementById('editMarkersToggleMini');
-                  if (markersToggle) {
-                    markersToggle.setAttribute('aria-pressed', 'false');
-                    markersToggle.classList.remove('active');
-                  }
-                  if (markersToggleMini) {
-                    markersToggleMini.setAttribute('aria-pressed', 'false');
-                    markersToggleMini.classList.remove('glow');
-                  }
-                } catch (e) {
-                  if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit marker edit mode when entering route edit');
+            if (this.selectionState) {
+              this.selectionState.setEditRouteMode(on);
+              try {
+                const markersToggle = document.getElementById('editMarkersToggle');
+                const markersToggleMini = document.getElementById('editMarkersToggleMini');
+                if (markersToggle) {
+                  markersToggle.setAttribute('aria-pressed', 'false');
+                  markersToggle.classList.remove('active');
                 }
+                if (markersToggleMini) {
+                  markersToggleMini.setAttribute('aria-pressed', 'false');
+                  markersToggleMini.classList.remove('glow');
+                }
+              } catch (e) {
+                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit marker edit mode when entering route edit');
               }
 
               // Update edit overlay
-              try {
-                if (typeof updateEditOverlay === 'function') {
-                  updateEditOverlay();
-                }
-              } catch (e) {
-                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to update edit overlay');
-              }
+              this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
 
-              this.map.render();
+              // Emit edit mode changed event instead of direct render
+              this.eventBus.emit(this.eventTypes.EDIT_MODE_CHANGED, {
+                mode: 'route',
+                enabled: on,
+                triggeredBy: 'toolbar-route-edit-toggle'
+              });
             }
           };
 
@@ -236,8 +242,8 @@
         if (exportCustomBtn) {
           exportCustomBtn.addEventListener('click', () => {
             try {
-              if (this.map && this.map.markerManager) {
-                this.map.markerManager.exportMarkers();
+              if (this.markerManager) {
+                this.markerManager.exportMarkers();
               } else {
                 if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {
                   NotificationUtils.showMarkerError('Marker manager not available.');
@@ -376,14 +382,14 @@
         const editMarkersToggle = document.getElementById('editMarkersToggle');
         const editRouteToggle = document.getElementById('editRouteToggle');
 
-        if (editMarkersToggle && this.map) {
-          const isActive = !!this.map.editMarkersMode;
+        if (editMarkersToggle && this.selectionState) {
+          const isActive = !!this.selectionState.editMarkersMode;
           editMarkersToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editMarkersToggle.classList.toggle('active', isActive);
         }
 
-        if (editRouteToggle && this.map) {
-          const isActive = !!this.map.editRouteMode;
+        if (editRouteToggle && this.selectionState) {
+          const isActive = !!this.selectionState.editRouteMode;
           editRouteToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editRouteToggle.classList.toggle('active', isActive);
         }
