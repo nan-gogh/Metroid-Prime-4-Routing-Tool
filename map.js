@@ -2256,6 +2256,19 @@ async function init() {
             
             eventBus.on(window.EventTypes.EDIT_MODE_CHANGED, (data) => {
                 try {
+                    // When entering any edit mode, deselect any selected marker to prevent confusion
+                    if (data && data.enabled && map) {
+                        if (map.selectedMarker) {
+                            map.selectedMarker = null;
+                            map.selectedMarkerLayer = null;
+                            if (typeof map.hideTooltip === 'function') {
+                                map.hideTooltip();
+                            }
+                            // Request render to update visual state
+                            eventBus.emit(window.EventTypes.RENDER_REQUESTED);
+                        }
+                    }
+                    
                     // Edit mode changes require updating the overlay UI and then rendering
                     updateEditOverlay();
                     if (map && typeof map.render === 'function') {
