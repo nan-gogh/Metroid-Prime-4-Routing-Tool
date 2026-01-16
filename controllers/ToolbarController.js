@@ -132,14 +132,8 @@
               // Update edit overlay
               this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
 
-
-              // Emit edit mode changed event - DO NOT change layer visibility based on edit mode
-              // The customMarkers layer should remain visible regardless of edit mode state
-              this.eventBus.emit(this.eventTypes.EDIT_MODE_CHANGED, {
-                mode: 'markers',
-                enabled: on,
-                triggeredBy: 'toolbar-toggle'
-              });
+              // Note: EDIT_MODE_CHANGED is already emitted by EditModeState.setEditMarkersMode()
+              // Do not duplicate event emissions - comply with single source of truth architecture
             }
           };
 
@@ -198,12 +192,8 @@
               // Update edit overlay
               this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
 
-              // Emit edit mode changed event instead of direct render
-              this.eventBus.emit(this.eventTypes.EDIT_MODE_CHANGED, {
-                mode: 'route',
-                enabled: on,
-                triggeredBy: 'toolbar-route-edit-toggle'
-              });
+              // Note: EDIT_MODE_CHANGED is already emitted by EditModeState.setEditRouteMode()
+              // Do not duplicate event emissions - comply with single source of truth architecture
             }
           };
 

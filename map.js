@@ -2571,6 +2571,7 @@ async function init() {
             };
 
             // Enter/exit edit-mode helpers that ensure outline is turned on and colored
+            // These are now called by event handlers for EDIT_MODE_ENTER_REQUESTED/EDIT_MODE_EXIT_REQUESTED
             map._enterEditMode = function(layerKey, scale) {
                 try {
                     // add edit-mode-outline class only for route and marker layers
@@ -2584,9 +2585,9 @@ async function init() {
                                 row.style.setProperty('--edit-mode-outline-color', layerColor);
                                 row.classList.add('edit-mode-outline');
                             }
-                        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._enterEditMode.setOutlineColor'); }
+                        } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap._enterEditMode.setOutlineColor'); }
                     }
-                } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._enterEditMode'); }
+                } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap._enterEditMode'); }
             };
 
             map._exitEditMode = function(layerKey) {
@@ -2598,12 +2599,12 @@ async function init() {
                             row.classList.remove('edit-mode-outline');
                             row.style.removeProperty('--edit-mode-outline-color');
                         }
-                    } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._exitEditMode.removeOutline'); }
+                    } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap._exitEditMode.removeOutline'); }
                     // Reset cursor when exiting route edit mode
                     if (layerKey === 'route') {
-                        try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._exitEditMode.resetCursor'); }
+                        try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap._exitEditMode.resetCursor'); }
                     }
-                } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._exitEditMode'); }
+                } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap._exitEditMode'); }
             };
             // Apply any previously saved highlighted layers (consent-gated)
             try {

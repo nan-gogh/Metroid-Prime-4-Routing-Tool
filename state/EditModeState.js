@@ -26,9 +26,21 @@
         this.editMarkersMode = !!enabled;
         this._emitChange(window.EventTypes.EDIT_MODE_CHANGED, {
           mode: !!enabled ? 'markers' : null,
+          enabled: !!enabled,
           markersEnabled: !!enabled,
           routeEnabled: this.editRouteMode
         });
+        
+        // Emit enter/exit events for UI effects (layer highlighting)
+        if (enabled) {
+          this._emitChange(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, {
+            mode: 'customMarkers'
+          });
+        } else {
+          this._emitChange(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, {
+            mode: 'customMarkers'
+          });
+        }
       } catch (e) {
         this.errorHandler.logDebug('EditModeState.setEditMarkersMode failed', 'EditModeState.setEditMarkersMode', { error: e });
       }
@@ -43,9 +55,21 @@
         this.editRouteMode = !!enabled;
         this._emitChange(window.EventTypes.EDIT_MODE_CHANGED, {
           mode: !!enabled ? 'route' : null,
+          enabled: !!enabled,
           markersEnabled: this.editMarkersMode,
           routeEnabled: !!enabled
         });
+        
+        // Emit enter/exit events for UI effects (layer highlighting)
+        if (enabled) {
+          this._emitChange(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, {
+            mode: 'route'
+          });
+        } else {
+          this._emitChange(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, {
+            mode: 'route'
+          });
+        }
       } catch (e) {
         this.errorHandler.logDebug('EditModeState.setEditRouteMode failed', 'EditModeState.setEditRouteMode', { error: e });
       }
