@@ -214,7 +214,8 @@
         if (!stage || !this._enabledStages.has(stage)) continue;
 
         // Skip rendering if we're doing selective rendering and this stage isn't dirty
-        const stageName = stage.constructor.name || 'UnknownStage';
+        // Check stage.constructor.name which works for both classes and objects with custom constructor property
+        const stageName = (stage && stage.constructor && stage.constructor.name) ? stage.constructor.name : 'UnknownStage';
         if (dirtyOnly && !dirtyOnly.has(stageName)) continue;
 
         const stageStartTime = this._profilingEnabled ? performance.now() : 0;

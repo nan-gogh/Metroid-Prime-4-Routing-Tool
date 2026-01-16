@@ -138,8 +138,14 @@ class InteractiveMap {
                         } catch (e) { moduleErrorHandler.logDebug('overlayClearStage failed', 'InteractiveMap.init.overlayClearStage', { error: e }); }
                     }
                 };
-                // Give the stage a name for dirty flag tracking
-                Object.defineProperty(overlayClearStage.constructor, 'name', { value: 'OverlayClearStage' });
+                // Give the stage a name property for dirty flag tracking (RenderPipeline uses constructor.name)
+                // This must match what's passed to markDirty() - define on instance, not on Function.prototype
+                Object.defineProperty(overlayClearStage, 'constructor', {
+                    value: { name: 'OverlayClearStage' },
+                    writable: false,
+                    enumerable: false,
+                    configurable: true
+                });
 
                 // Create a dedicated clear stage for the heatmap canvas
                 // This runs before heatmap rendering to ensure clean slate each frame
@@ -154,8 +160,14 @@ class InteractiveMap {
                         } catch (e) { moduleErrorHandler.logDebug('heatmapClearStage failed', 'InteractiveMap.init.heatmapClearStage', { error: e }); }
                     }
                 };
-                // Give the stage a name for dirty flag tracking
-                Object.defineProperty(heatmapClearStage.constructor, 'name', { value: 'HeatmapClearStage' });
+                // Give the stage a name property for dirty flag tracking (RenderPipeline uses constructor.name)
+                // This must match what's passed to markDirty() - define on instance, not on Function.prototype
+                Object.defineProperty(heatmapClearStage, 'constructor', {
+                    value: { name: 'HeatmapClearStage' },
+                    writable: false,
+                    enumerable: false,
+                    configurable: true
+                });
                 
                     // Use the concrete `OverlayRenderer` instance in the pipeline
                     // (must be constructed above if the module is available).
