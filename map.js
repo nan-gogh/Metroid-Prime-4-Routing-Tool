@@ -382,14 +382,7 @@ class InteractiveMap {
         // Tooltip element
         this.tooltip = document.getElementById('tooltip');
 
-        // Initialize TooltipManager and attach it to the map container
-        try {
-            if (typeof TooltipManager !== 'undefined') {
-                try { this.tooltipManager = new TooltipManager(); this.tooltipManager.init(this.canvas.parentElement); } catch (e) { moduleErrorHandler.logDebug('TooltipManager.init failed', 'InteractiveMap.init.tooltipManager', { error: e }); }
-            }
-        } catch (e) {
-            moduleErrorHandler.logDebug('TooltipManager initialization failed', 'InteractiveMap.init.tooltipManagerInit', { error: e });
-        }
+        // TooltipManager initialization removed - tooltips are now managed by OverlayRenderer via showTooltip()
         // Move tooltip into the map container and ensure container is positioned so absolute coords align
         try {
             const parent = this.canvas && this.canvas.parentElement;
@@ -1472,43 +1465,6 @@ class InteractiveMap {
         }
     }
 
-    // Update tooltip position to follow the selected marker (idempotent)
-    _updateTooltipPosition() {
-        try {
-            if (!this.tooltip) return;
-            if (!this.selectedMarker || !this.selectedMarkerLayer) return;
-            // Compute marker screen position
-            const pos = this.markerManager ? this.markerManager.getScreenPosition(this.selectedMarker, {zoom: this.zoom, panX: this.panX, panY: this.panY}, MP4Config.MAP_SIZE) : null;
-            const mx = (pos && typeof pos.x === 'number') ? pos.x : (this.selectedMarker && typeof this.selectedMarker.x === 'number' ? this.selectedMarker.x * MP4Config.MAP_SIZE * this.zoom + this.panX : null);
-            const my = (pos && typeof pos.y === 'number') ? pos.y : (this.selectedMarker && typeof this.selectedMarker.y === 'number' ? this.selectedMarker.y * MP4Config.MAP_SIZE * this.zoom + this.panY : null);
-            if (mx === null || my === null) return;
-            // Compute offsets of canvas inside parent container so absolute positioning aligns
-            const parent = this.tooltip.parentElement;
-            let canvasOffsetLeft = 0, canvasOffsetTop = 0;
-            try {
-                if (this.canvas && parent) {
-                    const canvasRect = this.canvas.getBoundingClientRect();
-                    const parentRect = parent.getBoundingClientRect();
-                    canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
-                    canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
-                }
-            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._updateTooltipPosition.computeOffsets'); }
-
-            const margin = 6;
-            let desiredLeft = Math.round(canvasOffsetLeft + mx + 15);
-            let desiredTop = Math.round(canvasOffsetTop + my - 10);
-            if (parent) {
-                const maxLeft = Math.max(0, parent.clientWidth - (this.tooltip.offsetWidth || 120) - margin);
-                const maxTop = Math.max(0, parent.clientHeight - (this.tooltip.offsetHeight || 28) - margin);
-                desiredLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
-                desiredTop = Math.min(Math.max(desiredTop, margin), maxTop);
-            }
-            this.tooltip.style.left = `${desiredLeft}px`;
-            this.tooltip.style.top = `${desiredTop}px`;
-            // Ensure visible when following
-            if (this.tooltip.style.display !== 'block') this.tooltip.style.display = 'block';
-        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._updateTooltipPosition'); }
-    }
     
     render() {
         // Full redraw: use RenderPipeline exclusively
@@ -1531,10 +1487,6 @@ class InteractiveMap {
             try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { 
                 this.errorHandler.logError(e, 'InteractiveMap.render.updateQuadLabels');
             }
-            // Update tooltip position (keeps selected marker tooltip anchored during pan/zoom)
-            try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) { 
-                this.errorHandler.logError(e, 'InteractiveMap.render.updateTooltipPosition');
-            }
             return;
         }
 
@@ -1548,10 +1500,6 @@ class InteractiveMap {
         // Ensure DOM quadrant labels are updated
         try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { 
             this.errorHandler.logError(e, 'InteractiveMap.render.fallback.updateQuadLabels');
-        }
-        // Update tooltip position
-        try { if (typeof this._updateTooltipPosition === 'function') this._updateTooltipPosition(); } catch (e) { 
-            this.errorHandler.logError(e, 'InteractiveMap.render.fallback.updateTooltipPosition');
         }
     }
 
@@ -2266,9 +2214,10 @@ async function init() {
                     // Only perform side effects: rendering and UI updates
                     // The actual state is already updated in SelectionState
                     
-                    // Trigger render for selection changes
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    // Trigger selective render for selection changes using dirty flag system
+                    // OverlayRenderer is the only renderer affected by marker selection changes
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('OverlayRenderer');
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:SELECTION_CHANGED handler');
@@ -2427,6 +2376,8 @@ async function init() {
 
     // Create map
     map = new InteractiveMap('mapCanvas');
+    // Expose map globally for renderers and other modules to access
+    window.interactiveMap = map;
         // Highlighting runtime state: delegated to HighlightState
         try {
             // For backward compatibility, expose highlighting through modular HighlightState

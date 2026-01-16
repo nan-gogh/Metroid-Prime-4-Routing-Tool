@@ -67,41 +67,32 @@
           }
         } catch (e) { /* non-fatal */ }
 
-        // Tooltip follow: prefer TooltipManager when available
+        // Position selected marker tooltip (from SelectionState via DOM)
+        // OverlayRenderer is responsible for updating tooltip position every frame to keep it anchored to the marker
         try {
           if (this.selectionState.selectedMarker && this.selectionState.selectedMarkerLayer) {
             const m = this.selectionState.selectedMarker;
-            const pos2 = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
-            if (pos2 && typeof pos2.x === 'number' && typeof pos2.y === 'number') {
-              // Compute canvas-local coords and offset into container
-              let canvasOffsetLeft = 0, canvasOffsetTop = 0;
-              try {
-                const canvasRect = renderContext.canvas.getBoundingClientRect();
-                const parentRect = (renderContext.canvas.parentElement && renderContext.canvas.parentElement.getBoundingClientRect) ? renderContext.canvas.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
-                canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
-                canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
-              } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to calculate canvas offset:', e); }
-              const tooltipX = Math.round(canvasOffsetLeft + pos2.x + 15);
-              const tooltipY = Math.round(canvasOffsetTop + pos2.y - 10);
-              if (this.map.tooltipManager && typeof this.map.tooltipManager.update === 'function') {
-                try { this.map.tooltipManager.update(tooltipX, tooltipY); } catch (e) { this.errorHandler.logDebug('OverlayRenderer: tooltipManager update failed', 'OverlayRenderer.render.tooltipManagerUpdate', { error: e, message: e.message }); }
-              } else {
-                try { this.map.showTooltip(m, pos2.x, pos2.y, this.selectionState.selectedMarkerLayer); } catch (e) { this.errorHandler.logDebug('OverlayRenderer: showTooltip failed', 'OverlayRenderer.render.showTooltip', { error: e, message: e.message }); }
+            const layerKey = this.selectionState.selectedMarkerLayer;
+            const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
+            
+            if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+              // Get the map instance from window global (all renderers have access to global map)
+              // This is set in map.js during initialization
+              const mapInstance = window.interactiveMap || (window.interactiveMapInstance && window.interactiveMapInstance());
+              
+              if (mapInstance && typeof mapInstance.showTooltip === 'function') {
+                // showTooltip handles DOM positioning with container offset
+                try {
+                  mapInstance.showTooltip(m, pos.x, pos.y, layerKey);
+                } catch (e) {
+                  if (this.errorHandler) this.errorHandler.logDebug('OverlayRenderer: showTooltip failed', 'OverlayRenderer.render.showTooltip', { error: e, message: e.message });
+                }
               }
             }
           }
-        } catch (e) { /* non-fatal */ }
-
-        // Position selected marker tooltip (DOM)
-        try {
-          if (this.map.selectedMarker && this.map.selectedMarkerLayer) {
-            const m = this.map.selectedMarker;
-            const pos = MarkerUtilsCore.getMarkerScreenPosition(m, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
-            if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-              try { this.map.showTooltip(m, pos.x, pos.y, this.map.selectedMarkerLayer); } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to show selected marker tooltip:', e); }
-            }
-          }
-        } catch (e) { /* non-fatal */ }
+        } catch (e) {
+          if (this.errorHandler) this.errorHandler.logDebug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
+        }
       } catch (e) { this.errorHandler.logDebug('OverlayRenderer.render failed', 'OverlayRenderer.render', { error: e }); }
     }
   }
