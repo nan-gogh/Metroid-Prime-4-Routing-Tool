@@ -1226,11 +1226,6 @@ class InteractiveMap {
                         // no route -> display 0
                         el.textContent = '0';
                     }
-                } else if (layerKey === 'customMarkers' && this.markerManager) {
-                    // Special handling for custom markers - use MarkerManager directly for accurate count
-                    const count = this.markerManager.getCount();
-                    const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (this.layerConfig && this.layerConfig[layerKey] && this.layerConfig[layerKey].maxMarkers) || 50;
-                    el.textContent = `${count} / ${configuredMax}`;
                 } else if (Array.isArray(layer.markers)) {
                     // If layer provides a maxMarkers field use it; otherwise try runtime layerConfig, else just show count
                     const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (this.layerConfig && this.layerConfig[layerKey] && this.layerConfig[layerKey].maxMarkers);
@@ -2396,6 +2391,11 @@ async function init() {
             // Marker event listeners
             eventBus.on(window.EventTypes.MARKER_ADDED, (data) => {
                 try {
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
@@ -2414,6 +2414,11 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_REMOVED, (data) => {
                 try {
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
@@ -2432,6 +2437,11 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_EDITED, (data) => {
                 try {
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
