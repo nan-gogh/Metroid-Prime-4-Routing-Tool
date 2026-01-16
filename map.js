@@ -2418,8 +2418,11 @@ async function init() {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
-                    // This is batched by the render pipeline on RAF, not synchronous
+                    // For marker removal (especially bulk clear), request immediate render for UX feedback
+                    // The { all: true } flag indicates bulk operation (multiple markers)
+                    if (data && data.all && eventBus && typeof eventBus.emit === 'function') {
+                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
+                    }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_REMOVED handler');
                 }
