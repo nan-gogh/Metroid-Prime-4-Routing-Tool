@@ -17,6 +17,7 @@
       this.layerState = map.layerState;
       this.tilesetState = map.tilesetState;
       this.imageState = map.imageState;
+      this.heatmapDisplayState = map.heatmapDisplayState;
     }
 
     init() {
@@ -187,7 +188,13 @@
 
         // 4 - toggle grid heatmap
         if (ev.key === '4') {
-          try { if (this.map && typeof this.map.setGridHeatmap === 'function') this.map.setGridHeatmap(!this.map._showGridHeatmap); } catch (err) { this.errorHandler.logError('Failed to toggle grid heatmap via 4 key', err); }
+          try { 
+            if (this.heatmapDisplayState && typeof this.heatmapDisplayState.toggle === 'function') {
+              this.heatmapDisplayState.toggle();
+            } else if (this.map && typeof this.map.setGridHeatmap === 'function') {
+              this.map.setGridHeatmap(!this.map._showGridHeatmap);
+            }
+          } catch (err) { this.errorHandler.logError('Failed to toggle grid heatmap via 4 key', err); }
           try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on 4 key', err); }
           return;
         }

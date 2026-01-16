@@ -8,6 +8,7 @@
       this.layerState = options.layerState;
       this.highlightState = options.highlightState;
       this.tilesetState = options.tilesetState;
+      this.heatmapDisplayState = options.heatmapDisplayState;
       this.markerManager = options.markerManager;
       this.mapState = options.mapState;
       this.eventBus = options.eventBus;
@@ -122,16 +123,10 @@
         const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
         if (gridHeatmapBtn) {
           gridHeatmapBtn.addEventListener('click', () => {
-            if (this.layerState) {
-              const newValue = !this.layerState.isHeatmapVisible();
-              this.layerState.setHeatmapVisible(newValue);
+            if (this.heatmapDisplayState) {
+              // Toggle heatmap visibility via dedicated HeatmapDisplayState
+              this.heatmapDisplayState.toggle();
               this._updateGridHeatmapButtonState();
-              this._saveDisplaySettings();
-              // Emit display settings changed event
-              this.eventBus.emit(this.eventTypes.DISPLAY_SETTINGS_CHANGED, {
-                showGridHeatmap: newValue,
-                triggeredBy: 'grid-heatmap-toggle'
-              });
             }
           });
           this._updateGridHeatmapButtonState();
@@ -221,8 +216,8 @@
     _updateGridHeatmapButtonState() {
       try {
         const gridHeatmapBtn = document.getElementById('gridHeatmapBtn');
-        if (gridHeatmapBtn && this.layerState) {
-          gridHeatmapBtn.classList.toggle('active', this.layerState.isHeatmapVisible());
+        if (gridHeatmapBtn && this.heatmapDisplayState) {
+          gridHeatmapBtn.classList.toggle('active', this.heatmapDisplayState.isVisible());
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });

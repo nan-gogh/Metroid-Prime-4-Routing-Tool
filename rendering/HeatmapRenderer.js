@@ -1,19 +1,19 @@
 // rendering/HeatmapRenderer.js
-// Minimal scaffold for heatmap rendering module.
+// Renders green crystal density heatmap visualization
 
 (function (global) {
   class HeatmapRenderer {
     /**
      * Creates a new HeatmapRenderer instance for rendering green crystal density heatmaps.
      * @param {Object} mapState - The map state manager
-     * @param {Object} layerState - The layer state manager
+     * @param {Object} heatmapDisplayState - The heatmap display state manager (independent from layers)
      * @param {Object} config - Configuration object (defaults to global MP4Config)
      * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
      * @param {Array} greenCrystalLayers - Array of green crystal layer keys (defaults to GREEN_CRYSTAL_LAYERS)
      */
-    constructor(mapState, layerState, config, layers, greenCrystalLayers) {
+    constructor(mapState, heatmapDisplayState, config, layers, greenCrystalLayers) {
       this.mapState = mapState;
-      this.layerState = layerState;
+      this.heatmapDisplayState = heatmapDisplayState;
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
       this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
@@ -60,10 +60,10 @@
     render(renderContext) {
       // Schedule rAF-based render to throttle heavy work
       if (!renderContext.ctx || !renderContext.canvas) return;
-      // Clear visible canvas quickly if heatmap disabled
+      
+      // If heatmap is disabled, return early (HeatmapClearStage will clear the canvas)
       try {
-        if (!this.layerState || !this.layerState.isHeatmapVisible()) {
-          try { const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize(); renderContext.ctx.clearRect(0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer.render: Failed to clear canvas:', e); }
+        if (!this.heatmapDisplayState || !this.heatmapDisplayState.isVisible()) {
           return;
         }
       } catch (e) { console.error('HeatmapRenderer.render: Failed to check heatmap visibility:', e); }
@@ -86,7 +86,7 @@
         const pw = Math.round(cssWidth * dpr);
         const ph = Math.round(cssHeight * dpr);
 
-        // Clear offscreen
+        // Clear offscreen buffer only (heatmap canvas clearing is now handled by HeatmapClearStage in pipeline)
         try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear offscreen canvas:', e); }
 
         // Build buckets (coarse 8x8 grid) and draw into offscreen
@@ -154,14 +154,16 @@
         }
         hmCtx.restore();
 
-        // Blit offscreen to visible canvas with screen blend to integrate with tiles
+        // Blit offscreen to dedicated heatmap canvas with screen blend to integrate with tiles
         try {
-          this.ctx.save();
-          try { this.ctx.globalCompositeOperation = 'screen'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to set composite operation to screen:', e); }
+          const heatmapCtx = renderContext.ctxHeatmap;
+          if (!heatmapCtx) return; // Heatmap canvas not available
+          heatmapCtx.save();
+          try { heatmapCtx.globalCompositeOperation = 'screen'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to set composite operation to screen:', e); }
           // draw scaled (use DPR-aware drawImage)
-          try { this.ctx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', e); }
-          try { this.ctx.globalCompositeOperation = 'source-over'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to reset composite operation:', e); }
-          this.ctx.restore();
+          try { heatmapCtx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', e); }
+          try { heatmapCtx.globalCompositeOperation = 'source-over'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to reset composite operation:', e); }
+          heatmapCtx.restore();
         } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
 
       } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }

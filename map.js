@@ -26,6 +26,7 @@ class InteractiveMap {
         this.routeAnimationState = new RouteAnimationState(MP4Config);
         this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler });
         this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config);
+        this.heatmapDisplayState = typeof HeatmapDisplayState !== 'undefined' ? new HeatmapDisplayState(MP4Config, this.errorHandler, window.eventBus || this.eventBus) : null;
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
 
         // Initialize error handler
@@ -84,7 +85,8 @@ class InteractiveMap {
                         layerConfig[key] = { ...LAYERS[key] };
                     });
                 }
-                this.heatmapRenderer = new HeatmapRenderer(this.mapState, this.layerState, MP4Config, layerConfig, GREEN_CRYSTAL_LAYERS);
+                // HeatmapRenderer now uses dedicated HeatmapDisplayState instead of layerState for visibility
+                this.heatmapRenderer = new HeatmapRenderer(this.mapState, this.heatmapDisplayState, MP4Config, layerConfig, GREEN_CRYSTAL_LAYERS);
                 try { this.heatmapRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('HeatmapRenderer.init failed', 'InteractiveMap.init.heatmapRenderer', { error: e }); }
             }
             if (typeof GridRenderer !== 'undefined') {
@@ -125,8 +127,8 @@ class InteractiveMap {
                 try { this.overlayRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('OverlayRenderer.init failed', 'InteractiveMap.init.overlayRenderer', { error: e }); }
             }
             if (typeof RenderPipeline !== 'undefined') {
-                // Insert an overlay-clear stage so overlay canvas is cleared
-                // exactly once before overlay-rendering stages (grid, markers, route)
+                // Create a dedicated clear stage for the overlay canvas
+                // This runs before overlay renderers (grid, markers, route, etc.)
                 const overlayClearStage = {
                     render: (renderContext) => {
                         try {
@@ -136,14 +138,36 @@ class InteractiveMap {
                         } catch (e) { moduleErrorHandler.logDebug('overlayClearStage failed', 'InteractiveMap.init.overlayClearStage', { error: e }); }
                     }
                 };
+                // Give the stage a name for dirty flag tracking
+                Object.defineProperty(overlayClearStage.constructor, 'name', { value: 'OverlayClearStage' });
+
+                // Create a dedicated clear stage for the heatmap canvas
+                // This runs before heatmap rendering to ensure clean slate each frame
+                // ARCHITECTURE: Just like OverlayClearStage clears the overlay canvas,
+                // this stage is responsible for clearing the heatmap canvas in one centralized place
+                const heatmapClearStage = {
+                    render: (renderContext) => {
+                        try {
+                            if (!renderContext || !renderContext.ctxHeatmap) return;
+                            const canvasSize = renderContext.getCanvasSize();
+                            renderContext.ctxHeatmap.clearRect(0, 0, canvasSize.width, canvasSize.height);
+                        } catch (e) { moduleErrorHandler.logDebug('heatmapClearStage failed', 'InteractiveMap.init.heatmapClearStage', { error: e }); }
+                    }
+                };
+                // Give the stage a name for dirty flag tracking
+                Object.defineProperty(heatmapClearStage.constructor, 'name', { value: 'HeatmapClearStage' });
+                
                     // Use the concrete `OverlayRenderer` instance in the pipeline
                     // (must be constructed above if the module is available).
                     // Create RenderContext for clean canvas access abstraction
                     const renderContext = typeof RenderContext !== 'undefined' ?
                         RenderContext.fromMap(this) : null;
 
+                    // Pipeline order is critical: 
+                    // TileRenderer → HeatmapClearStage → HeatmapRenderer → OverlayClearStage → GridRenderer/Markers/Route/Overlay
                     this.renderPipeline = new RenderPipeline([
                         this.tileRenderer,
+                        heatmapClearStage,
                         this.heatmapRenderer,
                         overlayClearStage,
                         this.gridRenderer,
@@ -151,6 +175,10 @@ class InteractiveMap {
                         this.routeRenderer,
                         this.overlayRenderer
                     ].filter(Boolean), renderContext);
+                    
+                    // Store references for dirty marking
+                    this._overlayClearStage = overlayClearStage;
+                    this._heatmapClearStage = heatmapClearStage;
             }
 
             // Set up callbacks AFTER managers are created
@@ -394,7 +422,7 @@ class InteractiveMap {
         } catch (e) {
             moduleErrorHandler.logDebug('Tooltip positioning setup failed', 'InteractiveMap.init.tooltipSetup', { error: e });
         }
-        // Tileset and heatmap settings are now managed by LayerState
+        // Tileset settings managed by TilesetState, Heatmap by HeatmapDisplayState
         if (this.layerState) {
             // Load tileset from storage
             try {
@@ -408,14 +436,6 @@ class InteractiveMap {
                 const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
-
-            // Load grid heatmap from storage
-            try {
-                const gh = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP);
-                this.layerState.setHeatmapVisible(gh === '1' || gh === 1 || gh === true);
-            } catch (e) {
-                this.layerState.setHeatmapVisible(false);
-            }
         } else {
             // Fallback for when LayerState is not available
             try {
@@ -427,11 +447,15 @@ class InteractiveMap {
                 const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
+        }
 
+        // Load heatmap visibility from storage into dedicated HeatmapDisplayState
+        if (this.heatmapDisplayState) {
             try {
-                const gh = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP);
-                this._showGridHeatmap = (gh === '1' || gh === 1 || gh === true);
-            } catch (e) { this._showGridHeatmap = false; }
+                this.heatmapDisplayState.loadFromStorage(window.storageService);
+            } catch (e) {
+                this.heatmapDisplayState.setVisible(false);
+            }
         }
         
         // Load marker scaling configuration (consent-gated)
@@ -999,23 +1023,31 @@ class InteractiveMap {
     // Toggle and persist the grid heatmap overlay
     setGridHeatmap(enabled) {
         enabled = !!enabled;
-        if (this._showGridHeatmap === enabled) return;
-        this._showGridHeatmap = enabled;
-        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
-        try {
-            // Redraw the grid renderer to show/hide heatmap
-            this.markRendererDirty('GridRenderer');
-            // Inline heatmap toggle removed; nothing to update here.
-            // Update sidebar button state if present
+        // Use heatmapDisplayState if available, fallback to old method
+        if (this.heatmapDisplayState) {
+            if (this.heatmapDisplayState.isVisible() === enabled) return;
+            this.heatmapDisplayState.setVisible(enabled);
+            // Event handler in eventBus will mark renderers dirty and save to storage
+        } else {
+            // Fallback to old implementation using _showGridHeatmap
+            if (this._showGridHeatmap === enabled) return;
+            this._showGridHeatmap = enabled;
+            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
             try {
-                const btn = document.getElementById('gridHeatmapBtn');
-                if (btn) {
-                    btn.classList.toggle('active', this._showGridHeatmap);
-                    btn.setAttribute('aria-pressed', this._showGridHeatmap ? 'true' : 'false');
-                }
-            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.updateButton'); }
-        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap'); }
+                // Redraw the heatmap renderer to show/hide heatmap overlay
+                this.markRendererDirty('HeatmapRenderer');
+                // Update sidebar button state if present
+                try {
+                    const btn = document.getElementById('gridHeatmapBtn');
+                    if (btn) {
+                        btn.classList.toggle('active', this._showGridHeatmap);
+                        btn.setAttribute('aria-pressed', this._showGridHeatmap ? 'true' : 'false');
+                    }
+                } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.updateButton'); }
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap'); }
+        }
     }
+
 
     getNeededResolution() {
         return this.imageState.getNeededResolution();
@@ -1511,6 +1543,24 @@ class InteractiveMap {
     markRendererDirty(rendererName) {
         if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
             this.renderPipeline.markDirty(rendererName);
+            
+            // IMPORTANT: Auto-link dependent clear stages with their renderers
+            // This ensures canvases are cleared at the right time in the pipeline
+            
+            // When marking overlay renderers dirty, also mark OverlayClearStage dirty
+            // This ensures the overlay canvas is cleared before drawing new content
+            // Without this, overlays accumulate between frames during pan/zoom operations
+            const overlayRenderers = ['GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+            if (overlayRenderers.includes(rendererName)) {
+                this.renderPipeline.markDirty('OverlayClearStage');
+            }
+            
+            // When marking HeatmapRenderer dirty, also mark HeatmapClearStage dirty
+            // This ensures the heatmap canvas is cleared before drawing new heatmap
+            // This maintains architectural consistency with overlay rendering
+            if (rendererName === 'HeatmapRenderer') {
+                this.renderPipeline.markDirty('HeatmapClearStage');
+            }
         } else {
             // Fallback: trigger full render if pipeline doesn't support dirty flags
             this.requestRender();
@@ -2037,7 +2087,10 @@ async function init() {
                     // This ensures multiple render requests in one frame are batched together
                     if (map && map.renderPipeline && typeof map.renderPipeline.markDirty === 'function') {
                         // Mark all renderers dirty for a full render, batched via rAF
-                        const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+                        // ARCHITECTURE NOTE: Both HeatmapClearStage and OverlayClearStage MUST be marked dirty
+                        // to ensure their respective canvases are cleared before content is rendered.
+                        // This prevents accumulation during pan/zoom operations and maintains unified clearing architecture.
+                        const allRenderers = ['TileRenderer', 'HeatmapClearStage', 'HeatmapRenderer', 'OverlayClearStage', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
                         allRenderers.forEach(name => map.renderPipeline.markDirty(name));
                     } else if (map && typeof map.render === 'function') {
                         // Fallback if pipeline is not available
@@ -2136,12 +2189,38 @@ async function init() {
             
             eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
                 try {
-                    // Display settings have changed, apply them to the map
-                    if (map && map.layerState && typeof map.setGridHeatmap === 'function') {
-                        map.setGridHeatmap(map.layerState.heatmapVisible, map.layerState.gridVisible);
+                    // Display settings have changed, mark HeatmapRenderer dirty to re-render
+                    // NOTE: SettingsController already updated layerState before emitting this event,
+                    //       so we just need to mark the renderer dirty to trigger a re-render
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('HeatmapRenderer');
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED handler');
+                }
+            });
+            
+            eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
+                try {
+                    // Heatmap visibility changed via dedicated HeatmapDisplayState
+                    // Mark HeatmapRenderer dirty AND all overlay renderers to ensure clean re-render
+                    // This prevents overlay elements from disappearing when heatmap toggled
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        // Mark heatmap and all overlay renderers for re-rendering
+                        map.markRendererDirty('HeatmapRenderer');
+                        map.markRendererDirty('GridRenderer');
+                        map.markRendererDirty('MarkerRenderer');
+                        map.markRendererDirty('RouteRenderer');
+                        map.markRendererDirty('OverlayRenderer');
+                    }
+                    // Save new visibility state to persistent storage
+                    if (map && map.heatmapDisplayState && window.storageService) {
+                        try {
+                            map.heatmapDisplayState.saveToStorage(window.storageService);
+                        } catch (e) { moduleErrorHandler.logDebug('HEATMAP_VISIBILITY_CHANGED: Failed to save storage', 'EventBus:HEATMAP_VISIBILITY_CHANGED - saveStorage', { error: e }); }
+                    }
+                } catch (e) {
+                    moduleErrorHandler.logError(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED handler');
                 }
             });
             
@@ -2567,6 +2646,7 @@ async function init() {
         if (typeof SettingsController !== 'undefined') {
             settingsController = new SettingsController({
                 layerState: map.layerState,
+                heatmapDisplayState: map.heatmapDisplayState,
                 highlightState: map.highlightState,
                 tilesetState: map.tilesetState,
                 markerManager: map.markerManager,

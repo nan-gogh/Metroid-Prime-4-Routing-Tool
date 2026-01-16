@@ -158,109 +158,12 @@
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
         const gridSpacing = (this.config.MAP_SIZE || 8192) / 8;
 
-        // Clear heatmap backing canvas so it doesn't accumulate between draws
-        try {
-            if (renderContext.ctxHeatmap) {
-                renderContext.ctxHeatmap.clearRect(0, 0, cssWidth, cssHeight);
-            }
-        } catch (e) { (this.errorHandler || global.errorHandler || console).error('GridRenderer.render: Failed to clear heatmap canvas:', e); }
-
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
         const opacity = Math.min(0.4, 0.05 + this.mapState.zoom * 0.3);
 
-        // Optional green-crystal heatmap (draw into heatmap canvas, above tiles)
-        if (this.showGridHeatmap && renderContext.ctxHeatmap) {
-            try {
-                const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
-                const counts = new Array(cols * rows).fill(0);
-                const greenKeys = this.greenCrystalLayers;
-                greenKeys.forEach(k => {
-                    const layer = this.layers[k];
-                    if (layer && Array.isArray(layer.markers)) {
-                        layer.markers.forEach(m => {
-                            const mx = Number(m.x); const my = Number(m.y);
-                            if (!isFinite(mx) || !isFinite(my)) return;
-                            const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                            const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                            counts[rr * cols + cc]++;
-                        });
-                    }
-                });
-                const maxCount = Math.max(1, ...counts);
-                const hmCtx = map.ctxHeatmap;
-                hmCtx.save();
-                // draw heatmap cells into the dedicated canvas; CSS `mix-blend-mode: screen` is used to composite with tiles beneath
-                hmCtx.globalCompositeOperation = 'source-over';
-                // Map counts (1..16) into a more visible green ramp using HSL and a gamma curve
-                const rangeMin = 1;
-                const rangeMax = Math.max(16, maxCount || 16);
-                // Build buckets of markers per 8x8 cell so we can draw a soft radial blob per marker (lighter and more organic)
-                const buckets = new Array(cols * rows);
-                for (let i = 0; i < buckets.length; i++) buckets[i] = [];
-                try {
-                    const greenKeys = this.greenCrystalLayers;
-                    greenKeys.forEach(k => {
-                        const layer = this.layers[k];
-                        if (layer && Array.isArray(layer.markers)) {
-                            layer.markers.forEach(m => {
-                                const mx = Number(m.x); const my = Number(m.y);
-                                if (!isFinite(mx) || !isFinite(my)) return;
-                                const cc = Math.min(cols - 1, Math.max(0, Math.floor(mx * cols)));
-                                const rr = Math.min(rows - 1, Math.max(0, Math.floor(my * rows)));
-                                buckets[rr * cols + cc].push({mx, my});
-                            });
-                        }
-                    });
-                } catch (e) { this.errorHandler.logDebug('renderDetailGrid: failed to build heatmap buckets', 'GridRenderer.renderDetailGrid.buildBuckets', { error: e }); }
-
-                // For each cell with markers, compute the target total alpha and split it across markers
-                for (let idx = 0; idx < buckets.length; idx++) {
-                    const markers = buckets[idx];
-                    const cnt = markers.length;
-                    if (!cnt) continue;
-                    // Normalize in [0..1] relative to expected range (1..16)
-                    const tRaw = Math.min(1, Math.max(0, (cnt - rangeMin) / (rangeMax - rangeMin)));
-                    const gamma = 0.6;
-                    const t = Math.pow(tRaw, gamma);
-
-                    // HSL hue shifts with t (yellow-green -> green)
-                    const hue = Math.round(MP4Config.HEATMAP.HUE_RANGE.MIN + (MP4Config.HEATMAP.HUE_RANGE.MAX - MP4Config.HEATMAP.HUE_RANGE.MIN) * t);
-                    const sat = 100; // max saturation
-                    const light = 55; // fixed lightness
-
-                    // Target alpha for the whole cell (raised to improve visibility)
-                    const alphaMin = 0.01; const alphaMax = 0.75; const steps = 15;
-                    const ratioForAlpha = Math.min(1, Math.max(0, (cnt - 1) / steps));
-                    const targetAlpha = Math.max(alphaMin, Math.min(alphaMax, alphaMin + ratioForAlpha * (alphaMax - alphaMin)));
-                    // Split alpha among markers and apply a slight boost so individual blobs are more visible
-                    const alphaBoost = 1.4;
-                    const perMarkerAlpha = Math.min(alphaMax, Math.max(0.01, (targetAlpha * alphaBoost) / cnt));
-
-                    // Draw a radial gradient for each marker (smaller radius for less blur)
-                    for (let m of markers) {
-                        try {
-                            const screenX = m.mx * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
-                            const screenY = m.my * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
-                            // Skip off-screen markers early
-                            if (screenX + 2 < 0 || screenX - 2 > cssWidth || screenY + 2 < 0 || screenY - 2 > cssHeight) continue;
-                            const radius = Math.max(8, Math.round(((this.config.MAP_SIZE || 8192) / 8) * this.mapState.zoom * 0.45));
-                            const cx = Math.round(screenX);
-                            const cy = Math.round(screenY);
-                            const g = hmCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-                            g.addColorStop(0.0, `hsla(${hue}, ${sat}%, ${light}%, ${perMarkerAlpha})`);
-                            g.addColorStop(0.5, `hsla(${hue}, ${sat}%, ${light}%, ${Math.max(0.02, perMarkerAlpha * 0.6)})`);
-                            g.addColorStop(1.0, `hsla(${hue}, ${sat}%, ${light}%, 0)`);
-                            hmCtx.globalCompositeOperation = 'lighter';
-                            hmCtx.fillStyle = g;
-                            hmCtx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-                            hmCtx.globalCompositeOperation = 'source-over';
-                        } catch (e) { (this.errorHandler || global.errorHandler || console).error('GridRenderer.render: Failed to render heatmap marker:', e); }
-                    }
-                }
-                hmCtx.restore();
-            } catch (e) { /* non-fatal */ }
-        }
+        // Heatmap rendering is now handled exclusively by HeatmapRenderer
+        // GridRenderer only handles the 8x8 grid itself
 
         // Cyan gridlines for both satellite and holo views
         ctx.strokeStyle = 'rgba(34, 211, 238, 1.0)';

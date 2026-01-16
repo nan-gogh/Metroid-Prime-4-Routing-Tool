@@ -72,6 +72,7 @@
     TILESET_CHANGED: 'tileset:changed',
     TILESET_GRAYSCALE_CHANGED: 'tileset:grayscale-changed',
     DISPLAY_SETTINGS_CHANGED: 'display:settings-changed',
+    HEATMAP_VISIBILITY_CHANGED: 'heatmap:visibility-changed',
     EDIT_MODE_CHANGED: 'edit:mode-changed',
     SELECTION_CHANGED: 'selection:changed',
     SELECTION_CLEARED: 'selection:cleared',
