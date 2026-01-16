@@ -194,7 +194,19 @@
 
     // Reset to default view
     resetView() {
-      this.zoom = this.config.ZOOM ? this.config.ZOOM.DEFAULT_MIN || 0.1 : 0.1;
+      // Calculate fit-to-viewport zoom like initial load does
+      // Reserve padding for axis labels so indices are visible
+      const labelFontMax = 48;
+      const labelPadding = 8;
+      const halfW = labelFontMax * 0.6; // approx half-width of label
+      const halfH = labelFontMax / 2;
+      // Available space after reserving label margins on both sides
+      const availW = Math.max(32, this.canvasWidth - 2 * (labelPadding + halfW));
+      const availH = Math.max(32, this.canvasHeight - 2 * (labelPadding + halfH));
+      const fitZoom = Math.min(availW / this.mapSize, availH / this.mapSize);
+      
+      // Set zoom to fit the map in viewport
+      this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, fitZoom));
       this.centerMap();
     }
 

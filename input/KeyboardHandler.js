@@ -205,22 +205,24 @@
         // Arrow keys + WASD: pan by a fraction of viewport (Shift for larger steps)
         const stepFrac = ev.shiftKey ? 0.25 : 0.08;
         let moved = false;
+        let deltaX = 0, deltaY = 0;
+        
         try {
           const key = ev.key;
           if (key === 'ArrowLeft' || key === 'a' || key === 'A') { 
-            this.map.panX += Math.round(this.map.canvas.clientWidth * stepFrac); 
+            deltaX = Math.round(this.map.canvas.clientWidth * stepFrac); 
             moved = true; 
           }
           else if (key === 'ArrowRight' || key === 'd' || key === 'D') { 
-            this.map.panX -= Math.round(this.map.canvas.clientWidth * stepFrac); 
+            deltaX = -Math.round(this.map.canvas.clientWidth * stepFrac); 
             moved = true; 
           }
           else if (key === 'ArrowUp' || key === 'w' || key === 'W') { 
-            this.map.panY += Math.round(this.map.canvas.clientHeight * stepFrac); 
+            deltaY = Math.round(this.map.canvas.clientHeight * stepFrac); 
             moved = true; 
           }
           else if (key === 'ArrowDown' || key === 's' || key === 'S') { 
-            this.map.panY -= Math.round(this.map.canvas.clientHeight * stepFrac); 
+            deltaY = -Math.round(this.map.canvas.clientHeight * stepFrac); 
             moved = true; 
           }
         } catch (err) { this.errorHandler.logError('Failed to handle arrow key panning', err); }
@@ -228,14 +230,14 @@
         if (moved) {
           try { 
             ev.preventDefault(); 
+            // Use MapState.setPan() to properly update state and emit events through modular infrastructure
+            const newPanX = this.mapState.panX + deltaX;
+            const newPanY = this.mapState.panY + deltaY;
+            this.mapState.setPan(newPanX, newPanY);
+            
             this.map.updateResolution(); 
-            // Emit events instead of direct render call
-            this.eventBus.emit(this.eventTypes.MAP_VIEW_CHANGED, {
-              panX: this.map.panX,
-              panY: this.map.panY,
-              triggeredBy: 'keyboard-pan'
-            });
             this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+            
             // Save view after keyboard pan
             try { this.map.saveViewToStorage(); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'KeyboardHandler.pan.saveViewToStorage'); }
           } catch (err) { this.errorHandler.logError('Failed to update map after keyboard pan', err); }

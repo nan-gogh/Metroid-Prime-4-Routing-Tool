@@ -789,30 +789,35 @@ class InteractiveMap {
     }
 
     zoomIn() {
-        const zoomFactor = 1.3;
-        const newZoom = Math.max(this.mapState.minZoom, Math.min(this.mapState.maxZoom, this.mapState.zoom * zoomFactor));
-        this.mapState.zoom = newZoom;
-        this.imageState.updateResolution();
-        this.updateResolution();
-        this.render();
+        // Use mapState.zoomIn() which properly handles zoom center and pan adjustment
+        if (this.mapState && typeof this.mapState.zoomIn === 'function') {
+            // Zoom to canvas center (no explicit centerX/centerY means it defaults to canvas center)
+            this.mapState.zoomIn();
+            this.imageState.updateResolution();
+            this.updateResolution();
+            this.render();
+        }
     }
 
     zoomOut() {
-        const zoomFactor = 1 / 1.3;
-        const newZoom = Math.max(this.mapState.minZoom, Math.min(this.mapState.maxZoom, this.mapState.zoom * zoomFactor));
-        this.mapState.zoom = newZoom;
-        this.imageState.updateResolution();
-        this.updateResolution();
-        this.render();
+        // Use mapState.zoomOut() which properly handles zoom center and pan adjustment
+        if (this.mapState && typeof this.mapState.zoomOut === 'function') {
+            // Zoom from canvas center (no explicit centerX/centerY means it defaults to canvas center)
+            this.mapState.zoomOut();
+            this.imageState.updateResolution();
+            this.updateResolution();
+            this.render();
+        }
     }
 
     resetView() {
-        this.mapState.panX = 0;
-        this.mapState.panY = 0;
-        this.mapState.zoom = this.mapState.minZoom;
-        this.imageState.updateResolution();
-        this.updateResolution();
-        this.render();
+        // Use mapState.resetView() which properly centers and sets zoom through modular infrastructure
+        if (this.mapState && typeof this.mapState.resetView === 'function') {
+            this.mapState.resetView();
+            this.imageState.updateResolution();
+            this.updateResolution();
+            this.render();
+        }
     }
     
     bindEvents() {
@@ -2272,17 +2277,15 @@ async function init() {
             
             eventBus.on(window.EventTypes.MAP_VIEW_CHANGED, (data) => {
                 try {
-                    // Update map view state (pan, zoom, etc.)
+                    // MAP_VIEW_CHANGED event comes FROM mapState, so don't call setPan/setZoom again
+                    // (that would create an infinite loop). Just handle derived effects and rendering.
                     if (data && map && map.mapState) {
-                        if (typeof data.panX === 'number' && typeof data.panY === 'number') {
-                            map.mapState.setPan(data.panX, data.panY);
+                        // If zoom changed, update resolution and image state
+                        if (typeof data.zoom === 'number' && data.zoom !== map.mapState.zoom) {
+                            map.imageState && map.imageState.updateResolution && map.imageState.updateResolution();
+                            map.updateResolution && map.updateResolution();
                         }
-                        if (typeof data.zoom === 'number') {
-                            map.mapState.setZoom(data.zoom);
-                            map.imageState.updateResolution();
-                            map.updateResolution();
-                        }
-                        // Trigger render for view changes
+                        // Trigger render for view changes (map.mapState already has the new panX, panY, zoom)
                         if (map && typeof map.render === 'function') {
                             map.render();
                         }
