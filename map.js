@@ -16,6 +16,17 @@ class InteractiveMap {
         this.canvasHeatmap = document.getElementById('heatmapCanvas');
         this.ctxHeatmap = this.canvasHeatmap ? this.canvasHeatmap.getContext('2d') : null;
 
+        // Sub-canvas architecture: Each renderer has its own canvas for independent rendering
+        // This allows selective rendering without forcing unrelated renderers to redraw
+        this.canvasGrid = document.getElementById('gridCanvas');
+        this.ctxGrid = this.canvasGrid ? this.canvasGrid.getContext('2d') : null;
+        this.canvasMarker = document.getElementById('markerCanvas');
+        this.ctxMarker = this.canvasMarker ? this.canvasMarker.getContext('2d') : null;
+        this.canvasRoute = document.getElementById('routeCanvas');
+        this.ctxRoute = this.canvasRoute ? this.canvasRoute.getContext('2d') : null;
+        this.canvasOverlay = document.getElementById('overlayCanvas');
+        this.ctxOverlay = this.canvasOverlay ? this.canvasOverlay.getContext('2d') : null;
+
         // Initialize error handler FIRST (before state managers that need it)
         this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
 
@@ -42,7 +53,8 @@ class InteractiveMap {
             this.markerManager = new MarkerManager(
                 { maxMarkers: 50, layerPrefix: 'cm' },
                 StorageInterface,
-                NotificationInterface
+                NotificationInterface,
+                window.eventBus
             );
         }
         // Create RouteManager
@@ -127,87 +139,35 @@ class InteractiveMap {
                 try { this.overlayRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('OverlayRenderer.init failed', 'InteractiveMap.init.overlayRenderer', { error: e }); }
             }
             if (typeof RenderPipeline !== 'undefined') {
-                // Create a dedicated clear stage for the overlay canvas
-                // This runs before overlay renderers (grid, markers, route, etc.)
-                const overlayClearStage = {
-                    render: (renderContext) => {
-                        try {
-                            if (!renderContext || !renderContext.ctx) return;
-                            const canvasSize = renderContext.getCanvasSize();
-                            renderContext.ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-                        } catch (e) { moduleErrorHandler.logDebug('overlayClearStage failed', 'InteractiveMap.init.overlayClearStage', { error: e }); }
-                    }
-                };
-                // Give the stage a name property for dirty flag tracking (RenderPipeline uses constructor.name)
-                // This must match what's passed to markDirty() - define on instance, not on Function.prototype
-                Object.defineProperty(overlayClearStage, 'constructor', {
-                    value: { name: 'OverlayClearStage' },
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                });
-
-                // Create a dedicated clear stage for the heatmap canvas
-                // This runs before heatmap rendering to ensure clean slate each frame
-                // ARCHITECTURE: Just like OverlayClearStage clears the overlay canvas,
-                // this stage is responsible for clearing the heatmap canvas in one centralized place
-                const heatmapClearStage = {
-                    render: (renderContext) => {
-                        try {
-                            if (!renderContext || !renderContext.ctxHeatmap) return;
-                            const canvasSize = renderContext.getCanvasSize();
-                            renderContext.ctxHeatmap.clearRect(0, 0, canvasSize.width, canvasSize.height);
-                        } catch (e) { moduleErrorHandler.logDebug('heatmapClearStage failed', 'InteractiveMap.init.heatmapClearStage', { error: e }); }
-                    }
-                };
-                // Give the stage a name property for dirty flag tracking (RenderPipeline uses constructor.name)
-                // This must match what's passed to markDirty() - define on instance, not on Function.prototype
-                Object.defineProperty(heatmapClearStage, 'constructor', {
-                    value: { name: 'HeatmapClearStage' },
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                });
+                // Sub-canvas architecture: Each overlay renderer has its own canvas
+                // They render independently and are composited onto the main display by CompositeStage
+                // Each renderer clears its own canvas, eliminating the need for separate clear stages
                 
-                    // Use the concrete `OverlayRenderer` instance in the pipeline
-                    // (must be constructed above if the module is available).
-                    // Create RenderContext for clean canvas access abstraction
-                    const renderContext = typeof RenderContext !== 'undefined' ?
-                        RenderContext.fromMap(this) : null;
+                // Composite stage: Layers all sub-canvases onto the main display
+                // This runs AFTER all overlay renderers complete
+                const compositeStage = typeof CompositeStage !== 'undefined' ?
+                    new CompositeStage() : null;
+                
+                // Create RenderContext for clean canvas access abstraction
+                const renderContext = typeof RenderContext !== 'undefined' ?
+                    RenderContext.fromMap(this) : null;
 
-                    // Pipeline order is critical: 
-                    // TileRenderer → HeatmapClearStage → HeatmapRenderer → OverlayClearStage → GridRenderer/Markers/Route/Overlay
-                    this.renderPipeline = new RenderPipeline([
-                        this.tileRenderer,
-                        heatmapClearStage,
-                        this.heatmapRenderer,
-                        overlayClearStage,
-                        this.gridRenderer,
-                        this.markerRenderer,
-                        this.routeRenderer,
-                        this.overlayRenderer
-                    ].filter(Boolean), renderContext);
-                    
-                    // Store references for dirty marking
-                    this._overlayClearStage = overlayClearStage;
-                    this._heatmapClearStage = heatmapClearStage;
+                // Pipeline order is critical: 
+                // TileRenderer → HeatmapRenderer → GridRenderer/Markers/Route/Overlay → CompositeStage
+                // Each renderer clears its own canvas at the start of render()
+                this.renderPipeline = new RenderPipeline([
+                    this.tileRenderer,
+                    this.heatmapRenderer,
+                    this.gridRenderer,
+                    this.markerRenderer,
+                    this.routeRenderer,
+                    this.overlayRenderer,
+                    compositeStage
+                ].filter(Boolean), renderContext);
             }
 
             // Set up callbacks AFTER managers are created
             if (this.markerManager) {
-                this.markerManager.setOnChanged(() => {
-                    try {
-                        const markers = this.markerManager.getAllMarkers();
-                        this.customMarkers = markers;
-                        // Update LAYERS for rendering compatibility
-                        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-                            LAYERS.customMarkers.markers = markers;
-                        }
-                        this.markRendererDirty('MarkerRenderer');
-                    } catch (e) {
-                        moduleErrorHandler.logDebug('MarkerManager callback failed', 'InteractiveMap.init.markerManagerCallback', { error: e });
-                    }
-                });
                 this.markerManager.setOnCleanupRouteReferences((deletedMarkerUid) => {
                     try {
                         if (this.routeManager) {
@@ -382,12 +342,12 @@ class InteractiveMap {
             try {
                 const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
                 if (g === null || typeof g === 'undefined') {
-                    this.layerState.setGridVisible(true);
+                    this.layerState.setGridVisible(false);
                 } else {
                     this.layerState.setGridVisible(g === '1' || g === 1 || g === 'true' || g === true);
                 }
             } catch (e) {
-                this.layerState.setGridVisible(true);
+                this.layerState.setGridVisible(false);
             }
         }
         
@@ -423,13 +383,10 @@ class InteractiveMap {
         this.tooltip = document.getElementById('tooltip');
 
         // TooltipManager initialization removed - tooltips are now managed by OverlayRenderer via showTooltip()
-        // Move tooltip into the map container and ensure container is positioned so absolute coords align
+        // Keep tooltip at root level for proper positioning above sidebar
         try {
-            const parent = this.canvas && this.canvas.parentElement;
-            if (this.tooltip && parent) {
-                try { if (window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative'; } catch (e) { moduleErrorHandler.logDebug('Failed to set parent position for tooltip', 'InteractiveMap.init.tooltipPosition', { error: e }); }
-                try { parent.appendChild(this.tooltip); } catch (e) { moduleErrorHandler.logDebug('Failed to append tooltip to parent', 'InteractiveMap.init.tooltipAppend', { error: e }); }
-                try { this.tooltip.style.position = 'absolute'; this.tooltip.style.zIndex = '999'; this.tooltip.style.pointerEvents = 'none'; } catch (e) { moduleErrorHandler.logDebug('Failed to style tooltip', 'InteractiveMap.init.tooltipStyle', { error: e }); }
+            if (this.tooltip) {
+                try { this.tooltip.style.position = 'absolute'; this.tooltip.style.zIndex = '150'; this.tooltip.style.pointerEvents = 'none'; } catch (e) { moduleErrorHandler.logDebug('Failed to style tooltip', 'InteractiveMap.init.tooltipStyle', { error: e }); }
             }
         } catch (e) {
             moduleErrorHandler.logDebug('Tooltip positioning setup failed', 'InteractiveMap.init.tooltipSetup', { error: e });
@@ -785,6 +742,45 @@ class InteractiveMap {
             }
         }
 
+        // Size sub-canvas elements (grid, marker, route, overlay)
+        // Each renderer manages its own independent canvas
+        if (this.canvasGrid && this.ctxGrid) {
+            this.canvasGrid.style.width = cssWidth + 'px';
+            this.canvasGrid.style.height = cssHeight + 'px';
+            this.canvasGrid.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasGrid.height = Math.max(1, Math.floor(cssHeight * dpr));
+            try { this.ctxGrid.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
+                this.errorHandler.logDebug('Failed to set grid canvas transform', 'InteractiveMap.resize.gridTransform', { error: e });
+            }
+        }
+        if (this.canvasMarker && this.ctxMarker) {
+            this.canvasMarker.style.width = cssWidth + 'px';
+            this.canvasMarker.style.height = cssHeight + 'px';
+            this.canvasMarker.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasMarker.height = Math.max(1, Math.floor(cssHeight * dpr));
+            try { this.ctxMarker.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
+                this.errorHandler.logDebug('Failed to set marker canvas transform', 'InteractiveMap.resize.markerTransform', { error: e });
+            }
+        }
+        if (this.canvasRoute && this.ctxRoute) {
+            this.canvasRoute.style.width = cssWidth + 'px';
+            this.canvasRoute.style.height = cssHeight + 'px';
+            this.canvasRoute.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasRoute.height = Math.max(1, Math.floor(cssHeight * dpr));
+            try { this.ctxRoute.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
+                this.errorHandler.logDebug('Failed to set route canvas transform', 'InteractiveMap.resize.routeTransform', { error: e });
+            }
+        }
+        if (this.canvasOverlay && this.ctxOverlay) {
+            this.canvasOverlay.style.width = cssWidth + 'px';
+            this.canvasOverlay.style.height = cssHeight + 'px';
+            this.canvasOverlay.width = Math.max(1, Math.floor(cssWidth * dpr));
+            this.canvasOverlay.height = Math.max(1, Math.floor(cssHeight * dpr));
+            try { this.ctxOverlay.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
+                this.errorHandler.logDebug('Failed to set overlay canvas transform', 'InteractiveMap.resize.overlayTransform', { error: e });
+            }
+        }
+
         // Update MapState with new canvas dimensions
         if (this.mapState) {
             this.mapState.setCanvasSize(cssWidth, cssHeight, dpr);
@@ -800,7 +796,8 @@ class InteractiveMap {
         try { this._createHoneycombPattern && this._createHoneycombPattern(); } catch (e) {
             this.errorHandler.logDebug('Failed to recreate honeycomb pattern', 'InteractiveMap.resize.honeycombPattern', { error: e });
         }
-        this.render();
+        // Trigger full render when canvas resizes (affects all renderers through batched pipeline)
+        this.requestRender();
     }  
     
     centerMap() {
@@ -824,7 +821,8 @@ class InteractiveMap {
             this.mapState.zoomIn();
             this.imageState.updateResolution();
             this.updateResolution();
-            this.render();
+            // Trigger batched render for zoom change through pipeline
+            this.requestRender();
         }
     }
 
@@ -835,7 +833,8 @@ class InteractiveMap {
             this.mapState.zoomOut();
             this.imageState.updateResolution();
             this.updateResolution();
-            this.render();
+            // Trigger batched render for zoom change through pipeline
+            this.requestRender();
         }
     }
 
@@ -845,7 +844,8 @@ class InteractiveMap {
             this.mapState.resetView();
             this.imageState.updateResolution();
             this.updateResolution();
-            this.render();
+            // Trigger batched render for view reset through pipeline
+            this.requestRender();
         }
     }
     
@@ -1279,9 +1279,26 @@ class InteractiveMap {
             this.hideTooltip();
         }
 
-        // Only re-render the overlay (markers/route/tooltip). Tiles are expensive
-        // to redraw at high zoom and don't change when toggling layers.
-        try { this.render(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.render'); }
+        // Mark renderers as dirty and execute selective render
+        // Only re-render affected renderers based on what changed
+        try { 
+            // Markers, routes, and overlays always affected by layer toggles
+            this.markRendererDirty('MarkerRenderer');
+            this.markRendererDirty('RouteRenderer');
+            this.markRendererDirty('OverlayRenderer');
+            // Grid layer visibility change requires grid to be redrawn too
+            if (layerKey === 'grid') {
+                this.markRendererDirty('GridRenderer');
+            }
+            // Execute render immediately with dirty flags - only marked renderers will execute
+            if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
+                // Get the set of dirty renderers and render them immediately
+                const dirtyRenderers = this.renderPipeline.getDirtyRenderers();
+                if (dirtyRenderers.size > 0) {
+                    this.renderPipeline.render(dirtyRenderers);
+                }
+            }
+        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.render'); }
     }
     
     checkMarkerHover(mouseX, mouseY) {
@@ -1447,30 +1464,17 @@ class InteractiveMap {
         // Display layer name, optional index, then marker UID
         const idxPart = (displayIndex !== null) ? ` ${displayIndex}` : '';
         this.tooltip.textContent = `${layerName}${idxPart} - ${marker.uid}`;
-        // Compute desired position (relative to map container since tooltip has been moved into it)
+        // Compute desired position (relative to viewport since tooltip is at root level)
         const margin = 6;
         try {
-            const parent = this.tooltip.parentElement;
-            let canvasOffsetLeft = 0, canvasOffsetTop = 0;
-            try {
-                if (this.canvas && parent) {
-                    const canvasRect = this.canvas.getBoundingClientRect();
-                    const parentRect = parent.getBoundingClientRect();
-                    canvasOffsetLeft = Math.round(canvasRect.left - parentRect.left);
-                    canvasOffsetTop = Math.round(canvasRect.top - parentRect.top);
-                }
-            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.showTooltip.computeOffsets'); }
+            let desiredLeft = Math.round(x + 15);
+            let desiredTop = Math.round(y - 10);
 
-            let desiredLeft = Math.round(canvasOffsetLeft + x + 15);
-            let desiredTop = Math.round(canvasOffsetTop + y - 10);
-
-            // Clamp to container bounds so tooltip doesn't overflow
-            if (parent) {
-                const maxLeft = Math.max(0, parent.clientWidth - (this.tooltip.offsetWidth || 120) - margin);
-                const maxTop = Math.max(0, parent.clientHeight - (this.tooltip.offsetHeight || 28) - margin);
-                desiredLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
-                desiredTop = Math.min(Math.max(desiredTop, margin), maxTop);
-            }
+            // Clamp to viewport bounds so tooltip doesn't overflow
+            const maxLeft = Math.max(0, window.innerWidth - (this.tooltip.offsetWidth || 120) - margin);
+            const maxTop = Math.max(0, window.innerHeight - (this.tooltip.offsetHeight || 28) - margin);
+            desiredLeft = Math.min(Math.max(desiredLeft, margin), maxLeft);
+            desiredTop = Math.min(Math.max(desiredTop, margin), maxTop);
             this.tooltip.style.left = `${desiredLeft}px`;
             this.tooltip.style.top = `${desiredTop}px`;
         } catch (e) { 
@@ -1556,42 +1560,48 @@ class InteractiveMap {
         if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
             this.renderPipeline.markDirty(rendererName);
             
-            // IMPORTANT: Auto-link dependent clear stages with their renderers
-            // This ensures canvases are cleared at the right time in the pipeline
-            
-            // When marking overlay renderers dirty, also mark OverlayClearStage dirty
-            // This ensures the overlay canvas is cleared before drawing new content
-            // Without this, overlays accumulate between frames during pan/zoom operations
-            const overlayRenderers = ['GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
-            if (overlayRenderers.includes(rendererName)) {
-                this.renderPipeline.markDirty('OverlayClearStage');
-            }
-            
-            // When marking HeatmapRenderer dirty, also mark HeatmapClearStage dirty
-            // This ensures the heatmap canvas is cleared before drawing new heatmap
-            // This maintains architectural consistency with overlay rendering
-            if (rendererName === 'HeatmapRenderer') {
-                this.renderPipeline.markDirty('HeatmapClearStage');
+            // Sub-canvas architecture: Each renderer manages its own canvas independently
+            // CompositeStage must be marked dirty whenever a sub-canvas renderer changes
+            // to ensure sub-canvases are composited onto the display
+            const subCanvasRenderers = ['HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+            if (subCanvasRenderers.includes(rendererName)) {
+                this.renderPipeline.markDirty('CompositeStage');
             }
         } else {
             // Fallback: trigger full render if pipeline doesn't support dirty flags
-            this.requestRender();
+            this._requestFullRender();
+        }
+    }
+
+    /**
+     * Requests a full render of all renderers via the batching system.
+     * Used for expensive operations like zoom, pan, resize that affect tiles and overlays.
+     * Marks all renderers dirty and schedules RAF for batched execution.
+     * @private Internal method - use markRendererDirty() for selective updates
+     */
+    _requestFullRender() {
+        if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
+            // Mark all renderers dirty for full render
+            const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+            allRenderers.forEach(name => this.renderPipeline.markDirty(name));
+            // CompositeStage already marked dirty by markRendererDirty() for overlays, but mark explicitly
+            this.renderPipeline.markDirty('CompositeStage');
+        } else {
+            // Fallback: immediate render if pipeline doesn't support dirty flags
+            this.render();
         }
     }
 
     /**
      * Requests a batched render using the render pipeline's dirty flag system.
-     * Multiple calls in the same frame will be batched together.
+     * Multiple calls in the same frame will be batched together into a single RAF callback.
+     * Used specifically for zoom/pan/resize operations that affect all renderers.
+     * This method delegates to _requestFullRender() which properly queues all renderers.
      */
     requestRender() {
-        if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
-            // Mark all renderers as dirty for a full render
-            const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
-            allRenderers.forEach(name => this.renderPipeline.markDirty(name));
-        } else {
-            // Fallback: immediate render if pipeline doesn't support dirty flags
-            this.render();
-        }
+        // For top-level operations (zoom, pan, resize), mark all renderers dirty
+        // This ensures consistent, batched rendering behavior through the pipeline
+        this._requestFullRender();
     }
 
     /**
@@ -2099,10 +2109,9 @@ async function init() {
                     // This ensures multiple render requests in one frame are batched together
                     if (map && map.renderPipeline && typeof map.renderPipeline.markDirty === 'function') {
                         // Mark all renderers dirty for a full render, batched via rAF
-                        // ARCHITECTURE NOTE: Both HeatmapClearStage and OverlayClearStage MUST be marked dirty
-                        // to ensure their respective canvases are cleared before content is rendered.
-                        // This prevents accumulation during pan/zoom operations and maintains unified clearing architecture.
-                        const allRenderers = ['TileRenderer', 'HeatmapClearStage', 'HeatmapRenderer', 'OverlayClearStage', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+                        // With sub-canvas architecture, each renderer clears its own canvas
+                        // CompositeStage composes all sub-canvases onto the main display
+                        const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer', 'CompositeStage'];
                         allRenderers.forEach(name => map.renderPipeline.markDirty(name));
                     } else if (map && typeof map.render === 'function') {
                         // Fallback if pipeline is not available
@@ -2121,8 +2130,21 @@ async function init() {
                         map.layerState.layerVisibility = data.layerVisibility;
                     }
                     // Render when layer visibility changes
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        // Grid layer visibility change requires grid to be redrawn
+                        if (data && data.layerKey === 'grid') {
+                            map.markRendererDirty('GridRenderer');
+                        }
+                        map.markRendererDirty('MarkerRenderer');
+                        map.markRendererDirty('RouteRenderer');
+                        map.markRendererDirty('OverlayRenderer');
+                        // Execute render immediately with dirty flags - only marked renderers will execute
+                        if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
+                            const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
+                            if (dirtyRenderers.size > 0) {
+                                map.renderPipeline.render(dirtyRenderers);
+                            }
+                        }
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:LAYER_VISIBILITY_CHANGED handler');
@@ -2201,11 +2223,25 @@ async function init() {
             
             eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
                 try {
-                    // Display settings have changed, mark HeatmapRenderer dirty to re-render
+                    // Display settings have changed, mark affected renderers dirty to re-render
                     // NOTE: SettingsController already updated layerState before emitting this event,
-                    //       so we just need to mark the renderer dirty to trigger a re-render
+                    //       so we just need to mark the renderer(s) dirty to trigger a re-render
                     if (map && typeof map.markRendererDirty === 'function') {
-                        map.markRendererDirty('HeatmapRenderer');
+                        // Grid visibility change requires grid to be redrawn
+                        if (data && typeof data.gridVisible === 'boolean') {
+                            map.markRendererDirty('GridRenderer');
+                        }
+                        // Heatmap visibility change requires heatmap to be redrawn
+                        if (data && typeof data.heatmapVisible === 'boolean') {
+                            map.markRendererDirty('HeatmapRenderer');
+                        }
+                        // Execute render immediately with dirty flags - only marked renderers will execute
+                        if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
+                            const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
+                            if (dirtyRenderers.size > 0) {
+                                map.renderPipeline.render(dirtyRenderers);
+                            }
+                        }
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED handler');
@@ -2215,17 +2251,31 @@ async function init() {
             eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
                 try {
                     // Heatmap visibility changed via dedicated HeatmapDisplayState
-                    // Mark HeatmapRenderer dirty AND all overlay renderers to ensure clean re-render
-                    // This prevents overlay elements from disappearing when heatmap toggled
+                    // Step 1: Update UI button state to reflect new visibility
+                    try {
+                        const btn = document.getElementById('gridHeatmapBtn');
+                        if (btn && map && map.heatmapDisplayState) {
+                            const isVisible = map.heatmapDisplayState.isVisible();
+                            btn.classList.toggle('active', isVisible);
+                            btn.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
+                        }
+                    } catch (e) { moduleErrorHandler.logDebug('HEATMAP_VISIBILITY_CHANGED: Failed to update button state', 'EventBus:HEATMAP_VISIBILITY_CHANGED - updateButton', { error: e }); }
+                    
+                    // Step 2: Mark HeatmapRenderer dirty and execute selective render
                     if (map && typeof map.markRendererDirty === 'function') {
-                        // Mark heatmap and all overlay renderers for re-rendering
                         map.markRendererDirty('HeatmapRenderer');
-                        map.markRendererDirty('GridRenderer');
-                        map.markRendererDirty('MarkerRenderer');
-                        map.markRendererDirty('RouteRenderer');
-                        map.markRendererDirty('OverlayRenderer');
+                        // CompositeStage must also be marked dirty since heatmap visibility affects final display
+                        map.markRendererDirty('CompositeStage');
+                        // Execute render immediately with dirty flags
+                        if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
+                            const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
+                            if (dirtyRenderers.size > 0) {
+                                map.renderPipeline.render(dirtyRenderers);
+                            }
+                        }
                     }
-                    // Save new visibility state to persistent storage
+                    
+                    // Step 3: Save new visibility state to persistent storage (async, non-blocking)
                     if (map && map.heatmapDisplayState && window.storageService) {
                         try {
                             map.heatmapDisplayState.saveToStorage(window.storageService);
@@ -2412,8 +2462,10 @@ async function init() {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
-                    // This is batched by the render pipeline on RAF, not synchronous
+                    // Trigger rendering through the batched render pipeline
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                    }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_ADDED handler');
                 }
@@ -2429,6 +2481,10 @@ async function init() {
                     // Update display counts (UI update, not rendering)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
+                    }
+                    // Trigger rendering through the batched render pipeline
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
                     }
                     // For marker removal (especially bulk clear), request immediate render for UX feedback
                     // The { all: true } flag indicates bulk operation (multiple markers)
@@ -2451,8 +2507,10 @@ async function init() {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
-                    // This is batched by the render pipeline on RAF, not synchronous
+                    // Trigger rendering through the batched render pipeline
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                    }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_EDITED handler');
                 }
@@ -3025,17 +3083,8 @@ async function init() {
     // Layer toggle handlers are created dynamically in `initializeLayerIcons()`
     
     // Custom marker controls
-    document.getElementById('exportCustom').addEventListener('click', () => {
-        try {
-            if (map.markerManager) {
-                map.markerManager.exportMarkers();
-            } else {
-                NotificationUtils.showMarkerError('Marker manager not available.');
-            }
-        } catch (err) {
-            NotificationUtils.showMarkerError('Failed to export custom markers: ' + (err.message || String(err)));
-        }
-    });
+    // NOTE: Custom marker export is now handled by ToolbarController
+    // NOTE: Custom marker import/clear are handled here due to complex file operations
 
     // Edit markers toggle - enables placing, dragging and deleting custom markers
     // NOTE: Edit mode toggles are now handled by ToolbarController
@@ -3186,111 +3235,24 @@ async function init() {
         document.getElementById('importFile').click();
     });
     
-    document.getElementById('importFile').addEventListener('change', (e) => {
+    document.getElementById('importFile').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            try {
-                const obj = JSON.parse(ev.target.result);
-                let markersToImport = [];
 
-                // Handle different formats
-                if (obj && Array.isArray(obj.markers)) {
-                    // Format: { markers: [...], ... }
-                    markersToImport = obj.markers;
-                } else if (Array.isArray(obj)) {
-                    // Format: bare array
-                    markersToImport = obj;
-                } else {
-                    throw new Error('Invalid marker file: missing markers array');
-                }
-
-                if (!Array.isArray(markersToImport) || markersToImport.length === 0) {
-                    throw new Error('File contains no markers');
-                }
-
-                // Detect legacy marker file (legacy UIDs like cm01, cm02) vs current hashed UIDs
-                const isLegacyMarkersFile = MarkerUtilsCore.isLegacyMarkerFile(markersToImport);
-
-                // Build migratedMarkers: for legacy files regenerate hashed UIDs; for modern files keep provided UIDs
-                const migratedMarkers = markersToImport.map(m => {
-                    if (typeof m.x !== 'number' || typeof m.y !== 'number') {
-                        throw new Error('Invalid marker: x and y must be numbers');
-                    }
-                    const x = Number(m.x);
-                    const y = Number(m.y);
-                    let uid;
-                    if (isLegacyMarkersFile) {
-                        uid = map.markerManager ? map.markerManager.generateUID(x, y) : `cm_${Math.random().toString(16).slice(2, 10)}`;
-                    } else {
-                        uid = (typeof m.uid === 'string' && m.uid) ? m.uid : (map.markerManager ? map.markerManager.generateUID(x, y) : `cm_${Math.random().toString(16).slice(2, 10)}`);
-                    }
-                    return { uid, x, y };
-                });
-                if (isLegacyMarkersFile) {
-                    NotificationUtils.showUpgradeNotification(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
-                    // log removed
-                }
-
-                // Check if current markers exist
-                const currentMarkers = this.markerManager ? this.markerManager.getAllMarkers() : [];
-                const maxMarkers = map?.layerConfig?.customMarkers?.maxMarkers || 50;
-                
-                // Count only NEW markers (those without matching UIDs)
-                const newMarkersCount = migratedMarkers.filter(imported => {
-                    return map.markerManager ? !map.markerManager.markerExists(imported.uid) : !currentMarkers.some(current => current.uid === imported.uid);
-                }).length;
-                
-                const totalAfterImport = currentMarkers.length + newMarkersCount;
-
-                if (totalAfterImport > maxMarkers) {
-                    const needToDelete = totalAfterImport - maxMarkers;
-                    NotificationUtils.showImportError(
-                        `Cannot import ${migratedMarkers.length} markers.\n\n` +
-                        `You have ${currentMarkers.length} markers, import would add ${newMarkersCount} new ones.\n\n` +
-                        `Total would be ${totalAfterImport}, maximum is ${maxMarkers}.\n\n` +
-                        `Please delete at least ${needToDelete} marker(s) first.`
-                    );
-                    e.target.value = '';
-                    return;
-                }
-
-                // Merge markers: replace those with matching UIDs, add new ones
-                const mergedMarkers = currentMarkers.slice();
-                for (let i = 0; i < migratedMarkers.length; i++) {
-                    const importedMarker = migratedMarkers[i];
-                    const existingIdx = mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
-                    if (existingIdx >= 0) {
-                        // Overwrite marker with same UID (hash)
-                        mergedMarkers[existingIdx] = importedMarker;
-                    } else {
-                        // Add new marker
-                        mergedMarkers.push(importedMarker);
-                    }
-                }
-                
-                if (map.markerManager) {
-                    map.markerManager.setMarkers(mergedMarkers);
-                    // The setMarkers method handles saving to storage and notifying changes
-                } else {
-                    // Fallback if markerManager not available (should not happen in decoupled code)
-                    moduleErrorHandler.logWarning('markerManager not available during marker import', 'InteractiveMap.importMarkers');
-                }
-
-                // log removed
-                e.target.value = '';
-            } catch (error) {
-                // error logging removed
-                NotificationUtils.showMarkerError('Failed to import markers: ' + (error.message || String(error)));
-                e.target.value = '';
+        try {
+            if (map.markerManager) {
+                await map.markerManager.importMarkers(file);
+            } else {
+                // Fallback if markerManager not available
+                moduleErrorHandler.logWarning('markerManager not available during marker import', 'InteractiveMap.importMarkers');
+                NotificationUtils.showMarkerError('Marker manager not available.');
             }
-        };
-        reader.onerror = () => {
-            NotificationUtils.showFileError('Failed to read file');
+        } catch (error) {
+            NotificationUtils.showMarkerError('Failed to import markers: ' + (error.message || String(error)));
+        } finally {
+            // Clear the file input
             e.target.value = '';
-        };
-        reader.readAsText(file);
+        }
     });
     
     document.getElementById('clearCustom').addEventListener('click', async () => {

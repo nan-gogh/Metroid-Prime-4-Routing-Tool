@@ -27,6 +27,7 @@
       this._bindTilesetControls();
       this._bindDisplayToggles();
       this._bindHighlightControls();
+      this._bindEventListeners();
       this._updateSidebarHandleEmphasis();
     }
 
@@ -134,6 +135,21 @@
           this._updateGridHeatmapButtonState();
         }
 
+        // Grid toggle
+        const gridToggleBtn = document.getElementById('gridToggleBtn');
+        if (gridToggleBtn) {
+          gridToggleBtn.addEventListener('click', () => {
+            if (this.layerState) {
+              // Toggle grid visibility via LayerState
+              const newVisible = !this.layerState.isGridVisible();
+              this.layerState.setGridVisible(newVisible);
+              this._updateGridButtonState();
+              this._saveDisplaySettings();
+            }
+          });
+          this._updateGridButtonState();
+        }
+
         // Grayscale toggle
         const tilesetGrayscaleBtn = document.getElementById('tilesetGrayscaleBtn');
         if (tilesetGrayscaleBtn) {
@@ -168,6 +184,27 @@
 
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });
+      }
+    }
+
+    /**
+     * Bind event listeners for state changes
+     */
+    _bindEventListeners() {
+      try {
+        // Listen for display settings changes to update button states
+        this.eventBus.on(this.eventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
+          try {
+            // Update grid button state when grid visibility changes
+            if (data && typeof data.gridVisible === 'boolean') {
+              this._updateGridButtonState();
+            }
+          } catch (e) {
+            this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
+          }
+        });
+      } catch (e) {
+        this.errorHandler.logDebug('SettingsController: Failed to bind event listeners', 'SettingsController._bindEventListeners', { error: e });
       }
     }
 
@@ -223,6 +260,20 @@
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });
+      }
+    }
+
+    /**
+     * Update grid button state
+     */
+    _updateGridButtonState() {
+      try {
+        const gridToggleBtn = document.getElementById('gridToggleBtn');
+        if (gridToggleBtn && this.layerState) {
+          gridToggleBtn.classList.toggle('active', this.layerState.isGridVisible());
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('SettingsController: Failed to update grid button state', 'SettingsController._updateGridButtonState', { error: e });
       }
     }
 
@@ -361,21 +412,21 @@
         const settings = {
           tileset: this.tilesetState ? this.tilesetState.tileset : 'sat',
           tilesetGrayscale: this.tilesetState ? this.tilesetState.grayscale : false,
-          gridHeatmap: false // TODO: Implement heatmap state management
+          gridVisible: this.layerState ? this.layerState.isGridVisible() : false
         };
 
         if (window.storageService) {
           window.storageService.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
           window.storageService.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
-          window.storageService.set(this.config.STORAGE_KEYS.GRID_HEATMAP, settings.gridHeatmap ? '1' : '0');
+          window.storageService.set(this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0');
         } else if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
           window._mp4Storage.saveSetting('mp4_tileset', settings.tileset);
           window._mp4Storage.saveSetting('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-          window._mp4Storage.saveSetting('mp4_grid_heatmap', settings.gridHeatmap ? '1' : '0');
+          window._mp4Storage.saveSetting('mp4_grid_visible', settings.gridVisible ? '1' : '0');
         } else {
           localStorage.setItem('mp4_tileset', settings.tileset);
           localStorage.setItem('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-          localStorage.setItem('mp4_grid_heatmap', settings.gridHeatmap ? '1' : '0');
+          localStorage.setItem('mp4_grid_visible', settings.gridVisible ? '1' : '0');
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });

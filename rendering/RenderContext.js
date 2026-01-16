@@ -6,17 +6,43 @@
     /**
      * Creates a new RenderContext instance that provides clean access to rendering surfaces.
      * @param {Object} options - Configuration options
-     * @param {HTMLCanvasElement} options.canvas - Main overlay canvas
+     * @param {HTMLCanvasElement} options.canvas - Main overlay canvas (display composite)
      * @param {CanvasRenderingContext2D} options.ctx - Main overlay context
      * @param {CanvasRenderingContext2D} options.ctxTiles - Background tiles context
      * @param {CanvasRenderingContext2D} options.ctxHeatmap - Heatmap context
+     * @param {CanvasRenderingContext2D} options.ctxGrid - Grid layer context (sub-canvas)
+     * @param {CanvasRenderingContext2D} options.ctxMarker - Marker layer context (sub-canvas)
+     * @param {CanvasRenderingContext2D} options.ctxRoute - Route layer context (sub-canvas)
+     * @param {CanvasRenderingContext2D} options.ctxOverlay - Overlay layer context (sub-canvas)
+     * @param {HTMLCanvasElement} options.canvasHeatmap - Heatmap canvas element
+     * @param {HTMLCanvasElement} options.canvasGrid - Grid sub-canvas element
+     * @param {HTMLCanvasElement} options.canvasMarker - Marker sub-canvas element
+     * @param {HTMLCanvasElement} options.canvasRoute - Route sub-canvas element
+     * @param {HTMLCanvasElement} options.canvasOverlay - Overlay sub-canvas element
      * @param {number} options.devicePixelRatio - Device pixel ratio for scaling
      */
     constructor(options) {
+      // Main composite canvas
       this.canvas = options.canvas;
       this.ctx = options.ctx;
+      
+      // Background layers
       this.ctxTiles = options.ctxTiles;
       this.ctxHeatmap = options.ctxHeatmap;
+      
+      // Sub-canvas contexts (independent layers for selective rendering)
+      this.ctxGrid = options.ctxGrid;
+      this.ctxMarker = options.ctxMarker;
+      this.ctxRoute = options.ctxRoute;
+      this.ctxOverlay = options.ctxOverlay;
+      
+      // Sub-canvas elements (for sizing and positioning)
+      this.canvasHeatmap = options.canvasHeatmap;
+      this.canvasGrid = options.canvasGrid;
+      this.canvasMarker = options.canvasMarker;
+      this.canvasRoute = options.canvasRoute;
+      this.canvasOverlay = options.canvasOverlay;
+      
       this.devicePixelRatio = options.devicePixelRatio || 1;
 
       // Error handler for context operations
@@ -30,10 +56,25 @@
      */
     static fromMap(map) {
       return new RenderContext({
+        // Main display canvas
         canvas: map.canvas,
         ctx: map.ctx,
+        
+        // Background layers
         ctxTiles: map.ctxTiles,
         ctxHeatmap: map.ctxHeatmap,
+        
+        // Sub-canvases (independent layers)
+        ctxGrid: map.ctxGrid,
+        ctxMarker: map.ctxMarker,
+        ctxRoute: map.ctxRoute,
+        ctxOverlay: map.ctxOverlay,
+        canvasHeatmap: map.canvasHeatmap,
+        canvasGrid: map.canvasGrid,
+        canvasMarker: map.canvasMarker,
+        canvasRoute: map.canvasRoute,
+        canvasOverlay: map.canvasOverlay,
+        
         devicePixelRatio: map.devicePixelRatio || 1,
         errorHandler: map.errorHandler
       });

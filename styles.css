@@ -936,9 +936,31 @@ h1, h2, h3, h4, h5, h6 {
     will-change: opacity, transform;
 }
 
+/* Sub-canvas architecture: Each renderer has its own independent canvas */
+/* These are rendered to independently then composited by CompositeStage */
+#gridCanvas {
+    z-index: 2;
+    pointer-events: none;
+}
+
+#markerCanvas {
+    z-index: 3;
+    pointer-events: none;
+}
+
+#routeCanvas {
+    z-index: 4;
+    pointer-events: none;
+}
+
+#overlayCanvas {
+    z-index: 5;
+    pointer-events: none;
+}
+
 /* overlay canvas (interactive) */
 #mapCanvas {
-    z-index: 2;
+    z-index: 6;
     cursor: grab;
     /* Disable browser pinch-to-zoom on the canvas so pointer events
        (including multi-touch pinch) are delivered to the app's JS
@@ -1144,7 +1166,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Tooltip */
 #tooltip {
-    position: absolute; /* moved into map container for accurate positioning */
+    position: absolute; /* positioned relative to viewport */
     background: rgba(10, 25, 41, 0.95);
     border: 1px solid #22d3ee;
     border-radius: 6px;
@@ -1152,7 +1174,7 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 13px;
     color: #e2e2e2;
     pointer-events: none;
-    z-index: 999; /* ensure above canvas layers */
+    z-index: 150; /* below sidebar (200) so tooltips don't appear above sidebar */
     display: none;
     white-space: nowrap;
 }

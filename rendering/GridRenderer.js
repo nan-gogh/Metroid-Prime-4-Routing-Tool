@@ -81,12 +81,22 @@
      */
     render(renderContext) {
       try {
+        // Sub-canvas architecture: GridRenderer renders to its own canvas (gridCanvas)
+        // This allows selective rendering without forcing other overlay renderers to redraw
+        const gridCtx = renderContext.ctxGrid;
+        if (!gridCtx || !renderContext.canvasGrid) return;
+
+        // Clear grid canvas at the start
+        const canvasSize = renderContext.getCanvasSize();
+        gridCtx.clearRect(0, 0, canvasSize.width, canvasSize.height);
+
+        // Always update DOM labels to ensure they reflect current grid visibility state
+        try { this.updateQuadLabels(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
+
         // Only render the grid when the runtime grid layer is enabled
         if (!this.layerState.isLayerVisible('grid')) return;
         try { this.renderQuadrantGrid(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
         try { this.renderDetailGrid(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
-        // Keep DOM labels in sync
-        try { this.updateQuadLabels(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
       } catch (e) { this.errorHandler.logDebug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
     }
 
@@ -97,7 +107,8 @@
      */
     renderQuadrantGrid(renderContext) {
       try {
-        const ctx = renderContext.ctx;
+        // Use grid sub-canvas instead of main overlay canvas
+        const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
@@ -146,7 +157,7 @@
      */
     renderDetailGrid(renderContext) {
       try {
-        const ctx = renderContext.ctx;
+        const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
@@ -210,7 +221,7 @@
      */
     renderAxisLabels(renderContext) {
       try {
-        const ctx = renderContext.ctx;
+        const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
@@ -286,18 +297,31 @@
     /**
      * Updates the DOM quadrant labels with marker counts and positioning.
      * Labels show green crystal marker counts per quadrant and are only visible
-     * when the grid layer is both enabled and highlighted.
+     * when the grid layer is enabled.
      */
     updateQuadLabels(renderContext) {
       try {
-        const canvas = renderContext && renderContext.canvas;
-        const parent = canvas && canvas.parentElement;
-        const container = parent ? parent.querySelector('#gridQuadLabels') : null;
+        // Use the stored container reference, or find it if not available
+        let container = this._labelsContainer;
+        if (!container) {
+          // Fallback: find the container
+          if (renderContext && renderContext.canvas) {
+            const parent = renderContext.canvas.parentElement;
+            container = parent ? parent.querySelector('#gridQuadLabels') : null;
+          }
+          if (!container) {
+            container = document.querySelector('#gridQuadLabels');
+          }
+        }
         if (!container) return;
-        // Show labels only when the grid layer is visible AND it is highlighted
-        const shouldShow = !!(this.layerState && this.layerState.isGridVisible()) && !!(this.highlightState && this.highlightState.isLayerHighlighted('grid'));
+
+        // Show labels only when the grid layer is visible (they belong to the grid)
+        const shouldShow = !!(this.layerState && this.layerState.isGridVisible());
         container.style.display = shouldShow ? 'block' : 'none';
-        if (!shouldShow) return;
+
+        // Only update positions/content if we have a render context
+        if (!shouldShow || !renderContext) return;
+        const canvas = renderContext.canvas;
         const cols = MP4Config.GRID.COLS, rows = MP4Config.GRID.ROWS;
         const gridSpacing = (this.config.MAP_SIZE || 8192) / MP4Config.GRID.COLS;
         const cssWidth = canvas ? canvas.clientWidth : 0;

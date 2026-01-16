@@ -2,11 +2,14 @@
 // Extracted from map.js to improve modularity and testability
 
 const NotificationUtils = {
-    // Show error message to user
+    // Show error message to user (now internally async for performance)
     showError(message, title = 'Error') {
         try {
             if (typeof message !== 'string') message = String(message);
-            alert(`${title}: ${message}`);
+            // Defer alert to separate macrotask to prevent performance violations
+            TaskScheduler.deferToNextTask(async () => {
+                alert(`${title}: ${message}`);
+            });
         } catch (e) {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show error notification');
@@ -16,11 +19,14 @@ const NotificationUtils = {
         }
     },
 
-    // Show success message to user
+    // Show success message to user (now internally async for performance)
     showSuccess(message, title = 'Success') {
         try {
             if (typeof message !== 'string') message = String(message);
-            alert(`${title}: ${message}`);
+            // Defer alert to separate macrotask to prevent performance violations
+            TaskScheduler.deferToNextTask(async () => {
+                alert(`${title}: ${message}`);
+            });
         } catch (e) {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show success notification');
@@ -30,11 +36,14 @@ const NotificationUtils = {
         }
     },
 
-    // Show informational message to user
+    // Show informational message to user (now internally async for performance)
     showInfo(message, title = 'Info') {
         try {
             if (typeof message !== 'string') message = String(message);
-            alert(`${title}: ${message}`);
+            // Defer alert to separate macrotask to prevent performance violations
+            TaskScheduler.deferToNextTask(async () => {
+                alert(`${title}: ${message}`);
+            });
         } catch (e) {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show info notification');

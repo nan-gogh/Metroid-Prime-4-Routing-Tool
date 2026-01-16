@@ -114,6 +114,7 @@
 
             if (this.editModeState) {
               this.editModeState.setEditMarkersMode(on);
+              this._setEditToggleColor('customMarkers', on);
               try {
                 const routeToggle = document.getElementById('editRouteToggle');
                 const routeToggleMini = document.getElementById('editRouteToggleMini');
@@ -174,6 +175,7 @@
 
             if (this.editModeState) {
               this.editModeState.setEditRouteMode(on);
+              this._setEditToggleColor('route', on);
               try {
                 const markersToggle = document.getElementById('editMarkersToggle');
                 const markersToggleMini = document.getElementById('editMarkersToggleMini');
@@ -202,6 +204,9 @@
             editRouteToggleMini.addEventListener('click', toggleRouteEdit);
           }
         }
+
+        // Set initial toggle states and colors
+        this.updateEditToggleStates();
 
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to bind edit mode toggles');
@@ -362,16 +367,83 @@
           const isActive = !!this.editModeState.editMarkersMode;
           editMarkersToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editMarkersToggle.classList.toggle('active', isActive);
+          this._setEditToggleColor('customMarkers', isActive);
         }
 
         if (editRouteToggle && this.editModeState) {
           const isActive = !!this.editModeState.editRouteMode;
           editRouteToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editRouteToggle.classList.toggle('active', isActive);
+          this._setEditToggleColor('route', isActive);
         }
 
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to update edit toggle states');
+      }
+    }
+
+    /**
+     * Set the glow color for edit toggles based on layer colors
+     * @param {string} layerKey - The layer key ('customMarkers' or 'route')
+     * @param {boolean} on - Whether the edit mode is active
+     */
+    _setEditToggleColor(layerKey, on) {
+      try {
+        // Get layer color from global LAYERS
+        const layerColor = (typeof window.LAYERS !== 'undefined' && window.LAYERS && window.LAYERS[layerKey] && window.LAYERS[layerKey].color) ?
+          String(window.LAYERS[layerKey].color).trim() : '#22d3ee';
+
+        // Parse hex color to RGB
+        const parseHexSimple = (h) => {
+          if (!h || h[0] !== '#') return null;
+          const s = h.slice(1);
+          if (s.length === 6) {
+            return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16) };
+          } else if (s.length === 3) {
+            return { r: parseInt(s[0]+s[0],16), g: parseInt(s[1]+s[1],16), b: parseInt(s[2]+s[2],16) };
+          } else if (s.length === 8) {
+            return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16), a: parseInt(s.slice(6,8),16) / 255 };
+          } else if (s.length === 4) {
+            return { r: parseInt(s[0]+s[0],16), g: parseInt(s[1]+s[1],16), b: parseInt(s[2]+s[2],16), a: parseInt(s[3]+s[3],16) / 255 };
+          }
+          return null;
+        };
+
+        const rgb = parseHexSimple(layerColor) || { r: 34, g: 211, b: 238 };
+        const isRoute = (layerKey === 'route');
+        const glow1 = `rgba(${rgb.r},${rgb.g},${rgb.b},${isRoute ? 0.9 : 0.75})`;
+        const glow2 = `rgba(${rgb.r},${rgb.g},${rgb.b},${isRoute ? 0.6 : 0.35})`;
+        const border = layerColor;
+
+        // Apply to mini toggles
+        const miniEl = document.getElementById(layerKey === 'customMarkers' ? 'editMarkersToggleMini' : 'editRouteToggleMini');
+        if (miniEl) {
+          if (on) {
+            miniEl.style.setProperty('--edit-layer-glow1', glow1);
+            miniEl.style.setProperty('--edit-layer-glow2', glow2);
+            miniEl.style.setProperty('--edit-layer-border', border);
+          } else {
+            miniEl.style.removeProperty('--edit-layer-glow1');
+            miniEl.style.removeProperty('--edit-layer-glow2');
+            miniEl.style.removeProperty('--edit-layer-border');
+          }
+        }
+
+        // Apply to sidebar toggles
+        const sidebarEl = document.getElementById(layerKey === 'customMarkers' ? 'editMarkersToggle' : 'editRouteToggle');
+        if (sidebarEl) {
+          const cssPrefix = layerKey === 'customMarkers' ? 'edit-markers' : 'edit-route';
+          if (on) {
+            sidebarEl.style.setProperty(`--${cssPrefix}-border`, border);
+            sidebarEl.style.setProperty(`--${cssPrefix}-glow1`, glow1);
+          } else {
+            sidebarEl.style.removeProperty(`--${cssPrefix}-border`);
+            sidebarEl.style.removeProperty(`--${cssPrefix}-glow1`);
+          }
+        }
+
+      } catch (e) {
+        if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to set edit toggle color');
       }
     }
   }

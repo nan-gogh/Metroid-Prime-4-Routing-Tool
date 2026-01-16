@@ -76,16 +76,6 @@
         orderedEntries.push(staticLayers[i]);
       }
 
-      // Insert a runtime-only `grid` layer so users can toggle grid visibility from the sidebar.
-      // Always append it at the end of the ordered list.
-      const hasGrid = orderedEntries.some(e => e[0] === 'grid');
-      if (!hasGrid) {
-        // Use a darker teal backdrop so the white icon remains visible,
-        // and explicitly set the icon color to match the gridlines (cyan).
-        const gridEntry = ['grid', { name: 'Grid', icon: '▦', color: '#155962ff', iconColor: '#22d3ee' }];
-        orderedEntries.push(gridEntry);
-      }
-
       orderedEntries.forEach(([layerKey, layer]) => {
         this._createLayerRow(container, layerKey, layer, savedVisibility);
       });
@@ -467,8 +457,13 @@
           // Apply each pending toggle via the layerState
           for (const [k, v] of Object.entries(toApply)) {
             try {
-              if (this.layerState && typeof this.layerState.setLayerVisible === 'function') {
-                this.layerState.setLayerVisible(k, v);
+              if (this.layerState) {
+                // Special handling for grid layer
+                if (k === 'grid' && typeof this.layerState.setGridVisible === 'function') {
+                  this.layerState.setGridVisible(v);
+                } else if (typeof this.layerState.setLayerVisible === 'function') {
+                  this.layerState.setLayerVisible(k, v);
+                }
               }
             } catch (e) { this._logError(e, 'LayerListController._scheduleApplyLayerToggles.applyToggle'); }
           }

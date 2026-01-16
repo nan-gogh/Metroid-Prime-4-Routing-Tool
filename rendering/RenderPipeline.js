@@ -61,7 +61,7 @@
       requestAnimationFrame(() => {
         this._frameScheduled = false;
         this.render(this._dirtyFlags);
-        this._dirtyFlags.clear();
+        this._clearDirtyFlags();
       });
     }
 
@@ -92,9 +92,10 @@
 
     /**
      * Clears all dirty flags without triggering a render.
+     * @private - Only called internally after render completion
      * @returns {RenderPipeline} This pipeline instance for chaining
      */
-    clearDirtyFlags() {
+    _clearDirtyFlags() {
       this._dirtyFlags.clear();
       return this;
     }

@@ -48,10 +48,11 @@
                 <div class="control-group section-glow">
                     <h3>M a p p i n g \ \ \</h3>
                     <div class="tileset-controls">
+                        <button id="gridToggleBtn" class="control-toggle" aria-pressed="false">Grid</button>
+                        <button id="gridHeatmapBtn" class="control-toggle" aria-pressed="false">Heatmap</button>
                         <button id="tilesetSatBtn" class="control-toggle" aria-pressed="false">Satellite</button>
                         <button id="tilesetHoloBtn" class="control-toggle" aria-pressed="false">Holographic</button>
                         <button id="tilesetGrayscaleBtn" class="control-toggle" aria-pressed="false">Grayscale</button>
-                        <button id="gridHeatmapBtn" class="control-toggle" aria-pressed="false">Heatmap</button>
                     </div>
                 </div>
             
@@ -168,8 +169,14 @@
             <canvas id="mapTiles" aria-hidden="true"></canvas>
             <!-- Heatmap canvas sits above tiles and beneath the interactive overlay -->
             <canvas id="heatmapCanvas" aria-hidden="true"></canvas>
-            <!-- Overlay canvas for routes & markers (keeps existing id for compatibility with map.js) -->
+            <!-- Sub-canvas architecture: Each renderer has its own canvas for independent rendering -->
+            <!-- This allows selective rendering without forcing unrelated renderers to redraw -->
+            <canvas id="gridCanvas" aria-hidden="true"></canvas>
+            <canvas id="markerCanvas" aria-hidden="true"></canvas>
+            <canvas id="routeCanvas" aria-hidden="true"></canvas>
+            <!-- Overlay canvas for transient elements like route preview (main interactive canvas) -->
             <canvas id="mapCanvas"></canvas>
+            <canvas id="overlayCanvas" aria-hidden="true"></canvas>
             <div id="editOverlay" class="edit-overlay" aria-hidden="true"></div>
             
             <div class="zoom-controls">
@@ -250,6 +257,7 @@
     <script src="rendering/RouteRenderer.js"></script>
     <script src="rendering/OverlayRenderer.js"></script>
     <script src="rendering/RenderContext.js"></script>
+    <script src="rendering/CompositeStage.js"></script>
     <script src="rendering/RenderPipeline.js"></script>
 
     <!-- Input and state modules (phase 2 scaffolding) -->

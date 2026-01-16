@@ -58,7 +58,7 @@
           if (stored !== null) {
             this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === true);
           } else {
-            this.layerVisibility.grid = true; // Default to visible
+            this.layerVisibility.grid = false; // Default to hidden
           }
         } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
           const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
@@ -67,17 +67,17 @@
             if (stored !== null) {
               this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === 'true');
             } else {
-              this.layerVisibility.grid = true; // Default to visible
+              this.layerVisibility.grid = false; // Default to hidden
             }
           } else {
-            this.layerVisibility.grid = true; // Default to visible
+            this.layerVisibility.grid = false; // Default to hidden
           }
         } else {
-          this.layerVisibility.grid = true; // Default to visible
+          this.layerVisibility.grid = false; // Default to hidden
         }
       } catch (e) {
         this.errorHandler.logDebug('LayerState._loadGridVisibility failed', 'LayerState._loadGridVisibility', { error: e });
-        this.layerVisibility.grid = true;
+        this.layerVisibility.grid = false;
       }
     }
 

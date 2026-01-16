@@ -170,7 +170,14 @@
           return;
         }
 
-        const ctx = renderContext ? renderContext.ctx : this.map.ctx;
+        // Clear route canvas at start of frame
+        if (renderContext && renderContext.canvasRoute) {
+          const routeCanvas = renderContext.canvasRoute;
+          const ctx = renderContext.ctxRoute;
+          ctx.clearRect(0, 0, routeCanvas.width, routeCanvas.height);
+        }
+
+        const ctx = renderContext ? renderContext.ctxRoute : this.map.ctx;
         const pathData = this._computePathData();
 
         if (!pathData.valid || pathData.points.length < 2) {
@@ -192,6 +199,9 @@
 
         // Render route nodes
         this._renderNodes(ctx, pathData);
+
+        // Render route preview dot (transient UI element during route editing)
+        this._renderRoutePreview(ctx);
 
         ctx.restore();
 
@@ -379,6 +389,72 @@
      */
     invalidateCache() {
       this._resetCaches();
+    }
+
+    /**
+     * Renders the route preview dot when editing a route.
+     * Shows where the next waypoint will be placed during route editing.
+     * @param {CanvasRenderingContext2D} ctx - The route canvas context
+     */
+    _renderRoutePreview(ctx) {
+      try {
+        if (!this.routeState.routePreview) return;
+
+        const pos = RouteUtilsCore.getRoutePreviewScreenPosition(
+          this.routeState.routePreview,
+          {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY},
+          this.config.MAP_SIZE || 8192
+        );
+
+        if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
+
+        const px = pos.x;
+        const py = pos.y;
+
+        // Use the same route color logic as the rest of RouteRenderer
+        const routeHex = this.routeColor;
+        let nodeFill = null;
+
+        try {
+          if (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) {
+            nodeFill = ColorUtils.hexToRgba(routeHex, 0.95);
+          } else if (routeHex && typeof routeHex === 'string') {
+            // Simple hex -> rgba fallback
+            const s = routeHex.replace('#', '').trim();
+            let r = 34, g = 211, b = 238, a = 0.95;
+            if (s.length === 6) {
+              r = parseInt(s.slice(0,2),16);
+              g = parseInt(s.slice(2,4),16);
+              b = parseInt(s.slice(4,6),16);
+            } else if (s.length === 8) {
+              r = parseInt(s.slice(0,2),16);
+              g = parseInt(s.slice(2,4),16);
+              b = parseInt(s.slice(4,6),16);
+              a = parseInt(s.slice(6,8),16) / 255 * 0.95;
+            } else if (s.length === 3) {
+              r = parseInt(s[0]+s[0],16);
+              g = parseInt(s[1]+s[1],16);
+              b = parseInt(s[2]+s[2],16);
+            }
+            nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
+          }
+        } catch (e) {
+          this.errorHandler && this.errorHandler.logDebug('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e });
+        }
+
+        const dotSize = (global.map && global.map.getRouteNodeSize && typeof global.map.getRouteNodeSize === 'function') ?
+          global.map.getRouteNodeSize() : 6;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = nodeFill || 'rgba(34, 211, 238, 1)';
+        ctx.arc(px, py, dotSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e });
+      }
     }
 
     /**

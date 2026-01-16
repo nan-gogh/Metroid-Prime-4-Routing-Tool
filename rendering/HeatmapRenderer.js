@@ -29,7 +29,6 @@
       // Setup an offscreen buffer and internal scheduling flags
       this.offscreenCanvas = null;
       this.offscreenCtx = null;
-      this._pendingRender = false;
       this._lastCanvasSize = { w: 0, h: 0, dpr: 1 };
     }
 
@@ -52,28 +51,31 @@
     }
 
     /**
-     * Schedules a throttled render of the green crystal heatmap using requestAnimationFrame.
-     * Clears the canvas if heatmap is disabled, otherwise delegates to _renderNow() for actual rendering.
+     * Renders the green crystal heatmap to the provided render context.
      * Uses offscreen buffering and DPR-aware scaling for crisp rendering at all zoom levels.
+     * Called by RenderPipeline when heatmap is marked dirty.
      * @param {RenderContext} renderContext - The render context providing canvas access
      */
     render(renderContext) {
-      // Schedule rAF-based render to throttle heavy work
-      if (!renderContext.ctx || !renderContext.canvas) return;
+      // Check if heatmap canvas is available
+      if (!renderContext.ctxHeatmap || !renderContext.canvasHeatmap) return;
       
-      // If heatmap is disabled, return early (HeatmapClearStage will clear the canvas)
+      // If heatmap is disabled, clear the canvas and return
       try {
         if (!this.heatmapDisplayState || !this.heatmapDisplayState.isVisible()) {
+          const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
+          const dpr = window.devicePixelRatio || 1;
+          renderContext.ctxHeatmap.clearRect(0, 0, cssWidth * dpr, cssHeight * dpr);
           return;
         }
       } catch (e) { console.error('HeatmapRenderer.render: Failed to check heatmap visibility:', e); }
 
-      if (this._pendingRender) return;
-      this._pendingRender = true;
-      requestAnimationFrame(() => {
-        this._pendingRender = false;
-        try { this._renderNow(renderContext); } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); }
-      });
+      // Perform the actual rendering work
+      try { 
+        this._renderNow(renderContext); 
+      } catch (e) { 
+        this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); 
+      }
     }
 
     _renderNow(renderContext) {
@@ -86,8 +88,16 @@
         const pw = Math.round(cssWidth * dpr);
         const ph = Math.round(cssHeight * dpr);
 
-        // Clear offscreen buffer only (heatmap canvas clearing is now handled by HeatmapClearStage in pipeline)
+        // Clear offscreen buffer
         try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear offscreen canvas:', e); }
+
+        // Clear heatmap canvas before rendering new content
+        try {
+          const heatmapCtx = renderContext.ctxHeatmap;
+          if (heatmapCtx && renderContext.canvasHeatmap) {
+            heatmapCtx.clearRect(0, 0, renderContext.canvasHeatmap.width, renderContext.canvasHeatmap.height);
+          }
+        } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear heatmap canvas:', e); }
 
         // Build buckets (coarse 8x8 grid) and draw into offscreen
         const cols = this.config.GRID.COLS, rows = this.config.GRID.ROWS;

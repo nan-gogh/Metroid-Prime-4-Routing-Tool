@@ -1,5 +1,5 @@
 // rendering/OverlayRenderer.js
-// Handles transient overlay drawing: route preview dot + selected marker tooltip
+// Handles transient overlay drawing: selected marker tooltip and future UI elements
 
 (function (global) {
   class OverlayRenderer {
@@ -19,53 +19,17 @@
 
     render(renderContext) {
       try {
-        const ctx = renderContext.ctx;
-        if (!ctx) return;
+        if (!renderContext || !renderContext.ctxOverlay) return;
 
-        // Draw transient route preview dot (when editing route)
-        try {
-          if (this.routeState.routePreview) {
-            const pos = RouteUtilsCore.getRoutePreviewScreenPosition(this.routeState.routePreview, {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY}, this.config.MAP_SIZE || 8192);
-            if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-              const px = pos.x;
-              const py = pos.y;
-              // Derive route color like RouteRenderer uses
-              const routeHex = this.routeColor;
-              let nodeFill = null;
-              try {
-                  if (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) {
-                      nodeFill = ColorUtils.hexToRgba(routeHex, 0.95);
-                  } else if (routeHex && typeof routeHex === 'string') {
-                      // simple hex -> rgba fallback
-                      const s = routeHex.replace('#', '').trim();
-                      let r = 34, g = 211, b = 238, a = 0.95;
-                      if (s.length === 6) {
-                          r = parseInt(s.slice(0,2),16);
-                          g = parseInt(s.slice(2,4),16);
-                          b = parseInt(s.slice(4,6),16);
-                      } else if (s.length === 8) {
-                          r = parseInt(s.slice(0,2),16);
-                          g = parseInt(s.slice(2,4),16);
-                          b = parseInt(s.slice(4,6),16);
-                          a = parseInt(s.slice(6,8),16) / 255 * 0.95;
-                      } else if (s.length === 3) {
-                          r = parseInt(s[0]+s[0],16);
-                          g = parseInt(s[1]+s[1],16);
-                          b = parseInt(s[2]+s[2],16);
-                      }
-                      nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
-                  }
-              } catch (e) { (this.errorHandler || global.errorHandler || console).error('OverlayRenderer.render: Failed to parse route color:', e); }
-              const dotSize = (this.map.getRouteNodeSize && typeof this.map.getRouteNodeSize === 'function') ? this.map.getRouteNodeSize() : 6;
-              ctx.save();
-              ctx.beginPath();
-              ctx.fillStyle = nodeFill || 'rgba(34, 211, 238, 1)';
-              ctx.arc(px, py, dotSize, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.restore();
-            }
-          }
-        } catch (e) { /* non-fatal */ }
+        // Clear overlay canvas at start of frame
+        if (renderContext.canvasOverlay) {
+          const overlayCanvas = renderContext.canvasOverlay;
+          const ctx = renderContext.ctxOverlay;
+          ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
+
+        const ctx = renderContext.ctxOverlay;
+        if (!ctx) return;
 
         // Position selected marker tooltip (from SelectionState via DOM)
         // OverlayRenderer is responsible for updating tooltip position every frame to keep it anchored to the marker

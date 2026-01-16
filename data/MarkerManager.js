@@ -13,15 +13,9 @@ class MarkerManager {
 
         // Internal state
         this.markers = [];
-        this.onChanged = null;
         this.onCleanupRouteReferences = null;
 
         // Note: loadFromStorage() is called explicitly after consent is obtained
-    }
-
-    // Set callback for when markers change
-    setOnChanged(callback) {
-        this.onChanged = callback;
     }
 
     // Set callback for route cleanup when markers are deleted
@@ -37,15 +31,6 @@ class MarkerManager {
                 this.eventBus.emit(eventType, eventData);
             } catch (e) {
                 this.errorHandler.logDebug('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
-            }
-        }
-
-        // Call legacy callback
-        if (this.onChanged) {
-            try {
-                this.onChanged();
-            } catch (e) {
-                this.errorHandler.logDebug('MarkerManager._notifyChanged failed', 'MarkerManager._notifyChanged', { error: e });
             }
         }
     }
@@ -225,47 +210,97 @@ class MarkerManager {
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    const imported = [];
+                    let markersToImport = [];
 
-                    if (!Array.isArray(data.markers)) {
-                        throw new Error('Invalid format: markers must be an array');
+                    // Handle different formats
+                    if (data && Array.isArray(data.markers)) {
+                        // Format: { markers: [...], ... }
+                        markersToImport = data.markers;
+                    } else if (Array.isArray(data)) {
+                        // Format: bare array
+                        markersToImport = data;
+                    } else {
+                        throw new Error('Invalid marker file: missing markers array');
                     }
 
-                    // Check if imported data is legacy and upgrade if needed
-                    let isLegacy = false;
-                    if (MarkerUtilsCore.isLegacyMarkerFile(data.markers)) {
-                        isLegacy = true;
-                        data.markers = MarkerUtilsCore.upgradeLegacyMarkers(data.markers, this.config.layerPrefix);
+                    if (!Array.isArray(markersToImport) || markersToImport.length === 0) {
+                        throw new Error('File contains no markers');
                     }
 
-                    // Validate and add markers
-                    for (const marker of data.markers) {
-                        if (!MarkerUtilsCore.validateMarker(marker)) {
+                    // Detect legacy marker file (legacy UIDs like cm01, cm02) vs current hashed UIDs
+                    const isLegacyMarkersFile = MarkerUtilsCore.isLegacyMarkerFile(markersToImport);
+
+                    // Build migratedMarkers: for legacy files regenerate hashed UIDs; for modern files keep provided UIDs
+                    const migratedMarkers = markersToImport.map(m => {
+                        if (typeof m.x !== 'number' || typeof m.y !== 'number') {
                             throw new Error('Invalid marker: x and y must be numbers');
                         }
-
-                        if (this.markers.length >= this.config.maxMarkers) {
-                            break;
+                        const x = Number(m.x);
+                        const y = Number(m.y);
+                        let uid;
+                        if (isLegacyMarkersFile) {
+                            uid = MarkerUtilsCore.generateUniqueUID(x, y, this.config.layerPrefix, this.markers.map(existing => existing.uid));
+                        } else {
+                            uid = (typeof m.uid === 'string' && m.uid) ? m.uid : MarkerUtilsCore.generateUniqueUID(x, y, this.config.layerPrefix, this.markers.map(existing => existing.uid));
                         }
+                        return { uid, x, y };
+                    });
 
-                        // Generate unique UID
-                        const uid = MarkerUtilsCore.generateUniqueUID(marker.x, marker.y, this.config.layerPrefix, this.markers.map(m => m.uid));
+                    // Check limits: count only NEW markers (those without matching UIDs)
+                    const newMarkersCount = migratedMarkers.filter(imported => !this.markerExists(imported.uid)).length;
+                    const totalAfterImport = this.markers.length + newMarkersCount;
 
-                        const newMarker = { uid, x: marker.x, y: marker.y };
-                        this.markers.push(newMarker);
-                        imported.push(newMarker);
+                    if (totalAfterImport > this.config.maxMarkers) {
+                        const needToDelete = totalAfterImport - this.config.maxMarkers;
+                        throw new Error(
+                            `Cannot import ${migratedMarkers.length} markers.\n\n` +
+                            `You have ${this.markers.length} markers, import would add ${newMarkersCount} new ones.\n\n` +
+                            `Total would be ${totalAfterImport}, maximum is ${this.config.maxMarkers}.\n\n` +
+                            `Please delete at least ${needToDelete} marker(s) first.`
+                        );
                     }
+
+                    // Merge markers: replace those with matching UIDs, add new ones
+                    const mergedMarkers = this.markers.slice();
+                    let replacedCount = 0;
+                    let addedCount = 0;
+
+                    for (const importedMarker of migratedMarkers) {
+                        const existingIdx = mergedMarkers.findIndex(m => m.uid === importedMarker.uid);
+                        if (existingIdx >= 0) {
+                            // Replace marker with same UID (hash)
+                            mergedMarkers[existingIdx] = importedMarker;
+                            replacedCount++;
+                        } else {
+                            // Add new marker
+                            mergedMarkers.push(importedMarker);
+                            addedCount++;
+                        }
+                    }
+
+                    // Update markers
+                    this.markers = mergedMarkers;
+                    this.saveToStorage();
 
                     // If legacy was detected, notify user
-                    if (isLegacy && imported.length > 0) {
-                        this.notifications.showUpgradeNotification(`Upgraded custom markers: ${imported.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
+                    if (isLegacyMarkersFile && migratedMarkers.length > 0) {
+                        this.notifications.showUpgradeNotification(`Upgraded custom markers: ${migratedMarkers.length} markers regenerated. UIDs and layers matched by coordinate hash.`);
                     }
 
-                    // Persist to storage and notify
-                    this.saveToStorage();
-                    this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, { markers: imported, layerKey: this.config.layerPrefix });
+                    // Notify about the import
+                    const imported = migratedMarkers.map(m => ({ uid: m.uid, x: m.x, y: m.y }));
+                    this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, {
+                        markers: imported,
+                        layerKey: this.config.layerPrefix,
+                        replaced: replacedCount,
+                        added: addedCount
+                    });
 
-                    resolve(imported);
+                    resolve({
+                        imported: imported.length,
+                        replaced: replacedCount,
+                        added: addedCount
+                    });
                 } catch (error) {
                     this.notifications.showError('Error importing markers: ' + error.message);
                     reject(error);

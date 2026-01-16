@@ -17,12 +17,33 @@ const RouteAnimation = {
      * @param {Object} map - The map instance to animate
      */
     startAnimation(map) {
-        if (!map || map._routeRaf) return;
+        if (!map) return;
 
-        map._lastRouteAnimTime = performance.now();
+        // Check if animation is already running using RouteAnimationState if available
+        if (map.routeAnimationState && map.routeAnimationState.getAnimationFrameId()) return;
+        if (!map.routeAnimationState && map._routeRaf) return;
+
+        // Initialize animation state
+        if (map.routeAnimationState) {
+            map.routeAnimationState.setLastAnimationTime(performance.now());
+        } else {
+            map._lastRouteAnimTime = performance.now();
+        }
+
         const step = (timestamp) => {
-            const dt = Math.max(0, timestamp - map._lastRouteAnimTime) / 1000; // seconds
-            map._lastRouteAnimTime = timestamp;
+            // Get timing from RouteAnimationState if available
+            const lastTime = map.routeAnimationState ? 
+                map.routeAnimationState.getLastAnimationTime() : 
+                map._lastRouteAnimTime;
+            
+            const dt = Math.max(0, timestamp - lastTime) / 1000; // seconds
+            
+            // Update timing
+            if (map.routeAnimationState) {
+                map.routeAnimationState.setLastAnimationTime(timestamp);
+            } else {
+                map._lastRouteAnimTime = timestamp;
+            }
 
             // Advance offset by speed * dt * direction (scale with zoom so perceived
             // animation speed remains consistent across zoom levels)
@@ -30,7 +51,18 @@ const RouteAnimation = {
             const zoomFactor = (typeof map.zoom === 'number' && map.zoom > 0) ? map.zoom : 1;
             const speed = map._routeAnimationSpeed || this.CONFIG.DEFAULT_SPEED;
 
-            map._routeDashOffset = (map._routeDashOffset + speed * dt * dir * zoomFactor + this.CONFIG.DASH_OFFSET_WRAP) % this.CONFIG.DASH_OFFSET_WRAP;
+            const currentOffset = map.routeAnimationState ? 
+                map.routeAnimationState.getAnimationOffset() : 
+                map._routeDashOffset;
+            
+            const newOffset = (currentOffset + speed * dt * dir * zoomFactor + this.CONFIG.DASH_OFFSET_WRAP) % this.CONFIG.DASH_OFFSET_WRAP;
+
+            // Update offset
+            if (map.routeAnimationState) {
+                map.routeAnimationState.setAnimationOffset(newOffset);
+            } else {
+                map._routeDashOffset = newOffset;
+            }
 
             // Only continue animating if there is a route
             if (!map.currentRoute || !map.currentRoute.length) {
@@ -38,17 +70,33 @@ const RouteAnimation = {
                 return;
             }
 
-            // Only redraw the overlay (route + markers) for animation frames
+            // Only redraw the route for animation frames through the batched render pipeline
             try {
-                if (map.render) map.render();
+                if (map.markRendererDirty) {
+                    map.markRendererDirty('RouteRenderer');
+                } else if (map.render) {
+                    map.render(); // Fallback for compatibility
+                }
             } catch (e) {
                 this.errorHandler.logDebug('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
             }
 
-            map._routeRaf = requestAnimationFrame(step);
+            // Schedule next frame and store RAF ID properly
+            const rafId = requestAnimationFrame(step);
+            if (map.routeAnimationState) {
+                map.routeAnimationState.setAnimationFrameId(rafId);
+            } else {
+                map._routeRaf = rafId;
+            }
         };
 
-        map._routeRaf = requestAnimationFrame(step);
+        // Start first frame and store RAF ID properly
+        const rafId = requestAnimationFrame(step);
+        if (map.routeAnimationState) {
+            map.routeAnimationState.setAnimationFrameId(rafId);
+        } else {
+            map._routeRaf = rafId;
+        }
     },
 
     /**
@@ -58,9 +106,20 @@ const RouteAnimation = {
     stopAnimation(map) {
         if (!map) return;
 
-        if (map._routeRaf) {
-            cancelAnimationFrame(map._routeRaf);
-            map._routeRaf = null;
+        // Get current RAF ID using RouteAnimationState if available
+        const currentRafId = map.routeAnimationState ? 
+            map.routeAnimationState.getAnimationFrameId() : 
+            map._routeRaf;
+
+        if (currentRafId) {
+            cancelAnimationFrame(currentRafId);
+            
+            // Clear RAF ID using RouteAnimationState if available
+            if (map.routeAnimationState) {
+                map.routeAnimationState.setAnimationFrameId(null);
+            } else {
+                map._routeRaf = null;
+            }
         }
     },
 

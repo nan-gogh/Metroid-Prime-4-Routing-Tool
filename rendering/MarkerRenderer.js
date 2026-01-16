@@ -44,10 +44,17 @@
      * @param {RenderContext} renderContext - The render context providing canvas access
      */
     render(renderContext) {
-      if (!renderContext || !renderContext.ctx) return;
+      if (!renderContext || !renderContext.ctxMarker) return;
+
+      // Clear marker canvas at start of frame
+      const markerCanvas = renderContext.canvasMarker;
+      if (markerCanvas) {
+        const ctx = renderContext.ctxMarker;
+        ctx.clearRect(0, 0, markerCanvas.width, markerCanvas.height);
+      }
 
       // Fully migrated marker rendering from map.renderMarkers()
-      const ctx = renderContext.ctx;
+      const ctx = renderContext.ctxMarker;
       const canvasSize = renderContext.getCanvasSize();
       const cssWidth = canvasSize.width;
       const cssHeight = canvasSize.height;

@@ -6,25 +6,15 @@ const MarkerUtils = {
     errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
 
     // Factory method to create manager with dependencies
-    createManager(config, storage, notifications) {
+    createManager(config, storage, notifications, eventBus) {
         if (this._manager) {
             this.errorHandler.logWarning('MarkerManager already exists, returning existing instance', 'MarkerUtils.createManager.duplicate', {});
             return this._manager;
         }
 
-        this._manager = new MarkerManager(config, storage, notifications);
+        this._manager = new MarkerManager(config, storage, notifications, eventBus);
 
-        // Set up legacy callback compatibility
-        this._manager.onChanged = () => {
-            if (this._onMarkersChanged) {
-                try {
-                    this._onMarkersChanged();
-                } catch (e) {
-                    this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils._notifyMarkersChanged', { error: e });
-                }
-            }
-        };
-
+        // Set up route cleanup callback compatibility
         this._manager.onCleanupRouteReferences = (uid) => {
             if (this._onCleanupRouteReferences) {
                 try {
@@ -44,19 +34,9 @@ const MarkerUtils = {
             // Try to create manager if dependencies are available
             if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
                 try {
-                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface);
+                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface, window.eventBus);
                     
-                    // Set up callbacks
-                    this._manager.onChanged = () => {
-                        if (this._onMarkersChanged) {
-                            try {
-                                this._onMarkersChanged();
-                            } catch (e) {
-                                this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils.getManager._notifyMarkersChanged', { error: e });
-                            }
-                        }
-                    };
-
+                    // Set up route cleanup callback
                     this._manager.onCleanupRouteReferences = (uid) => {
                         if (this._onCleanupRouteReferences) {
                             try {
@@ -80,21 +60,6 @@ const MarkerUtils = {
     },
 
     // Legacy callback setters for backward compatibility
-    setOnMarkersChanged(callback) {
-        this._onMarkersChanged = callback;
-        if (this._manager) {
-            this._manager.onChanged = () => {
-                if (callback) {
-                    try {
-                        callback();
-                    } catch (e) {
-                        this.errorHandler.logDebug('MarkerUtils._notifyMarkersChanged failed', 'MarkerUtils.setOnMarkersChanged', { error: e });
-                    }
-                }
-            };
-        }
-    },
-
     setOnCleanupRouteReferences(callback) {
         this._onCleanupRouteReferences = callback;
         if (this._manager) {
