@@ -1226,6 +1226,11 @@ class InteractiveMap {
                         // no route -> display 0
                         el.textContent = '0';
                     }
+                } else if (layerKey === 'customMarkers' && this.markerManager) {
+                    // Special handling for custom markers - use MarkerManager directly for accurate count
+                    const count = this.markerManager.getCount();
+                    const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (this.layerConfig && this.layerConfig[layerKey] && this.layerConfig[layerKey].maxMarkers) || 50;
+                    el.textContent = `${count} / ${configuredMax}`;
                 } else if (Array.isArray(layer.markers)) {
                     // If layer provides a maxMarkers field use it; otherwise try runtime layerConfig, else just show count
                     const configuredMax = (typeof layer.maxMarkers === 'number') ? layer.maxMarkers : (this.layerConfig && this.layerConfig[layerKey] && this.layerConfig[layerKey].maxMarkers);
