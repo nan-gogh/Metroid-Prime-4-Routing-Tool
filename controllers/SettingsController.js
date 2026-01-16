@@ -57,22 +57,27 @@
             this._setStorageConsent(on);
 
             if (on) {
-              // Save current settings
-              await this._saveAllSettings();
-              this._updateLayerCounts();
+              // Defer heavy save operation to prevent performance warnings after blocking dialog
+              Promise.resolve().then(async () => {
+                await this._saveAllSettings();
+                this._updateLayerCounts();
+              });
             } else {
               // Clear saved data
               if (!this._confirmClearData()) {
                 this._updateConsentToggleUI(saveLabel, true);
                 this._setStorageConsent(true);
               } else {
-                this._clearAllSavedData();
-                // Reload page after clearing
-                try {
-                  location.reload();
-                } catch (e) {
-                  this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
-                }
+                // Defer heavy clear operation to prevent performance warnings after blocking dialog
+                Promise.resolve().then(() => {
+                  this._clearAllSavedData();
+                  // Reload page after clearing
+                  try {
+                    location.reload();
+                  } catch (e) {
+                    this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
+                  }
+                });
               }
             }
 

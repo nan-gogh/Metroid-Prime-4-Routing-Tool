@@ -311,30 +311,33 @@ class RouteComputeController {
             return;
         }
         if (NotificationUtils.confirmDestructiveAction('Clear route? This cannot be undone.')) {
-            this.routeState.clearRoute();
-            // Exit route edit mode when route is cleared
-            this.editModeState.setEditRouteMode(false);
-            // Clean up pooled objects before clearing state
-            try {
-                const routeInsert = this.routeEditState.getRouteInsert();
-                if (routeInsert && routeInsert.tempMarker && typeof markerPool !== 'undefined') {
-                    markerPool.release(routeInsert.tempMarker);
-                }
-            } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.releasePooledObjects'); }
-            try { this.routeEditState.clearRouteNodeCandidate(); this.routeEditState.clearRouteInsert(); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.clearRouteCandidates'); }
-            // Update sidebar & mini toggles if present
-            try {
-                const routeToggle = document.getElementById('editRouteToggle');
-                if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
-            } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateRouteToggle'); }
-            try {
-                const miniRoute = document.getElementById('editRouteToggleMini');
-                if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.setMiniRouteToggleColor'); } miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
-            } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateMiniRouteToggle'); }
-            try { this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateEditOverlay'); }
-            // Emit render requested event instead of direct render
-            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
-                triggeredBy: 'route-clear'
+            // Defer heavy work to prevent performance warnings after blocking dialog
+            Promise.resolve().then(() => {
+                this.routeState.clearRoute();
+                // Exit route edit mode when route is cleared
+                this.editModeState.setEditRouteMode(false);
+                // Clean up pooled objects before clearing state
+                try {
+                    const routeInsert = this.routeEditState.getRouteInsert();
+                    if (routeInsert && routeInsert.tempMarker && typeof markerPool !== 'undefined') {
+                        markerPool.release(routeInsert.tempMarker);
+                    }
+                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.releasePooledObjects'); }
+                try { this.routeEditState.clearRouteNodeCandidate(); this.routeEditState.clearRouteInsert(); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.clearRouteCandidates'); }
+                // Update sidebar & mini toggles if present
+                try {
+                    const routeToggle = document.getElementById('editRouteToggle');
+                    if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
+                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateRouteToggle'); }
+                try {
+                    const miniRoute = document.getElementById('editRouteToggleMini');
+                    if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.setMiniRouteToggleColor'); } miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
+                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateMiniRouteToggle'); }
+                try { this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateEditOverlay'); }
+                // Emit render requested event instead of direct render
+                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
+                    triggeredBy: 'route-clear'
+                });
             });
         }
     }
