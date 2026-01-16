@@ -958,7 +958,7 @@ class InteractiveMap {
         // Increment generation and abort any in-flight tile loads from previous tileset
         try { this.imageState.incrementTilesetGeneration(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.incrementGeneration'); }
         try { this._abortAndCleanupTileLoads(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.abortTileLoads'); }
-        try { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting'); }
+        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting'); }
         // Clear cached images and reload (folder may change depending on
         // whether grayscale variants are enabled)
         try { this.preloadAllMapImages(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.preloadImages'); }
@@ -991,7 +991,7 @@ class InteractiveMap {
             enabled = !!enabled;
             if (this.tilesetGrayscale === enabled) return;
             this.tilesetGrayscale = enabled;
-            try { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0'); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting'); }
+            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting'); }
             this._handleTilesetChange();
         }
     }
@@ -1001,7 +1001,7 @@ class InteractiveMap {
         enabled = !!enabled;
         if (this._showGridHeatmap === enabled) return;
         this._showGridHeatmap = enabled;
-        try { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0'); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
+        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
         try {
             // Redraw the grid renderer to show/hide heatmap
             this.markRendererDirty('GridRenderer');
@@ -2101,9 +2101,16 @@ async function init() {
             
             eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
                 try {
-                    // Tileset changes require a render to take effect
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    // Tileset state has changed, trigger side effects
+                    // NOTE: Do NOT call map.setTileset() here - it would emit the event again!
+                    // The state has already changed; just handle the consequences.
+                    if (map) {
+                        try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - incrementGeneration'); }
+                        try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - abortTileLoads'); }
+                        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset); } } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting'); }
+                        try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - preloadImages'); }
+                        try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - loadInitialImage'); }
+                        try { map.markRendererDirty('TileRenderer'); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - markDirty'); }
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED handler');
@@ -2112,9 +2119,15 @@ async function init() {
             
             eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
                 try {
-                    // Grayscale changes require a render to take effect
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    // Grayscale state has changed, trigger side effects
+                    // NOTE: Do NOT call map.setTilesetGrayscale() here - it would emit the event again!
+                    if (map) {
+                        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0'); } } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - saveSetting'); }
+                        try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - incrementGeneration'); }
+                        try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - abortTileLoads'); }
+                        try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - preloadImages'); }
+                        try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - loadInitialImage'); }
+                        try { map.markRendererDirty('TileRenderer'); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - markDirty'); }
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED handler');
@@ -2123,9 +2136,9 @@ async function init() {
             
             eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
                 try {
-                    // Display settings changes (grid/heatmap) require a render
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    // Display settings have changed, apply them to the map
+                    if (map && map.layerState && typeof map.setGridHeatmap === 'function') {
+                        map.setGridHeatmap(map.layerState.heatmapVisible, map.layerState.gridVisible);
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED handler');
