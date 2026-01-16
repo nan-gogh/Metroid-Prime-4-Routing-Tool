@@ -2393,18 +2393,15 @@ async function init() {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    // (onChanged callback may not have run yet due to event emission happening first)
                     if (map && map.markerManager && LAYERS.customMarkers) {
                         LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
                     }
-                    // Update display counts (now guaranteed to read current state)
+                    // Update display counts (UI update, not rendering)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
-                    if (eventBus && typeof eventBus.emit === 'function') {
-                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
-                    }
+                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
+                    // This is batched by the render pipeline on RAF, not synchronous
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_ADDED handler');
                 }
@@ -2414,18 +2411,15 @@ async function init() {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    // (onChanged callback may not have run yet due to event emission happening first)
                     if (map && map.markerManager && LAYERS.customMarkers) {
                         LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
                     }
-                    // Update display counts (now guaranteed to read current state)
+                    // Update display counts (UI update, not rendering)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
-                    if (eventBus && typeof eventBus.emit === 'function') {
-                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
-                    }
+                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
+                    // This is batched by the render pipeline on RAF, not synchronous
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_REMOVED handler');
                 }
@@ -2435,18 +2429,15 @@ async function init() {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    // (onChanged callback may not have run yet due to event emission happening first)
                     if (map && map.markerManager && LAYERS.customMarkers) {
                         LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
                     }
-                    // Update display counts (now guaranteed to read current state)
+                    // Update display counts (UI update, not rendering)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
-                    if (eventBus && typeof eventBus.emit === 'function') {
-                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
-                    }
+                    // Rendering handled by MarkerManager.onChanged callback via markRendererDirty
+                    // This is batched by the render pipeline on RAF, not synchronous
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_EDITED handler');
                 }
