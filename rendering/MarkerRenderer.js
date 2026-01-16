@@ -11,12 +11,14 @@
      * @param {Object} markerManager - The marker manager for custom markers
      * @param {Object} config - Configuration object (defaults to global MP4Config)
      * @param {Object} layers - Layer configuration object (defaults to global LAYERS)
+     * @param {Object} highlightState - The highlight state manager (for marker highlighting)
      */
-    constructor(mapState, layerState, selectionState, markerManager, config, layers) {
+    constructor(mapState, layerState, selectionState, markerManager, config, layers, highlightState) {
       this.mapState = mapState;
       this.layerState = layerState;
       this.selectionState = selectionState;
       this.markerManager = markerManager;
+      this.highlightState = highlightState;
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
       this.errorHandler = global.errorHandler;
@@ -202,9 +204,10 @@
         let highlighted = false;
         let highlightScale = undefined;
         try {
-          if (this.layerState.highlightedLayers && this.layerState.highlightedLayers.has(layerKey)) {
+          // Check highlight state from HighlightState, not layerState
+          if (this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has(layerKey)) {
             highlighted = true;
-            const cfg = (this.layerState.highlightConfig && this.layerState.highlightConfig[layerKey]) ? this.layerState.highlightConfig[layerKey] : null;
+            const cfg = (this.highlightState.highlightConfig && this.highlightState.highlightConfig[layerKey]) ? this.highlightState.highlightConfig[layerKey] : null;
             highlightScale = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to check highlight state:', e); }
@@ -235,10 +238,10 @@
         // Get current zoom
         const zoom = this.mapState.zoom || 1;
         
-        // Check highlight state
+        // Check highlight state from HighlightState (via highlightState, not layerState)
         let isHighlighted = false;
         try {
-          if (this.layerState.highlightedLayers && this.layerState.highlightedLayers.has(layerKey)) {
+          if (this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has(layerKey)) {
             isHighlighted = true;
           }
         } catch (e) { console.error('MarkerRenderer.getMarkerRenderSize: Failed to check highlight state:', e); }

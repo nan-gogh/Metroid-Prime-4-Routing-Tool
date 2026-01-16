@@ -110,7 +110,7 @@ class InteractiveMap {
                         }
                     });
                 }
-                this.markerRenderer = new MarkerRenderer(this.mapState, this.layerState, this.selectionState, this.markerManager, MP4Config, layerConfig);
+                this.markerRenderer = new MarkerRenderer(this.mapState, this.layerState, this.selectionState, this.markerManager, MP4Config, layerConfig, this.highlightState);
                 try { this.markerRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('MarkerRenderer.init failed', 'InteractiveMap.init.markerRenderer', { error: e }); }
             }
             if (typeof RouteRenderer !== 'undefined') {
@@ -2427,76 +2427,51 @@ async function init() {
 
     // Create map
     map = new InteractiveMap('mapCanvas');
-        // Highlighting runtime state: set of layer keys currently highlighted
+        // Highlighting runtime state: delegated to HighlightState
         try {
-            map.highlightedLayers = new Set();
-            map._highlightConfig = Object.assign({}, map._highlightConfig || {});
-            // Global multiplier applied to all highlight scales (user-configurable)
-            try { map.highlightScaleMultiplier = (function(){ const v = loadHighlightMultiplierFromStorage(); return (typeof v === 'number' && !isNaN(v)) ? v : 1.0; })(); } catch (e) { map.highlightScaleMultiplier = 1.0; }
+            // For backward compatibility, expose highlighting through modular HighlightState
+            // Old properties left intact for legacy code, but these now delegate to highlightState
+            Object.defineProperty(map, 'highlightedLayers', {
+                get() {
+                    return this.highlightState ? this.highlightState.highlightedLayers : new Set();
+                },
+                set(value) {
+                    if (this.highlightState && value instanceof Set) {
+                        this.highlightState.highlightedLayers = value;
+                    }
+                }
+            });
+
+            Object.defineProperty(map, '_highlightConfig', {
+                get() {
+                    return this.highlightState ? this.highlightState.highlightConfig : {};
+                },
+                set(value) {
+                    if (this.highlightState && typeof value === 'object') {
+                        this.highlightState.highlightConfig = value;
+                    }
+                }
+            });
+
+            // Delegate highlighting methods to highlightState
             map.setLayerHighlight = function(layerKey, scale) {
-                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) { _logError(e, 'setLayerHighlight.initHighlightedLayers'); }
-                try { this.highlightedLayers.add(layerKey); } catch (e) { _logError(e, 'setLayerHighlight.addLayer'); }
-                // (debug logs removed)
-                try { this._highlightConfig = this._highlightConfig || {}; this._highlightConfig[layerKey] = { scale: (typeof scale === 'number') ? scale : 2.0 }; } catch (e) { _logError(e, 'setLayerHighlight.setConfig'); }
-                try { if (typeof this.render === 'function') this.render(); } catch (e) { _logError(e, 'setLayerHighlight.render'); }
-                try { if (window.eventBus) window.eventBus.emit(window.EventTypes.HIGHLIGHTED_LAYERS_SAVE_REQUESTED, { highlightConfig: this._highlightConfig || {} }); } catch (e) { _logError(e, 'setLayerHighlight.saveStorage'); }
-                // Ensure hit-testing is recalculated to match new visual sizes.
-                try {
-                    if (typeof this.checkMarkerHover === 'function') {
-                        if (typeof this.lastMouseX === 'number' && typeof this.lastMouseY === 'number') {
-                            try {
-                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
-                                if (rect) {
-                                    const lx = this.lastMouseX - rect.left;
-                                    const ly = this.lastMouseY - rect.top;
-                                    try { this.checkMarkerHover(lx, ly); } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.withOffset'); }
-                                } else {
-                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.noOffset'); }
-                                }
-                            } catch (e) { _logError(e, 'setLayerHighlight.getBoundingRect'); }
-                        } else {
-                            try {
-                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
-                                if (rect) this.checkMarkerHover(rect.width / 2, rect.height / 2);
-                            } catch (e) { _logError(e, 'setLayerHighlight.checkMarkerHover.center'); }
-                        }
-                    }
-                } catch (e) { _logError(e, 'setLayerHighlight.hoverCheck'); }
-            };
-            map.clearLayerHighlight = function(layerKey) {
-                try { if (this.highlightedLayers) this.highlightedLayers.delete(layerKey); } catch (e) { _logError(e, 'clearLayerHighlight.deleteLayer'); }
-                // (debug logs removed)
-                try { if (this._highlightConfig) delete this._highlightConfig[layerKey]; } catch (e) { _logError(e, 'clearLayerHighlight.deleteConfig'); }
-                try { if (typeof this.render === 'function') this.render(); } catch (e) { _logError(e, 'clearLayerHighlight.render'); }
-                try { if (window.eventBus) window.eventBus.emit(window.EventTypes.HIGHLIGHTED_LAYERS_SAVE_REQUESTED, { highlightConfig: this._highlightConfig || {} }); } catch (e) { _logError(e, 'clearLayerHighlight.saveStorage'); }
-                // Recompute hit testing after clearing highlight
-                try {
-                    if (typeof this.checkMarkerHover === 'function') {
-                        if (typeof this.lastMouseX === 'number' && typeof this.lastMouseY === 'number') {
-                            try {
-                                const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null;
-                                if (rect) {
-                                    const lx = this.lastMouseX - rect.left;
-                                    const ly = this.lastMouseY - rect.top;
-                                    try { this.checkMarkerHover(lx, ly); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.withOffset'); }
-                                } else {
-                                    try { this.checkMarkerHover(this.lastMouseX, this.lastMouseY); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.noOffset'); }
-                                }
-                            } catch (e) { _logError(e, 'clearLayerHighlight.getBoundingRect'); }
-                        } else {
-                            try { const rect = this.canvas && this.canvas.getBoundingClientRect ? this.canvas.getBoundingClientRect() : null; if (rect) this.checkMarkerHover(rect.width/2, rect.height/2); } catch (e) { _logError(e, 'clearLayerHighlight.checkMarkerHover.center'); }
-                        }
-                    }
-                } catch (e) { _logError(e, 'clearLayerHighlight.hoverCheck'); }
-            };
-            map.toggleLayerHighlight = function(layerKey, scale) {
-                try { if (!this.highlightedLayers) this.highlightedLayers = new Set(); } catch (e) { _logError(e, 'toggleLayerHighlight.initHighlightedLayers'); }
-                if (this.highlightedLayers && this.highlightedLayers.has(layerKey)) {
-                    try { this.clearLayerHighlight(layerKey); } catch (e) { _logError(e, 'toggleLayerHighlight.clearLayerHighlight'); }
-                } else {
-                    try { this.setLayerHighlight(layerKey, scale); } catch (e) { _logError(e, 'toggleLayerHighlight.setLayerHighlight'); }
+                if (this.highlightState && typeof this.highlightState.setLayerHighlight === 'function') {
+                    this.highlightState.setLayerHighlight(layerKey, scale);
                 }
             };
+
+            map.clearLayerHighlight = function(layerKey) {
+                if (this.highlightState && typeof this.highlightState.clearLayerHighlight === 'function') {
+                    this.highlightState.clearLayerHighlight(layerKey);
+                }
+            };
+
+            map.toggleLayerHighlight = function(layerKey, scale) {
+                if (this.highlightState && typeof this.highlightState.toggleLayerHighlight === 'function') {
+                    this.highlightState.toggleLayerHighlight(layerKey, scale);
+                }
+            };
+
 
             // Store previous highlight state for layers so edit-mode can restore it later
             // State tracking functions removed - edit mode no longer modifies highlight state
@@ -2979,7 +2954,8 @@ async function init() {
         const slider = document.getElementById('highlightScaleSlider');
         const label = document.getElementById('highlightScaleValue');
         if (slider && label) {
-            let initial = (map && typeof map.highlightScaleMultiplier === 'number') ? map.highlightScaleMultiplier : 1.0;
+            // Get initial value from highlightState instead of map property
+            let initial = (map && map.highlightState && typeof map.highlightState.highlightScaleMultiplier === 'number') ? map.highlightState.highlightScaleMultiplier : 1.0;
             slider.value = initial;
             // Display a mapped user-facing value while keeping internal numbers unchanged.
             // Users expect the displayed slider to start near 1.2x, so show (internal + 0.6).
@@ -2993,8 +2969,9 @@ async function init() {
                 const display = Number(v) + 0.6;
                 const pct = Math.round(display * 100);
                 label.textContent = `${pct}%`;
-                if (map && typeof map.updateMarkerHighlightMultiplier === 'function') {
-                    map.updateMarkerHighlightMultiplier(v);
+                // Update highlightScaleMultiplier via HighlightState
+                if (map && map.highlightState && typeof map.highlightState.setHighlightScaleMultiplier === 'function') {
+                    map.highlightState.setHighlightScaleMultiplier(v);
                 }
             });
             
