@@ -2391,8 +2391,13 @@ async function init() {
             // Marker event listeners
             eventBus.on(window.EventTypes.MARKER_ADDED, (data) => {
                 try {
-                    // LAYERS synchronization handled by MarkerManager.onChanged callback
-                    // Update display counts (reads from synchronized LAYERS array)
+                    // Event handlers must ensure state is current before acting on it
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    // (onChanged callback may not have run yet due to event emission happening first)
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now guaranteed to read current state)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
@@ -2407,8 +2412,13 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_REMOVED, (data) => {
                 try {
-                    // LAYERS synchronization handled by MarkerManager.onChanged callback
-                    // Update display counts (reads from synchronized LAYERS array)
+                    // Event handlers must ensure state is current before acting on it
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    // (onChanged callback may not have run yet due to event emission happening first)
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now guaranteed to read current state)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
@@ -2423,8 +2433,13 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_EDITED, (data) => {
                 try {
-                    // LAYERS synchronization handled by MarkerManager.onChanged callback
-                    // Update display counts (reads from synchronized LAYERS array)
+                    // Event handlers must ensure state is current before acting on it
+                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
+                    // (onChanged callback may not have run yet due to event emission happening first)
+                    if (map && map.markerManager && LAYERS.customMarkers) {
+                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Update display counts (now guaranteed to read current state)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
