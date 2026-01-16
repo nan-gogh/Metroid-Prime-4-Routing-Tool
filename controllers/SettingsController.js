@@ -57,10 +57,12 @@
             this._setStorageConsent(on);
 
             if (on) {
-              // Defer heavy save operation to prevent performance warnings after blocking dialog
-              Promise.resolve().then(async () => {
+              // Defer to next macrotask to create task boundary and prevent performance warnings
+              TaskScheduler.deferToNextTask(async () => {
                 await this._saveAllSettings();
                 this._updateLayerCounts();
+              }).catch(e => {
+                this.errorHandler.logError(e, 'SettingsController.storageConsent.saveOperations');
               });
             } else {
               // Clear saved data
@@ -68,8 +70,8 @@
                 this._updateConsentToggleUI(saveLabel, true);
                 this._setStorageConsent(true);
               } else {
-                // Defer heavy clear operation to prevent performance warnings after blocking dialog
-                Promise.resolve().then(() => {
+                // Defer to next macrotask to create task boundary and prevent performance warnings
+                TaskScheduler.deferToNextTask(async () => {
                   this._clearAllSavedData();
                   // Reload page after clearing
                   try {
@@ -77,6 +79,8 @@
                   } catch (e) {
                     this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
                   }
+                }).catch(e => {
+                  this.errorHandler.logError(e, 'SettingsController.storageConsent.clearOperations');
                 });
               }
             }

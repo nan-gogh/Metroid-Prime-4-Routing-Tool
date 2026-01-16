@@ -311,8 +311,8 @@ class RouteComputeController {
             return;
         }
         if (NotificationUtils.confirmDestructiveAction('Clear route? This cannot be undone.')) {
-            // Defer heavy work to prevent performance warnings after blocking dialog
-            Promise.resolve().then(() => {
+            // Defer to next macrotask to create task boundary and prevent performance warnings
+            TaskScheduler.deferToNextTask(async () => {
                 this.routeState.clearRoute();
                 // Exit route edit mode when route is cleared
                 this.editModeState.setEditRouteMode(false);
@@ -338,6 +338,8 @@ class RouteComputeController {
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-clear'
                 });
+            }).catch(e => {
+                this.errorHandler.logError(e, 'RouteComputeController.clearRoute.deferredWork');
             });
         }
     }

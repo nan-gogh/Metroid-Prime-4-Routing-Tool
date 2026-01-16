@@ -3287,10 +3287,8 @@ async function init() {
             return;
         }
         if (NotificationUtils.confirmDestructiveAction('Clear all custom markers? This cannot be undone.')) {
-            // Defer heavy work to microtask queue to avoid blocking the event handler
-            // The confirm() dialog is synchronous and blocks, causing the event handler to appear slow
-            // By deferring to microtask, we exit the event handler quickly, then do the work
-            Promise.resolve().then(() => {
+            // Defer to next macrotask to create task boundary and prevent performance warnings after blocking dialog
+            TaskScheduler.deferToNextTask(async () => {
                 try {
                     if (map.markerManager) {
                         map.markerManager.clearMarkers();
@@ -3310,6 +3308,8 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.deferred');
                 }
+            }).catch(e => {
+                moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.deferredWork');
             });
         }
     });
