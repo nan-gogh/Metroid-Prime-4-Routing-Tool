@@ -2391,19 +2391,12 @@ async function init() {
             // Marker event listeners
             eventBus.on(window.EventTypes.MARKER_ADDED, (data) => {
                 try {
-                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    if (map && map.markerManager && LAYERS.customMarkers) {
-                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
-                    }
-                    // Update display counts (now reads from synchronized LAYERS array)
+                    // LAYERS synchronization handled by MarkerManager.onChanged callback
+                    // Update display counts (reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Use render pipeline's dirty flag system for batched rendering
-                    if (map && typeof map.markRendererDirty === 'function') {
-                        map.markRendererDirty('MarkerRenderer');
-                    }
-                    // Also request render to ensure RAF loop is triggered with fallback
+                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
                     if (eventBus && typeof eventBus.emit === 'function') {
                         eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                     }
@@ -2414,19 +2407,12 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_REMOVED, (data) => {
                 try {
-                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    if (map && map.markerManager && LAYERS.customMarkers) {
-                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
-                    }
-                    // Update display counts (now reads from synchronized LAYERS array)
+                    // LAYERS synchronization handled by MarkerManager.onChanged callback
+                    // Update display counts (reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Use render pipeline's dirty flag system for batched rendering
-                    if (map && typeof map.markRendererDirty === 'function') {
-                        map.markRendererDirty('MarkerRenderer');
-                    }
-                    // Also request render to ensure RAF loop is triggered with fallback
+                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
                     if (eventBus && typeof eventBus.emit === 'function') {
                         eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                     }
@@ -2437,19 +2423,12 @@ async function init() {
 
             eventBus.on(window.EventTypes.MARKER_EDITED, (data) => {
                 try {
-                    // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
-                    if (map && map.markerManager && LAYERS.customMarkers) {
-                        LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
-                    }
-                    // Update display counts (now reads from synchronized LAYERS array)
+                    // LAYERS synchronization handled by MarkerManager.onChanged callback
+                    // Update display counts (reads from synchronized LAYERS array)
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
-                    // Use render pipeline's dirty flag system for batched rendering
-                    if (map && typeof map.markRendererDirty === 'function') {
-                        map.markRendererDirty('MarkerRenderer');
-                    }
-                    // Also request render to ensure RAF loop is triggered with fallback
+                    // Rendering handled by MarkerManager.onChanged callback + RENDER_REQUESTED for guaranteed update
                     if (eventBus && typeof eventBus.emit === 'function') {
                         eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                     }
@@ -3312,7 +3291,7 @@ async function init() {
             try { if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' }); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.exitEditMode'); }
             try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.clearDraggingState'); }
             try { map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.resetCursor'); }
-            try { map.render(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.renderAfterClearing'); }
+            // Rendering handled by MARKER_REMOVED event system
         }
     });
 
