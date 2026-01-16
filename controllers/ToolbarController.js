@@ -86,14 +86,14 @@
         // Edit markers toggle
         const editMarkersToggle = document.getElementById('editMarkersToggle');
         const editMarkersToggleMini = document.getElementById('editMarkersToggleMini');
-        if (editMarkersToggle && this.map) {
+        if (editMarkersToggle && this.editModeState) {
           // Reflect initial state
           try {
-            editMarkersToggle.setAttribute('aria-pressed', this.selectionState ? this.selectionState.editMarkersMode : false ? 'true' : 'false');
-            editMarkersToggle.classList.toggle('active', !!(this.selectionState && this.selectionState.editMarkersMode));
+            editMarkersToggle.setAttribute('aria-pressed', this.editModeState ? this.editModeState.editMarkersMode : false ? 'true' : 'false');
+            editMarkersToggle.classList.toggle('active', !!(this.editModeState && this.editModeState.editMarkersMode));
             if (editMarkersToggleMini) {
-              editMarkersToggleMini.setAttribute('aria-pressed', this.selectionState ? this.selectionState.editMarkersMode : false ? 'true' : 'false');
-              editMarkersToggleMini.classList.toggle('glow', !!(this.selectionState && this.selectionState.editMarkersMode));
+              editMarkersToggleMini.setAttribute('aria-pressed', this.editModeState ? this.editModeState.editMarkersMode : false ? 'true' : 'false');
+              editMarkersToggleMini.classList.toggle('glow', !!(this.editModeState && this.editModeState.editMarkersMode));
             }
           } catch (e) {
             if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to set initial marker edit toggle state');
@@ -112,8 +112,8 @@
               if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle marker edit button state');
             }
 
-            if (this.selectionState) {
-              this.selectionState.setEditMarkersMode(on);
+            if (this.editModeState) {
+              this.editModeState.setEditMarkersMode(on);
               try {
                 const routeToggle = document.getElementById('editRouteToggle');
                 const routeToggleMini = document.getElementById('editRouteToggleMini');
@@ -132,28 +132,14 @@
               // Update edit overlay
               this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
 
-              // Update layer visibility for custom markers
-              if (this.layerState && this.layerState.layerVisibility) {
-                const newVisibility = { ...this.layerState.layerVisibility };
-                newVisibility.customMarkers = on;
-                this.eventBus.emit(EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, {
-                  layerVisibility: newVisibility
-                });
-              }
 
-              // Emit events instead of direct render call
+              // Emit edit mode changed event - DO NOT change layer visibility based on edit mode
+              // The customMarkers layer should remain visible regardless of edit mode state
               this.eventBus.emit(this.eventTypes.EDIT_MODE_CHANGED, {
                 mode: 'markers',
                 enabled: on,
                 triggeredBy: 'toolbar-toggle'
               });
-              if (this.layerState) {
-                this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
-                  layerVisibility: { ...this.layerState.layerVisibility, customMarkers: on },
-                  triggeredBy: 'edit-mode-toggle'
-                });
-              }
-              this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
             }
           };
 
@@ -166,14 +152,14 @@
         // Edit route toggle
         const editRouteToggle = document.getElementById('editRouteToggle');
         const editRouteToggleMini = document.getElementById('editRouteToggleMini');
-        if (editRouteToggle && this.selectionState) {
+        if (editRouteToggle && this.editModeState) {
           // Reflect initial state
           try {
-            editRouteToggle.setAttribute('aria-pressed', this.selectionState.editRouteMode ? 'true' : 'false');
-            editRouteToggle.classList.toggle('active', !!this.selectionState.editRouteMode);
+            editRouteToggle.setAttribute('aria-pressed', this.editModeState ? this.editModeState.editRouteMode : false ? 'true' : 'false');
+            editRouteToggle.classList.toggle('active', !!(this.editModeState && this.editModeState.editRouteMode));
             if (editRouteToggleMini) {
-              editRouteToggleMini.setAttribute('aria-pressed', this.selectionState.editRouteMode ? 'true' : 'false');
-              editRouteToggleMini.classList.toggle('glow', !!this.selectionState.editRouteMode);
+              editRouteToggleMini.setAttribute('aria-pressed', this.editModeState ? this.editModeState.editRouteMode : false ? 'true' : 'false');
+              editRouteToggleMini.classList.toggle('glow', !!(this.editModeState && this.editModeState.editRouteMode));
             }
           } catch (e) {
             if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to set initial route edit toggle state');
@@ -192,8 +178,8 @@
               if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle route edit button state');
             }
 
-            if (this.selectionState) {
-              this.selectionState.setEditRouteMode(on);
+            if (this.editModeState) {
+              this.editModeState.setEditRouteMode(on);
               try {
                 const markersToggle = document.getElementById('editMarkersToggle');
                 const markersToggleMini = document.getElementById('editMarkersToggleMini');
@@ -382,14 +368,14 @@
         const editMarkersToggle = document.getElementById('editMarkersToggle');
         const editRouteToggle = document.getElementById('editRouteToggle');
 
-        if (editMarkersToggle && this.selectionState) {
-          const isActive = !!this.selectionState.editMarkersMode;
+        if (editMarkersToggle && this.editModeState) {
+          const isActive = !!this.editModeState.editMarkersMode;
           editMarkersToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editMarkersToggle.classList.toggle('active', isActive);
         }
 
-        if (editRouteToggle && this.selectionState) {
-          const isActive = !!this.selectionState.editRouteMode;
+        if (editRouteToggle && this.editModeState) {
+          const isActive = !!this.editModeState.editRouteMode;
           editRouteToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editRouteToggle.classList.toggle('active', isActive);
         }

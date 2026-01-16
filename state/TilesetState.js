@@ -3,11 +3,12 @@
 
 (function (global) {
   class TilesetState {
-    constructor(config) {
+    constructor(config, options = {}) {
       this.config = config || (global.MP4Config || {});
+      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
       this.tileset = 'sat'; // Default tileset
       this.grayscale = false;
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     // Tileset management
@@ -114,8 +115,8 @@
     // Event emission helper
     _emitChange(event, data) {
       try {
-        if (window.eventBus) {
-          window.eventBus.emit(event, data);
+        if (this.eventBus) {
+          this.eventBus.emit(event, data);
         }
       } catch (e) {
         this.errorHandler.logDebug('TilesetState._emitChange failed', 'TilesetState._emitChange', { error: e, event });

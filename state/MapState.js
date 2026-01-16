@@ -3,11 +3,10 @@
 
 (function (global) {
   class MapState {
-    constructor(config) {
+    constructor(config, options = {}) {
       this.config = config || global.MP4Config || {};
-
-      // Error handling
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
 
       // View state
       this.panX = 0;
@@ -249,8 +248,8 @@
     // Event emission helper
     _emitChange(event, data) {
       try {
-        if (window.eventBus) {
-          window.eventBus.emit(event, data);
+        if (this.eventBus) {
+          this.eventBus.emit(event, data);
         }
       } catch (e) {
         this.errorHandler.logDebug('MapState._emitChange failed', 'MapState._emitChange', { error: e, event });

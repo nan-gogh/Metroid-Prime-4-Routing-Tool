@@ -3,8 +3,10 @@
 
 (function (global) {
   class RouteState {
-    constructor(config) {
+    constructor(config, options = {}) {
       this.config = config || (global.MP4Config || {});
+      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
       this.currentRoute = null; // array of indices into _routeSources
       this.routeLengthNormalized = 0; // normalized route length (0-1)
       this._routeSources = []; // array of source objects {marker, layerKey}
@@ -197,8 +199,8 @@
     // Event emission helper
     _emitChange(event, data) {
       try {
-        if (window.eventBus) {
-          window.eventBus.emit(event, data);
+        if (this.eventBus) {
+          this.eventBus.emit(event, data);
         }
       } catch (e) {
         this.errorHandler.logDebug('RouteState._emitChange failed', 'RouteState._emitChange', { error: e, event });

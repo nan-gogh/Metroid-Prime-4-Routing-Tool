@@ -181,10 +181,10 @@
 
         // Exit edit mode if hiding the layer being edited
         if (!checked) {
-          if (layerKey === 'customMarkers' && this.selectionState && this.selectionState.editMarkersMode) {
-            this.selectionState.setEditMarkersMode(false);
-          } else if (layerKey === 'route' && this.selectionState && this.selectionState.editRouteMode) {
-            this.selectionState.setEditRouteMode(false);
+          if (layerKey === 'customMarkers' && this.editModeState && this.editModeState.editMarkersMode) {
+            this.editModeState.setEditMarkersMode(false);
+          } else if (layerKey === 'route' && this.editModeState && this.editModeState.editRouteMode) {
+            this.editModeState.setEditRouteMode(false);
           }
         }
 

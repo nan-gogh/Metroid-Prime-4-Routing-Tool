@@ -16,21 +16,21 @@ class InteractiveMap {
         this.canvasHeatmap = document.getElementById('heatmapCanvas');
         this.ctxHeatmap = this.canvasHeatmap ? this.canvasHeatmap.getContext('2d') : null;
 
-        // Initialize state managers
-        this.mapState = new MapState(MP4Config);
-        this.selectionState = new SelectionState(MP4Config);
-        this.editModeState = new EditModeState(MP4Config);
-        this.highlightState = new HighlightState(MP4Config);
-        this.tilesetState = new TilesetState(MP4Config);
-        this.routeState = new RouteState(MP4Config);
-        this.routeAnimationState = new RouteAnimationState(MP4Config);
-        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config);
-        this.heatmapDisplayState = typeof HeatmapDisplayState !== 'undefined' ? new HeatmapDisplayState(MP4Config, this.errorHandler, window.eventBus || this.eventBus) : null;
-        this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
-
-        // Initialize error handler
+        // Initialize error handler FIRST (before state managers that need it)
         this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+
+        // Initialize state managers
+        this.mapState = new MapState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.selectionState = new SelectionState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.editModeState = new EditModeState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.highlightState = new HighlightState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.tilesetState = new TilesetState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.routeState = new RouteState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.routeEditState = new RouteEditState({ eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
 
         // Initialize canvas dimensions for mapState
         if (this.mapState) {
@@ -586,24 +586,24 @@ class InteractiveMap {
     }
 
     get editMarkersMode() {
-        return this.selectionState ? this.selectionState.editMarkersMode : this._fallbackEditMarkersMode;
+        return this.editModeState ? this.editModeState.editMarkersMode : this._fallbackEditMarkersMode;
     }
 
     set editMarkersMode(value) {
-        if (this.selectionState) {
-            this.selectionState.setEditMarkersMode(value);
+        if (this.editModeState) {
+            this.editModeState.setEditMarkersMode(value);
         } else {
             this._fallbackEditMarkersMode = value;
         }
     }
 
     get editRouteMode() {
-        return this.selectionState ? this.selectionState.editRouteMode : this._fallbackEditRouteMode;
+        return this.editModeState ? this.editModeState.editRouteMode : this._fallbackEditRouteMode;
     }
 
     set editRouteMode(value) {
-        if (this.selectionState) {
-            this.selectionState.setEditRouteMode(value);
+        if (this.editModeState) {
+            this.editModeState.setEditRouteMode(value);
         } else {
             this._fallbackEditRouteMode = value;
         }
@@ -1356,7 +1356,7 @@ class InteractiveMap {
             const newIndices = newSources.map((_, i) => i);
 
             // Set the route with the temporary insertion
-            this.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, MAP_SIZE), newSources);
+            this.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, MP4Config.MAP_SIZE), newSources);
 
             // Initialize route insert state
             this._routeInsert = {
@@ -2256,7 +2256,8 @@ async function init() {
             
             eventBus.on(window.EventTypes.EDIT_MODE_CHANGED, (data) => {
                 try {
-                    // Edit mode changes require a render to show/hide edit overlays
+                    // Edit mode changes require updating the overlay UI and then rendering
+                    updateEditOverlay();
                     if (map && typeof map.render === 'function') {
                         map.render();
                     }
@@ -2381,6 +2382,14 @@ async function init() {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
+                    // Use render pipeline's dirty flag system for batched rendering
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                    }
+                    // Also request render to ensure RAF loop is triggered with fallback
+                    if (eventBus && typeof eventBus.emit === 'function') {
+                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
+                    }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_ADDED handler');
                 }
@@ -2391,6 +2400,14 @@ async function init() {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
                     }
+                    // Use render pipeline's dirty flag system for batched rendering
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                    }
+                    // Also request render to ensure RAF loop is triggered with fallback
+                    if (eventBus && typeof eventBus.emit === 'function') {
+                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
+                    }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_REMOVED handler');
                 }
@@ -2400,6 +2417,14 @@ async function init() {
                 try {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
+                    }
+                    // Use render pipeline's dirty flag system for batched rendering
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                    }
+                    // Also request render to ensure RAF loop is triggered with fallback
+                    if (eventBus && typeof eventBus.emit === 'function') {
+                        eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_EDITED handler');
@@ -2819,9 +2844,9 @@ async function init() {
         try {
             const ov = document.getElementById('editOverlay');
             if (!ov) return;
-            // Position overlay to match the map's rendered tile area (MAP_SIZE * zoom)
+            // Position overlay to match the map's rendered tile area (MP4Config.MAP_SIZE * zoom)
             if (map && (map.editMarkersMode || map.editRouteMode)) {
-                const size = (MAP_SIZE * (map.zoom || 1));
+                const size = (MP4Config.MAP_SIZE * (map.zoom || 1));
                 const left = Number(map.panX || 0);
                 const top = Number(map.panY || 0);
                 ov.style.left = Math.round(left) + 'px';

@@ -40,7 +40,7 @@
           canvas: { get: () => this.map.canvas },
           currentRoute: { get: () => this.routeState.currentRoute },
           _routeSources: { get: () => this.routeState._routeSources },
-          editRouteMode: { get: () => this.selectionState.editRouteMode },
+          editRouteMode: { get: () => this.map.editRouteMode },
           _routeInsert: {
             get: () => this.__routeInsert,
             set: (v) => {

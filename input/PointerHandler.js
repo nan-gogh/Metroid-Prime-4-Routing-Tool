@@ -45,7 +45,7 @@
           panY: { get: () => this.mapState.panY, set: (v) => this.mapState.panY = v },
           zoom: { get: () => this.mapState.zoom, set: (v) => this.mapState.zoom = v },
           canvas: { get: () => this.map.canvas },
-          editMarkersMode: { get: () => this.selectionState.editMarkersMode },
+          editMarkersMode: { get: () => this.map.editMarkersMode },
           _draggingMarker: { get: () => this.map._draggingMarker, set: (v) => this.map._draggingMarker = v }
         });
 

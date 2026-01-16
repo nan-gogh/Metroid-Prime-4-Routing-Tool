@@ -18,6 +18,7 @@
       this.tilesetState = map.tilesetState;
       this.imageState = map.imageState;
       this.heatmapDisplayState = map.heatmapDisplayState;
+      this.editModeState = map.editModeState;
     }
 
     init() {
@@ -44,12 +45,12 @@
             // Prefer clicking the toggles so their handlers run UI sync
             const markersToggle = document.getElementById('editMarkersToggle');
             const routeToggle = document.getElementById('editRouteToggle');
-            if (this.selectionState.editMarkersMode) {
-              if (markersToggle) markersToggle.click(); else this.selectionState.setEditMarkersMode(false);
+            if (this.editModeState && this.editModeState.editMarkersMode) {
+              if (markersToggle) markersToggle.click(); else this.editModeState.setEditMarkersMode(false);
             }
-            if (this.selectionState.editRouteMode) {
+            if (this.editModeState && this.editModeState.editRouteMode) {
               if (routeToggle) routeToggle.click(); else {
-                this.selectionState.setEditRouteMode(false);
+                this.editModeState.setEditRouteMode(false);
                 try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
               }
             }
@@ -109,11 +110,12 @@
             const routeToggleEl = document.getElementById('editRouteToggle');
             if (routeToggleEl) {
               routeToggleEl.click();
-            } else if (this.map) {
-              this.map.editRouteMode = !this.map.editRouteMode;
-              if (this.map.editRouteMode) {
+            } else if (this.editModeState) {
+              const newMode = !this.editModeState.editRouteMode;
+              this.editModeState.setEditRouteMode(newMode);
+              if (newMode) {
                 try { this.map._enterEditMode && this.map._enterEditMode('route', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.enterRoute'); }
-                try { this.map.editMarkersMode = false; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkers'); }
+                try { this.editModeState.setEditMarkersMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkers'); }
                 try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkersMode'); }
                 this._updateEditModeUI('route', true);
               } else {
@@ -128,11 +130,12 @@
             const editToggleEl = document.getElementById('editMarkersToggle');
             if (editToggleEl) {
               editToggleEl.click();
-            } else if (this.map) {
-              this.map.editMarkersMode = !this.map.editMarkersMode;
-              if (this.map.editMarkersMode) {
+            } else if (this.editModeState) {
+              const newMode = !this.editModeState.editMarkersMode;
+              this.editModeState.setEditMarkersMode(newMode);
+              if (newMode) {
                 try { this.map._enterEditMode && this.map._enterEditMode('customMarkers', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.enterMarkers'); }
-                try { this.map.editRouteMode = false; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRoute'); }
+                try { this.editModeState.setEditRouteMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRoute'); }
                 try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRouteMode'); }
                 this._updateEditModeUI('markers', true);
               } else {

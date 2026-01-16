@@ -3,12 +3,13 @@
 
 (function (global) {
   class SelectionState {
-    constructor(config) {
+    constructor(config, options = {}) {
       this.config = config || (global.MP4Config || {});
+      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
       this.selectedMarker = null;
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     // Marker selection management
@@ -188,8 +189,8 @@
     // Event emission helper
     _emitChange(event, data) {
       try {
-        if (window.eventBus) {
-          window.eventBus.emit(event, data);
+        if (this.eventBus) {
+          this.eventBus.emit(event, data);
         }
       } catch (e) {
         this.errorHandler.logDebug('SelectionState._emitChange failed', 'SelectionState._emitChange', { error: e, event });

@@ -6,13 +6,12 @@
     /**
      * Creates a new HeatmapDisplayState for managing heatmap visibility independently
      * @param {Object} config - Configuration object (defaults to global MP4Config)
-     * @param {Object} errorHandler - Error handler
-     * @param {Object} eventBus - Event bus for emitting visibility changes (defaults to window.eventBus)
+     * @param {Object} options - Options object with eventBus and errorHandler (defaults to window.eventBus)
      */
-    constructor(config, errorHandler, eventBus) {
+    constructor(config, options = {}) {
       this.config = config || (global.MP4Config || {});
-      this.errorHandler = errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
-      this.eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
 
       // Internal visibility state - completely independent from layer system
       this._heatmapVisible = false;
