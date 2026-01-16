@@ -3287,20 +3287,30 @@ async function init() {
             return;
         }
         if (NotificationUtils.confirmDestructiveAction('Clear all custom markers? This cannot be undone.')) {
-            if (map.markerManager) {
-                map.markerManager.clearMarkers();
-                // The clearMarkers method handles updating LAYERS and triggering callbacks
-            } else {
-                // Fallback (should not happen in decoupled code)
-                moduleErrorHandler.logWarning('markerManager not available during clear markers', 'InteractiveMap.clearMarkers');
-                map.customMarkers = [];
-            }
-            // Layer counts will be updated via MARKER_REMOVED event
-            // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
-            try { if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' }); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.exitEditMode'); }
-            try { map._draggingCandidate = null; map._draggingMarker = null; } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.clearDraggingState'); }
-            try { map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.resetCursor'); }
-            // Rendering handled by MARKER_REMOVED event system
+            // Defer heavy work to microtask queue to avoid blocking the event handler
+            // The confirm() dialog is synchronous and blocks, causing the event handler to appear slow
+            // By deferring to microtask, we exit the event handler quickly, then do the work
+            Promise.resolve().then(() => {
+                try {
+                    if (map.markerManager) {
+                        map.markerManager.clearMarkers();
+                        // The clearMarkers method handles updating LAYERS and triggering callbacks
+                    } else {
+                        // Fallback (should not happen in decoupled code)
+                        moduleErrorHandler.logWarning('markerManager not available during clear markers', 'InteractiveMap.clearMarkers');
+                        map.customMarkers = [];
+                    }
+                    // Layer counts will be updated via MARKER_REMOVED event
+                    // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
+                    if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' });
+                    map._draggingCandidate = null;
+                    map._draggingMarker = null;
+                    map.canvas.style.cursor = 'grab';
+                    // Rendering handled by MARKER_REMOVED event system
+                } catch (e) {
+                    moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.deferred');
+                }
+            });
         }
     });
 
