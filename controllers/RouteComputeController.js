@@ -310,9 +310,9 @@ class RouteComputeController {
             NotificationUtils.showInfo('No route to clear.');
             return;
         }
-        if (NotificationUtils.confirmDestructiveAction('Clear route? This cannot be undone.')) {
-            // Defer to next macrotask to create task boundary and prevent performance warnings
-            TaskScheduler.deferToNextTask(async () => {
+        // Use async confirmation to properly handle blocking dialog in separate macrotask
+        NotificationUtils.confirmDestructiveActionAsync('Clear route? This cannot be undone.').then(confirmed => {
+            if (confirmed) {
                 this.routeState.clearRoute();
                 // Exit route edit mode when route is cleared
                 this.editModeState.setEditRouteMode(false);
@@ -338,10 +338,10 @@ class RouteComputeController {
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-clear'
                 });
-            }).catch(e => {
-                this.errorHandler.logError(e, 'RouteComputeController.clearRoute.deferredWork');
-            });
-        }
+            }
+        }).catch(e => {
+            this.errorHandler.logError(e, 'RouteComputeController.clearRoute');
+        });
     }
 }
 

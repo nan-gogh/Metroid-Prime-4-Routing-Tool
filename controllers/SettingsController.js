@@ -46,8 +46,9 @@
             const on = !current;
 
             if (on) {
-              if (typeof NotificationUtils !== 'undefined' && NotificationUtils.confirmStorageConsent) {
-                if (!NotificationUtils.confirmStorageConsent()) {
+              if (typeof NotificationUtils !== 'undefined' && NotificationUtils.confirmStorageConsentAsync) {
+                const confirmed = await NotificationUtils.confirmStorageConsentAsync();
+                if (!confirmed) {
                   return;
                 }
               }
@@ -57,31 +58,23 @@
             this._setStorageConsent(on);
 
             if (on) {
-              // Defer to next macrotask to create task boundary and prevent performance warnings
-              TaskScheduler.deferToNextTask(async () => {
-                await this._saveAllSettings();
-                this._updateLayerCounts();
-              }).catch(e => {
-                this.errorHandler.logError(e, 'SettingsController.storageConsent.saveOperations');
-              });
+              // Save current settings
+              await this._saveAllSettings();
+              this._updateLayerCounts();
             } else {
               // Clear saved data
-              if (!this._confirmClearData()) {
+              const clearConfirmed = await this._confirmClearDataAsync();
+              if (!clearConfirmed) {
                 this._updateConsentToggleUI(saveLabel, true);
                 this._setStorageConsent(true);
               } else {
-                // Defer to next macrotask to create task boundary and prevent performance warnings
-                TaskScheduler.deferToNextTask(async () => {
-                  this._clearAllSavedData();
-                  // Reload page after clearing
-                  try {
-                    location.reload();
-                  } catch (e) {
-                    this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
-                  }
-                }).catch(e => {
-                  this.errorHandler.logError(e, 'SettingsController.storageConsent.clearOperations');
-                });
+                this._clearAllSavedData();
+                // Reload page after clearing
+                try {
+                  location.reload();
+                } catch (e) {
+                  this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
+                }
               }
             }
 
@@ -310,15 +303,15 @@
     }
 
     /**
-     * Confirm clearing saved data
-     * @returns {boolean} Whether to proceed with clearing
+     * Async confirm clearing saved data
+     * @returns {Promise<boolean>} Whether to proceed with clearing
      */
-    _confirmClearData() {
+    async _confirmClearDataAsync() {
       try {
-        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.confirmClearData) {
-          return NotificationUtils.confirmClearData();
+        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.confirmClearDataAsync) {
+          return await NotificationUtils.confirmClearDataAsync();
         }
-        return confirm('Clear all saved progress? This cannot be undone.');
+        return await TaskScheduler.deferToNextTask(() => confirm('Clear all saved progress? This cannot be undone.'));
       } catch (e) {
         return false;
       }

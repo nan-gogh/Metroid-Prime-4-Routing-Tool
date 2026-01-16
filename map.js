@@ -3280,15 +3280,15 @@ async function init() {
         reader.readAsText(file);
     });
     
-    document.getElementById('clearCustom').addEventListener('click', () => {
+    document.getElementById('clearCustom').addEventListener('click', async () => {
         const markerCount = map.markerManager ? map.markerManager.getAllMarkers().length : 0;
         if (markerCount === 0) {
             NotificationUtils.showInfo('No custom markers to clear.');
             return;
         }
-        if (NotificationUtils.confirmDestructiveAction('Clear all custom markers? This cannot be undone.')) {
-            // Defer to next macrotask to create task boundary and prevent performance warnings after blocking dialog
-            TaskScheduler.deferToNextTask(async () => {
+        const confirmed = await NotificationUtils.confirmDestructiveActionAsync('Clear all custom markers? This cannot be undone.');
+        if (confirmed) {
+            // Heavy work runs in separate macrotask due to async confirmation
                 try {
                     if (map.markerManager) {
                         map.markerManager.clearMarkers();
@@ -3306,11 +3306,8 @@ async function init() {
                     map.canvas.style.cursor = 'grab';
                     // Rendering handled by MARKER_REMOVED event system
                 } catch (e) {
-                    moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.deferred');
+                    moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers');
                 }
-            }).catch(e => {
-                moduleErrorHandler.logError(e, 'InteractiveMap.clearMarkers.deferredWork');
-            });
         }
     });
 

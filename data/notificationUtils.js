@@ -133,6 +133,56 @@ const NotificationUtils = {
     // Show save operation errors
     showSaveError(message) {
         this.showError(message, 'Save Error');
+    },
+
+    // ============================================================
+    // ASYNC CONFIRMATION METHODS - Properly handle performance
+    // These defer the blocking dialog to a separate macrotask
+    // Always use these async versions in event handlers
+    // ============================================================
+
+    // Async confirmation that defers the blocking dialog to prevent performance warnings
+    async confirmActionAsync(message, title = 'Confirm') {
+        try {
+            if (typeof message !== 'string') message = String(message);
+            // Defer to next macrotask to separate dialog from event handler
+            return await TaskScheduler.deferToNextTask(async () => {
+                return confirm(`${title}: ${message}`);
+            });
+        } catch (e) {
+            if (typeof errorHandler !== 'undefined' && errorHandler) {
+                errorHandler.logError(e, 'NotificationUtils.confirmActionAsync');
+            } else {
+                console.error('NotificationUtils.confirmActionAsync error:', e);
+            }
+            return false;
+        }
+    },
+
+    // Async destructive action confirmation
+    async confirmDestructiveActionAsync(message) {
+        return this.confirmActionAsync(message, 'Warning');
+    },
+
+    // Async storage consent confirmation
+    async confirmStorageConsentAsync() {
+        const message = 'This will enable local storage for routes, markers, and map settings.\n\n' +
+                       'Stored data includes:\n' +
+                       '• Custom markers\n' +
+                       '• Saved routes\n' +
+                       '• Layer visibility\n' +
+                       '• Map view settings\n' +
+                       '• Route looping\n\n' +
+                       'Tap OK to enable or Cancel to keep storage off.';
+        return this.confirmActionAsync(message, 'Enable Storage');
+    },
+
+    // Async clear data confirmation
+    async confirmClearDataAsync() {
+        const message = 'This will permanently delete all saved routes, markers, and map settings.\n\n' +
+                       'This action cannot be undone.\n\n' +
+                       'Tap OK to delete saved data and continue, or Cancel to keep it.';
+        return this.confirmDestructiveActionAsync(message);
     }
 };
 
