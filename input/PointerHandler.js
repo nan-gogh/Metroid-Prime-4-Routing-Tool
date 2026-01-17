@@ -15,13 +15,32 @@
       // Get state managers from map
       this.mapState = map.mapState;
       this.selectionState = map.selectionState;
+      this.editModeState = map.editModeState;
       this.routeState = map.routeState;
       this.layerState = map.layerState;
       this.imageState = map.imageState;
 
       // Create route edit handler for route-specific interactions
       if (typeof RouteEditHandler !== 'undefined') {
-        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus);
+        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus, this.editModeState);
+      }
+
+      // Create marker edit handler for marker-specific interactions
+      if (typeof MarkerEditHandler !== 'undefined') {
+        this.markerEditHandler = new MarkerEditHandler(
+          this.mapState,
+          this.selectionState,
+          this.editModeState,
+          map.markerManager,
+          map.layerVisibility,
+          map.layerConfig,
+          map.showTooltip.bind(map),
+          map.hideTooltip.bind(map),
+          map.checkMarkerHover ? map.checkMarkerHover.bind(map) : null,
+          this.config,
+          this.eventBus,
+          this.errorHandler
+        );
       }
 
       // Performance optimization: Create fast property accessors
@@ -45,7 +64,8 @@
           panY: { get: () => this.mapState.panY, set: (v) => this.mapState.panY = v },
           zoom: { get: () => this.mapState.zoom, set: (v) => this.mapState.zoom = v },
           canvas: { get: () => this.map.canvas },
-          editMarkersMode: { get: () => this.map.editMarkersMode },
+          editMarkersMode: { get: () => this.editModeState ? this.editModeState.editMarkersMode : false },
+          editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
           _draggingMarker: { get: () => this.map._draggingMarker, set: (v) => this.map._draggingMarker = v }
         });
 
@@ -472,81 +492,19 @@
           const isSelectable = !!(LAYERS[layerKey] && (LAYERS[layerKey].selectable !== false));
 
           // Try route-specific click handling first
-          if (this.routeEditHandler && this.routeEditHandler.handleClick(e, localX, localY, isQuickTap)) {
+          if (this.routeEditHandler && this.routeEditHandler.handleClick(e, localX, localY, isQuickTap, hit)) {
             return; // Route handler handled it
           }
 
-          if (this.editMarkersMode) {
-            // In edit mode: allow deletion (custom markers are editable regardless of flags)
-            const isCustom = (layerKey === 'customMarkers');
-            if (isDeletable || isCustom) {
-              if (this.map.markerManager) {
-                this.map.markerManager.removeMarker(hit.marker.uid);
-                this._checkMarkerHover(localX, localY);
-              }
-            }
-          } else {
-            // Normal mode: selection and tooltip behavior
-            if (isSelectable) {
-              const uid = hit.marker.uid;
-              if (this.map.selectedMarker && this.map.selectedMarker.uid === uid && this.map.selectedMarkerLayer === layerKey) {
-                // deselect
-                this.map.selectedMarker = null;
-                this.map.selectedMarkerLayer = null;
-                this.map.hideTooltip();
-                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
-              } else {
-                // select
-                this.map.selectedMarker = hit.marker;
-                this.map.selectedMarkerLayer = layerKey;
-                // compute screen coords for tooltip placement
-                const screenX = hit.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX;
-                const screenY = hit.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY;
-                this.map.showTooltip(hit.marker, screenX, screenY, layerKey);
-                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
-              }
-            }
+          // Try marker-specific click handling
+          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit)) {
+            return; // Marker handler handled it
           }
-        } else if (e.button === 0 && isQuickTap && !hit) {
-          // If a marker is currently selected, a quick tap anywhere on the
-          // map should deselect it (not start a placement). This avoids
-          // accidental placement while the user intends to dismiss selection.
-          if (this.map.selectedMarker) {
-            this.map.selectedMarker = null;
-            this.map.selectedMarkerLayer = null;
-            try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onClick.hideTooltip'); }
-            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
-            return;
-          }
-          // Quick tap on empty space - place custom marker
-          // Reuse previously computed localX/localY to avoid redundant layout read
-          const clientX = localX;
-          const clientY = localY;
 
-          // Convert to world coordinates (0-1 normalized)
-          const worldX = (clientX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
-          const worldY = (clientY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
-          
-          // Only place if within map bounds
-          if (worldX >= 0 && worldX <= 1 && worldY >= 0 && worldY <= 1) {
-            // Do not allow placement when the custom markers layer is hidden
-            if (!this.map.layerVisibility || !this.map.layerVisibility.customMarkers) {
-              return;
-            }
-            // Only place markers when edit mode is active
-            if (this.editMarkersMode) {
-              // Check marker limit before adding
-              const maxMarkers = this.map.layerConfig && this.map.layerConfig.customMarkers && this.map.layerConfig.customMarkers.maxMarkers || 50;
-              const currentMarkerCount = this.map.markerManager ? this.map.markerManager.getCount() : 0;
-              if (currentMarkerCount >= maxMarkers) {
-                return; // Silently ignore - could show a message but click handler shouldn't alert
-              }
-              if (this.map.markerManager) {
-                this.map.markerManager.addMarker(worldX, worldY);
-                // markerManager updates markers and triggers map updates; ensure hover state refresh
-                this._checkMarkerHover(localX, localY);
-              }
-            }
+        } else if (e.button === 0 && isQuickTap && !hit) {
+          // Try marker-specific empty space click handling (for deselection/placement)
+          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit)) {
+            return; // Marker handler handled it
           }
         }
       } catch (e) { this.errorHandler.logDebug('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }

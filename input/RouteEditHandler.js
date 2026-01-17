@@ -4,7 +4,7 @@
 
 (function (global) {
   class RouteEditHandler {
-    constructor(map, config, eventBus) {
+    constructor(map, config, eventBus, editModeState) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
@@ -15,6 +15,7 @@
       this.mapState = map.mapState;
       this.routeState = map.routeState;
       this.selectionState = map.selectionState;
+      this.editModeState = editModeState || (map && map.editModeState);
 
       // Performance optimization: Create fast property accessors
       this._createFastAccessors();
@@ -40,7 +41,7 @@
           canvas: { get: () => this.map.canvas },
           currentRoute: { get: () => this.routeState.currentRoute },
           _routeSources: { get: () => this.routeState._routeSources },
-          editRouteMode: { get: () => this.map.editRouteMode },
+          editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
           _routeInsert: {
             get: () => this.__routeInsert,
             set: (v) => {
@@ -124,12 +125,17 @@
       }
     }
 
-    handleClick(ev, localX, localY, isQuickTap) {
+    handleClick(ev, localX, localY, isQuickTap, hit) {
       try {
-        if (!isQuickTap || !this.editRouteMode) return false;
+        const shouldReturn = !isQuickTap || !this.editRouteMode;
+        if (shouldReturn) {
+          return false;
+        }
 
-        const hit = this.map.checkMarkerHover ? this.map.checkMarkerHover(localX, localY) : null;
-        if (!hit || !hit.marker || !hit.marker.uid) return false;
+        // Use hit passed from PointerHandler (it already did the detection)
+        if (!hit || !hit.marker || !hit.marker.uid) {
+          return false;
+        }
 
         // Route edit mode: tapping markers toggles their membership in the current route
         this._handleRouteEditClick(hit.marker, hit.layerKey);

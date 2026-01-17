@@ -2178,8 +2178,13 @@ async function init() {
             
             eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
                 try {
-                    if (map && typeof map.render === 'function') {
-                        map.render();
+                    if (map && typeof map.hideTooltip === 'function') {
+                        map.hideTooltip();
+                    }
+                    // Trigger selective render for selection clearing using dirty flag system
+                    if (map && typeof map.markRendererDirty === 'function') {
+                        map.markRendererDirty('MarkerRenderer');
+                        map.markRendererDirty('OverlayRenderer');
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:SELECTION_CLEARED handler');
@@ -2477,6 +2482,17 @@ async function init() {
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
                     if (map && map.markerManager && LAYERS.customMarkers) {
                         LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
+                    }
+                    // Clear selection if markers were removed from the selected layer
+                    if (data && data.layerKey === 'cm' && map && map.selectionState && map.selectedMarkerLayer === 'customMarkers') {
+                        // For individual marker removal, check if it was the selected marker
+                        if (data.uid && map.selectedMarker && map.selectedMarker.uid === data.uid) {
+                            map.selectionState.clearSelectedMarker();
+                        }
+                        // For bulk removal (all markers), always clear selection
+                        else if (data.all) {
+                            map.selectionState.clearSelectedMarker();
+                        }
                     }
                     // Update display counts (UI update, not rendering)
                     if (map && typeof map.updateLayerCounts === 'function') {
