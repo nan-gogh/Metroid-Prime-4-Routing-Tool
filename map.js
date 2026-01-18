@@ -2682,6 +2682,37 @@ async function init() {
                     }
                 },
                 {
+                    event: window.EventTypes.MARKER_SCALING_SAVE_REQUESTED,
+                    handler: (data) => {
+                        try {
+                            if (!data) return;
+                            // Update in-memory config if provided
+                            if (typeof data.userScaleMultiplier === 'number') {
+                                MP4Config.MARKER_SCALING.userScaleMultiplier = Math.max(0.5, Math.min(1.5, data.userScaleMultiplier));
+                            }
+                            if (typeof data.highlightMultiplier === 'number') {
+                                MP4Config.MARKER_SCALING.highlightMultiplier = Math.max(1.5, Math.min(2.5, data.highlightMultiplier));
+                            }
+
+                            // Persist using available storage APIs
+                            if (window.storageService && window.storageService.hasConsent()) {
+                                window.storageService.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                });
+                            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
+                                StorageInterface.saveMarkerScaling({
+                                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                });
+                            }
+
+                            // Request a render so renderers pick up new settings
+                            if (map && typeof map.render === 'function') map.render();
+                        } catch (e) { moduleErrorHandler.logError(e, 'MARKER_SCALING_SAVE_REQUESTED'); }
+                    }
+                },
+                {
                     event: window.EventTypes.HIGHLIGHTED_LAYERS_SAVE_REQUESTED,
                     handler: (data) => {
                         if (data && data.highlightConfig) {

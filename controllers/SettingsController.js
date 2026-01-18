@@ -215,15 +215,13 @@
                 else markerSlider.style.setProperty('--slider-fill', fillPercent + '%');
               }
             } catch (e) {}
-            // Update stored config via map helper if available, otherwise update MP4Config directly
+            // Emit storage/save request for marker scaling so authoritative handler persists it
             try {
-              if (this.map && typeof this.map.updateMarkerUserScaleMultiplier === 'function') {
-                this.map.updateMarkerUserScaleMultiplier(val);
-              } else if (this.config && this.config.MARKER_SCALING) {
-                this.config.MARKER_SCALING.userScaleMultiplier = val;
-                // Request a render so marker renderer picks up new scale
-                try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
-              }
+              try { this.eventBus.emit(this.eventTypes.MARKER_SCALING_SAVE_REQUESTED, { userScaleMultiplier: val }); } catch (e) {}
+              // Also update local config fallback so renderers pick up changes immediately
+              if (this.config && this.config.MARKER_SCALING) this.config.MARKER_SCALING.userScaleMultiplier = val;
+              // Request a render so marker renderer picks up new scale
+              try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
             } catch (e) {
               this.errorHandler.logDebug('SettingsController: Failed to update marker scale', 'SettingsController._bindHighlightControls.markerScale', { error: e });
             }
@@ -284,12 +282,10 @@
               if (this.highlightState && typeof this.highlightState.setHighlightScaleMultiplier === 'function') {
                 this.highlightState.setHighlightScaleMultiplier(val);
               }
-              // Also update MP4Config/marker scaling via map helper if present so MarkerRenderer picks up new highlight multiplier
-              if (this.map && typeof this.map.updateMarkerHighlightMultiplier === 'function') {
-                this.map.updateMarkerHighlightMultiplier(val);
-              } else if (this.config && this.config.MARKER_SCALING) {
-                this.config.MARKER_SCALING.highlightMultiplier = val;
-              }
+              // Emit storage/save request for highlight multiplier so authoritative handler persists it
+              try { this.eventBus.emit(this.eventTypes.HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED, { multiplier: val }); } catch (e) {}
+              // Also update local config fallback so renderers pick up changes immediately
+              if (this.config && this.config.MARKER_SCALING) this.config.MARKER_SCALING.highlightMultiplier = val;
 
               // Update slider fill visualization
               try {

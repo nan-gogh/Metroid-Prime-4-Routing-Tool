@@ -184,6 +184,8 @@ const EventTypes = {
     // Storage Events (enhanced)
     HIGHLIGHT_SETTINGS_SAVE_REQUESTED: 'storage:highlight-settings-save',
     LAYER_VISIBILITY_SAVE_REQUESTED: 'storage:layer-visibility-save',
+    // Marker scaling persistence (user + highlight multipliers)
+    MARKER_SCALING_SAVE_REQUESTED: 'storage:marker-scaling-save',
     HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED: 'storage:highlight-multiplier-save',
     HIGHLIGHTED_LAYERS_SAVE_REQUESTED: 'storage:highlighted-layers-save',
 
