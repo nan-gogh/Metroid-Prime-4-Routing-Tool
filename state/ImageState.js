@@ -91,8 +91,6 @@
     // Update resolution after loading
     updateResolution() {
       try {
-        // Log displayed resolution for debugging
-        try { console.debug('ImageState.updateResolution current', { currentResolution: this.currentResolution, pixelSize: this.config.TILE_RESOLUTIONS && this.config.TILE_RESOLUTIONS[this.currentResolution] }); } catch (e) {}
         // Mark renderer dirty so UI updates reflect new resolution
         if (this.onMarkRendererDirty) {
           this.onMarkRendererDirty('TileRenderer');

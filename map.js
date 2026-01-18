@@ -1181,7 +1181,6 @@ class InteractiveMap {
         if (status) {
             const res = MP4Config.TILE_RESOLUTIONS[this.imageState.currentResolution] || MP4Config.TILE_RESOLUTIONS[0];
             status.textContent = `${res}px`;
-            try { console.debug('InteractiveMap.updateResolution status set', { res, currentResolution: this.imageState.currentResolution }); } catch (e) {}
         }
 
         const zoomStatus = document.getElementById('zoomStatus');
