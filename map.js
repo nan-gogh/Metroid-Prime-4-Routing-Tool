@@ -30,6 +30,11 @@ class InteractiveMap {
         // Initialize error handler FIRST (before state managers that need it)
         this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
 
+        // Set error handler on global eventBus
+        if (window.eventBus) {
+            window.eventBus.setErrorHandler(this.errorHandler);
+        }
+
         // Initialize state managers
         this.mapState = new MapState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.selectionState = new SelectionState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
@@ -127,8 +132,7 @@ class InteractiveMap {
             }
             if (typeof RouteRenderer !== 'undefined') {
                 const routeColor = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : '#00ffb7ff';
-                this.routeRenderer = new RouteRenderer(this.mapState, this.layerState, this.routeAnimationState, MP4Config, routeColor);
-                this.routeRenderer.map = this; // Keep map reference for canvas access
+                this.routeRenderer = new RouteRenderer(this.mapState, this.layerState, this.routeAnimationState, this.routeManager, this.dragState, this.highlightState, MP4Config, routeColor);
                 try { this.routeRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('RouteRenderer.init failed', 'InteractiveMap.init.routeRenderer', { error: e }); }
             }
             if (typeof OverlayRenderer !== 'undefined') {
@@ -1860,6 +1864,108 @@ class InteractiveMap {
             RouteAnimation.stopAnimation(this);
         }
     }
+
+    /**
+     * Cleans up all event listeners and resources to prevent memory leaks.
+     * Should be called when the InteractiveMap instance is no longer needed.
+     */
+    destroy() {
+        // Clean up all stored event listeners
+        if (this._eventUnsubscribers && Array.isArray(this._eventUnsubscribers)) {
+            this._eventUnsubscribers.forEach(unsubscribe => {
+                try {
+                    if (typeof unsubscribe === 'function') {
+                        unsubscribe();
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('Failed to unsubscribe event listener', 'InteractiveMap.destroy.unsubscribe', { error: e });
+                }
+            });
+            this._eventUnsubscribers.length = 0; // Clear the array
+        }
+
+        // Stop any ongoing animations
+        try {
+            this.stopRouteAnimation();
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to stop route animation during destroy', 'InteractiveMap.destroy.stopAnimation', { error: e });
+        }
+
+        // Clean up renderers if they have destroy methods
+        const renderers = [this.tileRenderer, this.heatmapRenderer, this.gridRenderer, this.markerRenderer, this.routeRenderer, this.overlayRenderer];
+        renderers.forEach(renderer => {
+            try {
+                if (renderer && typeof renderer.destroy === 'function') {
+                    renderer.destroy();
+                }
+            } catch (e) {
+                this.errorHandler.logDebug('Failed to destroy renderer', 'InteractiveMap.destroy.renderer', { error: e, renderer: renderer ? renderer.constructor.name : 'unknown' });
+            }
+        });
+
+        // Clean up state managers if they have destroy methods
+        const stateManagers = [this.mapState, this.routeAnimationState, this.selectionState, this.layerState, this.editModeState, this.tilesetState, this.imageState];
+        stateManagers.forEach(manager => {
+            try {
+                if (manager && typeof manager.destroy === 'function') {
+                    manager.destroy();
+                }
+            } catch (e) {
+                this.errorHandler.logDebug('Failed to destroy state manager', 'InteractiveMap.destroy.stateManager', { error: e, manager: manager ? manager.constructor.name : 'unknown' });
+            }
+        });
+
+        // Clean up controllers if they have destroy methods
+        try {
+            if (this.routeController && typeof this.routeController.destroy === 'function') {
+                this.routeController.destroy();
+            }
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to destroy route controller', 'InteractiveMap.destroy.routeController', { error: e });
+        }
+
+        // Clean up input handlers if they have destroy methods
+        try {
+            if (this.gestureHandler && typeof this.gestureHandler.destroy === 'function') {
+                this.gestureHandler.destroy();
+            }
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to destroy gesture handler', 'InteractiveMap.destroy.gestureHandler', { error: e });
+        }
+
+        // Clean up route manager if it has destroy method
+        try {
+            if (this.routeManager && typeof this.routeManager.destroy === 'function') {
+                this.routeManager.destroy();
+            }
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to destroy route manager', 'InteractiveMap.destroy.routeManager', { error: e });
+        }
+
+        // Clean up marker manager if it has destroy method
+        try {
+            if (this.markerManager && typeof this.markerManager.destroy === 'function') {
+                this.markerManager.destroy();
+            }
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to destroy marker manager', 'InteractiveMap.destroy.markerManager', { error: e });
+        }
+
+        // Clear references to prevent memory leaks
+        this.canvas = null;
+        this.ctx = null;
+        this.canvasTiles = null;
+        this.ctxTiles = null;
+        this.canvasGrid = null;
+        this.ctxGrid = null;
+        this.canvasMarker = null;
+        this.ctxMarker = null;
+        this.canvasRoute = null;
+        this.ctxRoute = null;
+        this.canvasOverlay = null;
+        this.ctxOverlay = null;
+        this.tooltip = null;
+    }
 }
 
 // Module-level error handler for utility functions
@@ -1867,6 +1973,23 @@ const moduleErrorHandler = typeof errorHandler !== 'undefined' ? errorHandler : 
 
 // Initialize
 let map;
+// Queue for event unsubscriber functions registered before `map` is created.
+let _pendingEventUnsubscribers = [];
+function addEventUnsubscriber(unsub) {
+    if (map && Array.isArray(map._eventUnsubscribers)) {
+        map._eventUnsubscribers.push(unsub);
+    } else {
+        _pendingEventUnsubscribers.push(unsub);
+    }
+}
+function flushPendingUnsubscribers() {
+    if (!map) return;
+    map._eventUnsubscribers = map._eventUnsubscribers || [];
+    for (const u of _pendingEventUnsubscribers) {
+        map._eventUnsubscribers.push(u);
+    }
+    _pendingEventUnsubscribers = [];
+}
 
 // LocalStorage helpers for layer visibility persistence
 function loadLayerVisibilityFromStorage() {
@@ -2100,8 +2223,10 @@ async function init() {
         if (typeof eventBus !== 'undefined') {
             eventBus.setErrorHandler(moduleErrorHandler);
             
+            // Unsubscriber functions will be queued until `map` is created
+            
             // Set up event listeners for cross-module communication
-            eventBus.on(window.EventTypes.RENDER_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.RENDER_REQUESTED, (data) => {
                 try {
                     // Use renderPipeline's batching system instead of direct render()
                     // This ensures multiple render requests in one frame are batched together
@@ -2118,9 +2243,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:RENDER_REQUESTED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
                 try {
                     // Update layer state manager when controllers change visibility
                     // Only handle events with layerVisibility (from controllers), not layerKey (from layerState itself)
@@ -2147,9 +2272,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:LAYER_VISIBILITY_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.LAYER_COUNTS_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.LAYER_COUNTS_CHANGED, (data) => {
                 try {
                     if (map && typeof map.updateLayerCounts === 'function') {
                         map.updateLayerCounts();
@@ -2157,9 +2282,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:LAYER_COUNTS_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.LAYER_HIGHLIGHT_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.LAYER_HIGHLIGHT_CHANGED, (data) => {
                 try {
                     // Update highlighted layers state
                     if (data && data.highlightedLayers && map) {
@@ -2172,9 +2297,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:LAYER_HIGHLIGHT_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
                 try {
                     if (map && typeof map.hideTooltip === 'function') {
                         map.hideTooltip();
@@ -2187,9 +2312,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:SELECTION_CLEARED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
                 try {
                     // Tileset state has changed, trigger side effects
                     // NOTE: Do NOT call map.setTileset() here - it would emit the event again!
@@ -2205,9 +2330,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
                 try {
                     // Grayscale state has changed, trigger side effects
                     // NOTE: Do NOT call map.setTilesetGrayscale() here - it would emit the event again!
@@ -2222,9 +2347,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
                 try {
                     // Display settings have changed, mark affected renderers dirty to re-render
                     // NOTE: SettingsController already updated layerState before emitting this event,
@@ -2249,9 +2374,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
                 try {
                     // Heatmap visibility changed via dedicated HeatmapDisplayState
                     // Step 1: Update UI button state to reflect new visibility
@@ -2287,9 +2412,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.MAP_ZOOM_IN_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MAP_ZOOM_IN_REQUESTED, (data) => {
                 try {
                     if (map && typeof map.zoomIn === 'function') {
                         map.zoomIn();
@@ -2297,9 +2422,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MAP_ZOOM_IN_REQUESTED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.MAP_ZOOM_OUT_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MAP_ZOOM_OUT_REQUESTED, (data) => {
                 try {
                     if (map && typeof map.zoomOut === 'function') {
                         map.zoomOut();
@@ -2307,9 +2432,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MAP_ZOOM_OUT_REQUESTED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.MAP_VIEW_RESET_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MAP_VIEW_RESET_REQUESTED, (data) => {
                 try {
                     if (map && typeof map.resetView === 'function') {
                         map.resetView();
@@ -2317,9 +2442,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_RESET_REQUESTED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.EDIT_MODE_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.EDIT_MODE_CHANGED, (data) => {
                 try {
                     // When entering any edit mode, deselect any selected marker to prevent confusion
                     if (data && data.enabled && map && map.selectionState) {
@@ -2341,9 +2466,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:EDIT_MODE_CHANGED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.TOOLTIP_HIDE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.TOOLTIP_HIDE_REQUESTED, (data) => {
                 try {
                     if (map && typeof map.hideTooltip === 'function') {
                         map.hideTooltip();
@@ -2351,9 +2476,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TOOLTIP_HIDE_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.TOOLTIP_SHOW_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.TOOLTIP_SHOW_REQUESTED, (data) => {
                 try {
                     if (map && typeof map.showTooltip === 'function' && data && data.marker && typeof data.x === 'number' && typeof data.y === 'number') {
                         map.showTooltip(data.marker, data.x, data.y, data.layerKey);
@@ -2361,9 +2486,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:TOOLTIP_SHOW_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, (data) => {
                 try {
                     if (map && typeof map._enterEditMode === 'function' && data && data.mode) {
                         map._enterEditMode(data.mode, data.scale || 2.0);
@@ -2371,9 +2496,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:EDIT_MODE_ENTER_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, (data) => {
                 try {
                     if (map && typeof map._exitEditMode === 'function' && data && data.mode) {
                         map._exitEditMode(data.mode);
@@ -2381,10 +2506,10 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:EDIT_MODE_EXIT_REQUESTED handler');
                 }
-            });
+            }));
             
             // State synchronization listeners
-            eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
                 try {
                     // NOTE: Do NOT try to sync back to SelectionState here!
                     // The SELECTION_CHANGED event was GENERATED BY SelectionState
@@ -2402,9 +2527,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:SELECTION_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.MAP_VIEW_CHANGED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MAP_VIEW_CHANGED, (data) => {
                 try {
                     // MAP_VIEW_CHANGED event comes FROM mapState, so don't call setPan/setZoom again
                     // (that would create an infinite loop). Just handle derived effects and rendering.
@@ -2422,9 +2547,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
                 try {
                     // Update route state
                     if (data && map && map.routeState) {
@@ -2446,9 +2571,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED handler');
                 }
-            });
+            }));
             
-            eventBus.on(window.EventTypes.ROUTE_CLEARED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.ROUTE_CLEARED, (data) => {
                 try {
                     // Update layer counts to show route length as 0
                     if (map && typeof map.updateLayerCounts === 'function') {
@@ -2461,10 +2586,10 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:ROUTE_CLEARED handler');
                 }
-            });
+            }));
 
             // Marker event listeners
-            eventBus.on(window.EventTypes.MARKER_ADDED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MARKER_ADDED, (data) => {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
@@ -2482,9 +2607,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_ADDED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.MARKER_REMOVED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MARKER_REMOVED, (data) => {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
@@ -2518,9 +2643,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_REMOVED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.MARKER_EDITED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MARKER_EDITED, (data) => {
                 try {
                     // Event handlers must ensure state is current before acting on it
                     // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
@@ -2538,9 +2663,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_EDITED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.MARKER_POSITION_UPDATE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.MARKER_POSITION_UPDATE_REQUESTED, (data) => {
                 try {
                     // Handle marker position update during drag operations
                     if (data && data.markerUid && typeof data.newX === 'number' && typeof data.newY === 'number') {
@@ -2562,18 +2687,18 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_POSITION_UPDATE_REQUESTED handler');
                 }
-            });
+            }));
 
             // Phase 3: Global Function Eventification - Event Handlers
-            eventBus.on(window.EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED, (data) => {
                 try {
                     updateEditOverlay();
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:EDIT_OVERLAY_UPDATE_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.LAYER_VISIBILITY_SAVE_REQUESTED, (data) => {
                 try {
                     if (data && data.layerVisibility) {
                         saveLayerVisibilityToStorage(data.layerVisibility);
@@ -2581,9 +2706,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:LAYER_VISIBILITY_SAVE_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED, (data) => {
                 try {
                     if (data && typeof data.multiplier === 'number') {
                         saveHighlightMultiplierToStorage(data.multiplier);
@@ -2591,9 +2716,9 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.HIGHLIGHTED_LAYERS_SAVE_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.HIGHLIGHTED_LAYERS_SAVE_REQUESTED, (data) => {
                 try {
                     if (data && data.highlightConfig) {
                         saveHighlightedLayersToStorage(data.highlightConfig);
@@ -2601,16 +2726,16 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:HIGHLIGHTED_LAYERS_SAVE_REQUESTED handler');
                 }
-            });
+            }));
 
-            eventBus.on(window.EventTypes.ROUTE_COMPUTATION_REQUESTED, (data) => {
+            addEventUnsubscriber(eventBus.on(window.EventTypes.ROUTE_COMPUTATION_REQUESTED, (data) => {
                 try {
                     beginRouteCompute();
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:ROUTE_COMPUTATION_REQUESTED handler');
                 }
-            });
-            eventBus.on(window.EventTypes.SIDEBAR_VISIBILITY_TOGGLE_REQUESTED, (data) => {
+            }));
+            addEventUnsubscriber(eventBus.on(window.EventTypes.SIDEBAR_VISIBILITY_TOGGLE_REQUESTED, (data) => {
                 try {
                     const app = document.querySelector('.app-container');
                     const collapsed = app.classList.contains('sidebar-collapsed');
@@ -2618,7 +2743,7 @@ async function init() {
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:SIDEBAR_VISIBILITY_TOGGLE_REQUESTED handler');
                 }
-            });
+            }));
         }
     } catch (e) {
         console.warn('Failed to initialize EventBus:', e);
@@ -2628,6 +2753,8 @@ async function init() {
     map = new InteractiveMap('mapCanvas');
     // Expose map globally for renderers and other modules to access
     window.interactiveMap = map;
+    // Flush any event unsubscriber functions that were queued before `map` existed
+    try { flushPendingUnsubscribers(); } catch (e) { moduleErrorHandler.logDebug('Failed to flush pending unsubscribers', 'init', { error: e }); }
         // Highlighting runtime state: delegated to HighlightState
         try {
             // For backward compatibility, expose highlighting through modular HighlightState

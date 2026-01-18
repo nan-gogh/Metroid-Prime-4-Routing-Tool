@@ -14,7 +14,6 @@
 
       // Get state managers from map
       this.mapState = map.mapState;
-      this.routeState = map.routeState;
       this.selectionState = map.selectionState;
       this.editModeState = editModeState || (map && map.editModeState);
 
@@ -59,7 +58,8 @@
           },
           _routeNodeCandidate: {
             get: () => this.dragState.routeNodeCandidate,
-            set: (v) => this.dragState.setRouteNodeCandidate(v)
+            set: (v) => this.dragState.setRouteNodeCandidate(v),
+            configurable: true
           }
         });
       } catch (e) {
@@ -177,12 +177,12 @@
           const routePos = this.routeUtils.findRoutePositionOfMarker ?
             this.routeUtils.findRoutePositionOfMarker(hit.marker.uid, this.currentRoute, this._routeSources) : -1;
           if (routePos !== -1) {
-            this._routeNodeCandidate = {
+            this.dragState.setRouteNodeCandidate({
               pointerId: ev.pointerId,
               routePos: routePos,
               startClientX: ev.clientX,
               startClientY: ev.clientY
-            };
+            });
             return true; // Handled
           }
         }
@@ -195,12 +195,12 @@
             const routePos = this.routeUtils.findRoutePositionOfMarker ?
               this.routeUtils.findRoutePositionOfMarker(waypointHit.marker.uid, this.currentRoute, this._routeSources) : -1;
             if (routePos !== -1) {
-              this._routeNodeCandidate = {
+              this.dragState.setRouteNodeCandidate({
                 pointerId: ev.pointerId,
                 routePos: routePos,
                 startClientX: ev.clientX,
                 startClientY: ev.clientY
-              };
+              });
               return true; // Handled
             }
           }
@@ -257,7 +257,7 @@
       try {
         // Clear route node candidate if active
         if (this._routeNodeCandidate && ev.pointerId === this._routeNodeCandidate.pointerId) {
-          this._routeNodeCandidate = null;
+          this.dragState.setRouteNodeCandidate(null);
         }
 
         // Waypoint drag finalization is handled by DragState.finalizeAllDrags()
@@ -297,7 +297,7 @@
     handleMouseLeave(ev) {
       try {
         // Clear hover preview
-        this._routePreview = null;
+        this.dragState.setRoutePreview(null);
 
         // If a route-insert was in progress, cancel and restore
         if (this._routeInsert) {
@@ -311,7 +311,7 @@
 
         // Clear any unpromoted route-node candidate
         if (this._routeNodeCandidate) {
-          this._routeNodeCandidate = null;
+          this.dragState.setRouteNodeCandidate(null);
         }
 
         return false; // Continue with other handlers
@@ -465,7 +465,7 @@
                 const py = ay + (by - ay) * t;
                 const worldX = (px - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
                 const worldY = (py - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
-                this._routePreview = { index: seg.index, t, worldX, worldY, screenX: px, screenY: py };
+                this.dragState.setRoutePreview({ index: seg.index, t, worldX, worldY, screenX: px, screenY: py });
                 try { this.canvas.style.cursor = 'pointer'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerMove.setCursor'); }
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
                 return;
@@ -473,7 +473,7 @@
             }
           } else {
             if (this._routePreview) {
-              this._routePreview = null;
+              this.dragState.setRoutePreview(null);
               // Let PointerHandler handle marker hover
             }
           }
@@ -512,12 +512,12 @@
         });
 
         // Clear local candidate state
-        this._routeNodeCandidate = null;
+        this.dragState.setRouteNodeCandidate(null);
         this.map.pointerDownTime = 0;
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._promoteRouteNodeDrag.setCursor'); }
       } catch (err) {
         this.errorHandler.logError('Error in _promoteRouteNodeDrag:', 'interactions', err);
-        this._routeNodeCandidate = null;
+        this.dragState.setRouteNodeCandidate(null);
         this.dragState.setWaypointDrag(null);
       }
     }
@@ -630,7 +630,7 @@
               }
             } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.restoreRoute'); }
           }
-          this._routeInsert = null;
+          this.dragState.setRouteInsert(null);
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         }
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.main'); }
@@ -642,7 +642,7 @@
         if (!uid) return;
 
         // Clear any drag candidates before processing the click
-        this._routeNodeCandidate = null;
+        this.dragState.setRouteNodeCandidate(null);
         this.dragState.setWaypointDrag(null);
 
         // Build ordered list of existing route marker UIDs
@@ -739,7 +739,7 @@
               });
             }
           }
-          this._routeInsert = null;
+          this.dragState.setRouteInsert(null);
         }
       } catch (e) {
         this.errorHandler.logDebug('RouteEditHandler._cancelRouteInsert failed', 'RouteEditHandler._cancelRouteInsert', { error: e });
@@ -782,12 +782,12 @@
       try {
         this._cancelRouteInsert(reason);
         if (this._routeNodeCandidate) {
-          this._routeNodeCandidate = null;
+          this.dragState.setRouteNodeCandidate(null);
         }
         if (this._waypointDrag) {
           this.dragState.setWaypointDrag(null);
         }
-        this._routePreview = null;
+        this.dragState.setRoutePreview(null);
       } catch (e) {
         this.errorHandler.logDebug('RouteEditHandler.cancelOperations failed', 'RouteEditHandler.cancelOperations', { error: e });
       }

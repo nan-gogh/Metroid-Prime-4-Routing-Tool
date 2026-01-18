@@ -269,6 +269,8 @@
           this.layerVisibility[key] = !!visibilityMap[key];
         });
         this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
+          layerKey: null,
+          visible: null,
           layerVisibility: { ...this.layerVisibility },
           triggeredBy: 'bulk-update'
         });

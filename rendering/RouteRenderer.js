@@ -13,13 +13,19 @@
      * @param {Object} mapState - The map state manager
      * @param {Object} layerState - The layer state manager
      * @param {Object} routeAnimationState - The route animation state manager
+     * @param {Object} routeManager - The route manager for route data
+     * @param {Object} dragState - The drag state manager for route previews
+     * @param {Object} highlightState - The highlight state manager for glow effects
      * @param {Object} config - Configuration object from MP4Config
      * @param {string} routeColor - Route color (defaults to LAYERS.route.color)
      */
-    constructor(mapState, layerState, routeAnimationState, config, routeColor) {
+    constructor(mapState, layerState, routeAnimationState, routeManager, dragState, highlightState, config, routeColor) {
       this.mapState = mapState;
       this.layerState = layerState;
       this.routeAnimationState = routeAnimationState;
+      this.routeManager = routeManager;
+      this.dragState = dragState;
+      this.highlightState = highlightState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
       this.errorHandler = global.errorHandler;
@@ -31,9 +37,7 @@
       this._glowCacheValid = false;
       this._colorCache = {}; // Cache for hex to rgba conversions
       
-      // Map reference will be set externally (by map.js) to avoid circular dependencies
-      // Renderers depend on map for route manager and display properties
-      this.map = null;
+      // Map reference removed - RouteRenderer is now decoupled from map object
     }
 
     /**
@@ -53,9 +57,9 @@
 
     // Edge-case handling: validate route data before rendering
     _validateRouteData() {
-      // Get route data from map (which delegates to routeManager - the source of truth)
+      // Get route data from routeManager - the source of truth
       // Do NOT read from routeState to avoid circular event emission
-      const currentRoute = this.map && this.map.currentRoute;
+      const currentRoute = this.routeManager && this.routeManager.currentRoute;
       
       // Check for empty or invalid route
       if (!currentRoute || !Array.isArray(currentRoute) || currentRoute.length === 0) {
@@ -68,12 +72,12 @@
       }
 
       // Check route sources exist
-      if (!this.map._routeSources || !Array.isArray(this.map._routeSources)) {
+      if (!this.routeManager.routeSources || !Array.isArray(this.routeManager.routeSources)) {
         return false;
       }
 
       // Validate route indices are within bounds
-      const maxIndex = this.map._routeSources.length - 1;
+      const maxIndex = this.routeManager.routeSources.length - 1;
       for (const idx of currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
           (this.errorHandler || global.errorHandler).logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
@@ -86,19 +90,19 @@
 
     // Micro-optimization: Cache path computation when route hasn't changed
     _computePathData() {
-      // Get route from map (source of truth - routeManager)
-      const currentRoute = this.map && this.map.currentRoute;
+      // Get route from routeManager (source of truth)
+      const currentRoute = this.routeManager && this.routeManager.currentRoute;
       if (!currentRoute || !Array.isArray(currentRoute)) {
         return { points: [], valid: false };
       }
 
       // Include marker positions in cache key to detect when waypoints are dragged
       const markerPositions = currentRoute.map(idx => {
-        const src = this.map._routeSources[idx];
+        const src = this.routeManager.routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const routeKey = JSON.stringify(currentRoute) + '|' + this.map.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const routeKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._cachedPath && this._pathCacheValid && this._cachedPath.key === routeKey) {
         return this._cachedPath.data;
@@ -112,7 +116,7 @@
       const n = currentRoute.length;
       for (let i = 0; i < n; i++) {
         const idx = currentRoute[i];
-        const src = this.map._routeSources[idx];
+        const src = this.routeManager.routeSources[idx];
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
@@ -130,7 +134,7 @@
 
       // Handle route looping: close the route by connecting the last waypoint back to the first
       // Only when BOTH conditions are met: route looping is enabled AND route has at least 3 waypoints
-      const routeLooping = this.map && this.map.routeLooping;
+      const routeLooping = this.routeManager && this.routeManager.routeLooping;
       if (routeLooping && pathData.points.length >= 3) {
         pathData.points.push({ ...pathData.points[0] });
       }
@@ -146,19 +150,19 @@
 
     // Micro-optimization: Cache glow path separately
     _computeGlowPathData() {
-      // Get route from map (source of truth - routeManager)
-      const currentRoute = this.map && this.map.currentRoute;
+      // Get route from routeManager (source of truth)
+      const currentRoute = this.routeManager && this.routeManager.currentRoute;
       if (!currentRoute || !Array.isArray(currentRoute)) {
         return { points: [], valid: false };
       }
 
       // Include marker positions in cache key to detect when waypoints are dragged
       const markerPositions = currentRoute.map(idx => {
-        const src = this.map._routeSources[idx];
+        const src = this.routeManager.routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const glowKey = JSON.stringify(currentRoute) + '|' + this.map.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const glowKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._glowCache && this._glowCacheValid && this._glowCache.key === glowKey) {
         return this._glowCache.data;
@@ -195,7 +199,11 @@
           ctx.clearRect(0, 0, routeCanvas.width, routeCanvas.height);
         }
 
-        const ctx = renderContext ? renderContext.ctxRoute : this.map.ctx;
+        const ctx = renderContext ? renderContext.ctxRoute : null;
+        if (!ctx) {
+          this.errorHandler.logWarning('RouteRenderer.render called without valid renderContext', 'RouteRenderer.render');
+          return;
+        }
         const pathData = this._computePathData();
 
         if (!pathData.valid || pathData.points.length < 2) {
@@ -238,12 +246,10 @@
     }
 
     _shouldRenderGlow() {
-      const map = this.map;
-      return !!(map.highlightedLayers && map.highlightedLayers.has && map.highlightedLayers.has('route'));
+      return !!(this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has && this.highlightState.highlightedLayers.has('route'));
     }
 
     _setupLineStyle(ctx) {
-      const map = this.map;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
@@ -252,14 +258,14 @@
         ctx.strokeStyle = this._hexToRgba(routeHex, 1);
       }
 
-      const baseLine = (typeof map.routeLineWidth === 'number') ? map.routeLineWidth : 3;
-      const detailScale = map.getDetailScale ? map.getDetailScale() : 1;
-      ctx.lineWidth = Math.max(1, baseLine * map.zoom * detailScale);
+      const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
+      const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
+      ctx.lineWidth = Math.max(1, baseLine * this.mapState.zoom * detailScale);
 
       // Optimized dash pattern calculation
       const spacingScale = Math.max(0.35, baseLine / 5);
-      const dashLen = Math.max(3, 8 * map.zoom * spacingScale * detailScale);
-      const gapLen = Math.max(3, 6 * map.zoom * spacingScale * detailScale);
+      const dashLen = Math.max(3, 8 * this.mapState.zoom * spacingScale * detailScale);
+      const gapLen = Math.max(3, 6 * this.mapState.zoom * spacingScale * detailScale);
 
       if (routeHex) {
         ctx.setLineDash([dashLen, gapLen]);
@@ -268,7 +274,6 @@
     }
 
     _renderGlow(ctx) {
-      const map = this.map;
       const pathData = this._computeGlowPathData();
 
       try {
@@ -288,9 +293,9 @@
           }
         }
 
-        const baseLine = (typeof map.routeLineWidth === 'number') ? map.routeLineWidth : 3;
-        const detailScale = map.getDetailScale ? map.getDetailScale() : 1;
-        const glowLine = Math.max(1, baseLine * map.zoom * detailScale) * 2.6;
+        const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
+        const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
+        const glowLine = Math.max(1, baseLine * this.mapState.zoom * detailScale) * 2.6;
 
         ctx.lineWidth = glowLine;
         ctx.strokeStyle = glowColor;
@@ -322,7 +327,6 @@
     }
 
     _renderNodes(ctx, pathData) {
-      const map = this.map;
       const routeHex = this.routeColor;
       const nodeFill = routeHex ? this._hexToRgba(routeHex, 0.95) : null;
 
@@ -330,7 +334,9 @@
         ctx.fillStyle = nodeFill;
       }
 
-      const dotSize = map.getRouteNodeSize ? map.getRouteNodeSize() : 6;
+      const lineWidth = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
+      const dotSize = this.routeManager && typeof this.routeManager.getRouteNodeSize === 'function' ?
+        this.routeManager.getRouteNodeSize(lineWidth, this.mapState.zoom) : 6;
 
       // Skip the closing loop point for node rendering (only when a loop was actually added)
       const nodeCount = (map.routeLooping && pathData.points.length >= 4) ? pathData.points.length - 1 : pathData.points.length;
@@ -346,7 +352,6 @@
     _renderSingleNode(ctx, point) {
       if (!point) return;
 
-      const map = this.map;
       ctx.save();
 
       const routeHex = this.routeColor;
@@ -356,7 +361,9 @@
         ctx.fillStyle = nodeFill;
       }
 
-      const dotSize = map.getRouteNodeSize ? map.getRouteNodeSize() : 6;
+      const lineWidth = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
+      const dotSize = this.routeManager && typeof this.routeManager.getRouteNodeSize === 'function' ?
+        this.routeManager.getRouteNodeSize(lineWidth, this.mapState.zoom) : 6;
       ctx.beginPath();
       ctx.arc(point.x, point.y, dotSize, 0, Math.PI * 2);
       ctx.fill();
@@ -416,9 +423,8 @@
      */
     _renderRoutePreview(ctx) {
       try {
-        // Get route preview from map (DragState)
-        // RouteRenderer receives dragState via map, reads current preview
-        const routePreview = this.map && this.map.dragState ? this.map.dragState.routePreview : null;
+        // Get route preview from dragState
+        const routePreview = this.dragState ? this.dragState.routePreview : null;
         if (!routePreview) return;
 
         // Transform route preview coordinates to screen coordinates
