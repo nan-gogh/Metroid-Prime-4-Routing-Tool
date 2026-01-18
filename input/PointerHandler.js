@@ -5,6 +5,7 @@
   class PointerHandler {
     constructor(map, config, eventBus) {
       this.map = map;
+        this.markerManager = map.markerManager;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
       this.eventBus = eventBus || window.eventBus;
@@ -74,7 +75,7 @@
         this._updateResolution = this.imageState.updateResolution.bind(this.imageState);
         this._checkMarkerHover = this.map.checkMarkerHover.bind(this.map);
         this._findMarkerAt = this.map.checkMarkerHover.bind(this.map);
-        this._saveViewToStorage = this.map.saveViewToStorage.bind(this.map);
+        this._saveViewToStorage = this.map.saveViewToStorage ? this.map.saveViewToStorage.bind(this.map) : () => {};
         
         // Marker utilities
         if (this.map.markerRenderer) {
@@ -152,16 +153,15 @@
         this.panY = mouseY - worldY * this.zoom;
         
         this._updateResolution();
-        this.map.updateResolution();
         this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         // Update hover/cursor state after zoom so cursor matches visual marker size
         try { this._checkMarkerHover(mouseX, mouseY); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._onWheel.checkMarkerHover'); }
         // Debounce wheel until it stops, then save once
-        try { if (this.map._wheelSaveTimer) clearTimeout(this.map._wheelSaveTimer); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.clearTimer'); }
+        try { if (this._wheelSaveTimer) clearTimeout(this._wheelSaveTimer); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.clearTimer'); }
         try {
-            this.map._wheelSaveTimer = setTimeout(() => {
-                try { this._saveViewToStorage(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
-            }, 150);
+          this._wheelSaveTimer = setTimeout(() => {
+            try { this._saveViewToStorage(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
+          }, 150);
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.setTimeout'); }
       } catch (e) { this.errorHandler.logDebug('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
     }
@@ -174,7 +174,7 @@
         const downTime = Date.now();
         this.pointers.set(ev.pointerId, { x: localX, y: localY, clientX: ev.clientX, clientY: ev.clientY, downTime });
         
-        try { this.map.checkMarkerHover(localX, localY); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerDown.checkMarkerHover'); }
+        try { this._checkMarkerHover(localX, localY); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerDown.checkMarkerHover'); }
 
         if (this.pointers.size === 1) {
           // Single pointer - handle marker interaction and pan start
@@ -197,13 +197,12 @@
         if (this.routeEditHandler && this.routeEditHandler.handlePointerDown(ev, localX, localY, downTime)) {
           // Route handler handled it
           this.pointerDownTime = downTime;
-          this.map.pointerDownTime = downTime;
           return;
         }
 
         // Handle custom marker editing
         if (hit && hit.layerKey === 'customMarkers') {
-          if (this.editMarkersMode) {
+            if (this.editMarkersMode) {
             // Prepare for marker drag
             this.dragState.setDraggingCandidate({
               uid: hit.marker.uid,
@@ -216,13 +215,11 @@
             });
             this.dragState.setDragging(false);
             this.pointerDownTime = downTime;
-            this.map.pointerDownTime = downTime; // Set on map for click handler
-            this.map.canvas.style.cursor = 'grabbing';
+            try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           } else {
             // Normal mode - record for click detection
             this.pointerDownTime = downTime;
-            this.map.pointerDownTime = downTime; // Set on map for click handler
-            try { this.map.canvas.style.cursor = 'pointer'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
+            try { this.canvas.style.cursor = 'pointer'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           }
         } else {
           // Start single-pointer pan
@@ -230,8 +227,7 @@
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
           this.pointerDownTime = downTime;
-          this.map.pointerDownTime = downTime; // Set on map for click handler
-          this.map.canvas.style.cursor = 'grabbing';
+          try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
         }
       } catch (e) { this.errorHandler.logDebug('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
     }
@@ -361,9 +357,7 @@
         this.dragState.updateDraggingMarkerPosition(nx, ny);
         
         // Mark marker renderer dirty for immediate visual feedback
-        if (this.map && typeof this.map.markRendererDirty === 'function') {
-          this.map.markRendererDirty('MarkerRenderer');
-        }
+        try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
         
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._handleMarkerDrag.setCursor'); }
       } catch (err) {
@@ -376,15 +370,14 @@
       if (this.dragState.promoteDraggingCandidate(ev)) {
         // Clear selection if dragging currently selected marker
         try {
-          if (this.map.selectedMarker && this.map.selectedMarker.uid === this._draggingMarker.uid &&
-              this.map.selectedMarkerLayer === this._draggingMarker.layerKey) {
-            this.map.selectedMarker = null;
-            this.map.selectedMarkerLayer = null;
+          if (this.selectionState && this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === this._draggingMarker.uid &&
+              this.selectionState.selectedMarkerLayer === this._draggingMarker.layerKey) {
+            try { this.selectionState.clearSelectedMarker(); } catch (e) { /* ignore */ }
             try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
           }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
 
-        this.map.pointerDownTime = 0;
+        this.pointerDownTime = 0;
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
       }
     }
@@ -397,8 +390,8 @@
       // Save marker position if one was being dragged
       if (hadDraggingMarker) {
         try {
-          if (this.map.markerManager) {
-            this.map.markerManager.saveToStorage();
+          if (this.markerManager && typeof this.markerManager.saveToStorage === 'function') {
+            this.markerManager.saveToStorage();
           }
         } catch (e) {
           this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._finalizeDrags.markerSave');
@@ -406,13 +399,13 @@
       }
       
       const under = this._findMarkerAt ? this._findMarkerAt(localX, localY) : null;
-      this.canvas.style.cursor = under ? 'pointer' : 'grab';
+      try { this.canvas.style.cursor = under ? 'pointer' : 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._finalizeDrags.setCursor'); }
     }
 
     _onMouseLeave(ev) {
       try {
-        this.map.isDragging = false;
-        this.map.canvas.style.cursor = 'grab';
+        this.dragState.setDragging(false);
+        try { this.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.setCursor'); }
         try {
           const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
           let enteredUi = false;
@@ -422,7 +415,7 @@
             }
           } catch (e) { enteredUi = false; }
           // If pointer left into the UI, keep tooltip visible; otherwise hide it.
-          if (!enteredUi) this.map.hideTooltip();
+          if (!enteredUi) try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.hideTooltip'); }
         } catch (e) { try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
 
         // Handle route-specific mouse leave
@@ -436,13 +429,13 @@
       try {
         // Check if this was a quick tap (not a held drag)
         // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
-        const holdDuration = Date.now() - this.map.pointerDownTime;
+        const holdDuration = Date.now() - this.pointerDownTime;
         
         // Only interact on quick taps (less than threshold)
-        const isQuickTap = this.map.pointerDownTime > 0 && holdDuration < this.minClickDuration;
+        const isQuickTap = this.pointerDownTime > 0 && holdDuration < this.minClickDuration;
         
         // Clear timer after use (important for preventing double-placement)
-        this.map.pointerDownTime = 0;
+        this.pointerDownTime = 0;
         
         // Determine whether a marker exists at the click location (don't rely on hoveredMarker for custom markers)
         const rect = this.canvas.getBoundingClientRect();
