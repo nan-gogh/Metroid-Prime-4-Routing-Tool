@@ -10,7 +10,7 @@
   <div id="results"></div>
   <script src="../rendering/utils/colorUtils.js"></script>
   <script src="../data/markerUtils.js"></script>
-  <script src="../data/routeUtils.js"></script>
+  <script src="../data/routeMath.js"></script>
   <script>
     const results = document.getElementById('results');
     function assert(cond, msg) {
@@ -53,9 +53,9 @@
     try {
       const fakeMap = { zoom: 0.1, panX: 5, panY: 10 };
       const rp = { x: 0.2, y:0.4 };
-      const pos = RouteUtils.getRoutePreviewScreenPosition(rp, fakeMap);
-      assert(pos && typeof pos.x === 'number' && typeof pos.y === 'number', 'RouteUtils.getRoutePreviewScreenPosition returns coordinates');
-    } catch (e) { assert(false, 'RouteUtils.getRoutePreviewScreenPosition threw'); }
+      const pos = RouteMath.getRoutePreviewScreenPosition(rp, fakeMap);
+      assert(pos && typeof pos.x === 'number' && typeof pos.y === 'number', 'RouteMath.getRoutePreviewScreenPosition returns coordinates');
+    } catch (e) { assert(false, 'RouteMath.getRoutePreviewScreenPosition threw'); }
   </script>
 </body>
 </html>

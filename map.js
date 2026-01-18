@@ -1369,10 +1369,10 @@ class InteractiveMap {
             const prevIndices = this.currentRoute.slice();
 
             // Create ordered sources array
-            const ordered = RouteUtilsCore.createOrderedSources(prevIndices, prevSources);
+            const ordered = RouteMath.createOrderedSources(prevIndices, prevSources);
 
             // Calculate insertion position along the segment
-            const insertPosition = RouteUtilsCore.calculateSegmentInsertionPosition(seg.index, seg.t, ordered, this.routeLooping);
+            const insertPosition = RouteMath.calculateSegmentInsertionPosition(seg.index, seg.t, ordered, this.routeLooping);
             if (!insertPosition) return;
 
             // Create temporary marker using object pool
@@ -1381,13 +1381,14 @@ class InteractiveMap {
             tempMarker.y = insertPosition.y;
 
             // Insert waypoint into ordered sources
-            const newOrdered = RouteUtilsCore.insertWaypointIntoOrderedSources(ordered, insertPosition, tempMarker, 'temp');
+            const newOrdered = RouteMath.insertWaypointIntoOrderedSources(ordered, insertPosition, tempMarker, 'temp');
 
             const newSources = newOrdered;
             const newIndices = newSources.map((_, i) => i);
 
             // Set the route with the temporary insertion
-            this.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, MP4Config.MAP_SIZE), newSources);
+            const computedLength = this.routeManager ? this.routeManager.computeRouteLengthNormalized(newSources, MP4Config.MAP_SIZE) : 0;
+            this.setRoute(newIndices, computedLength, newSources);
 
             // Initialize route insert state
             this._routeInsert = {
@@ -1423,24 +1424,25 @@ class InteractiveMap {
             if (!Array.isArray(this.currentRoute) || !Array.isArray(this._routeSources)) return;
 
             // Find the route position of this marker
-            const routePos = RouteUtilsCore.findRoutePositionOfMarker(hit.marker.uid, this.currentRoute, this._routeSources);
+            const routePos = (this.routeManager && typeof this.routeManager.findRoutePositionOfMarker === 'function') ?
+                this.routeManager.findRoutePositionOfMarker(hit.marker.uid) : -1;
 
             if (routePos === -1) return; // Marker not in current route
 
             // Set up route node candidate for dragging
-            this._routeNodeCandidate = {
+            this.pointerHandler.dragState.setRouteNodeCandidate({
                 pointerId: ev.pointerId,
                 routePos: routePos,
                 startClientX: ev.clientX,
                 startClientY: ev.clientY
-            };
+            });
 
             // Clear pointer down time to prevent click handling
             this.pointerDownTime = 0;
 
         } catch (err) {
             this.errorHandler.logDebug('Route node drag start failed', 'InteractiveMap.handleRouteNodeDragStart', { error: err });
-            this._routeNodeCandidate = null;
+            this.pointerHandler.dragState.setRouteNodeCandidate(null);
         }
     }
     
@@ -1492,7 +1494,17 @@ class InteractiveMap {
                 try { this.tooltip.style.borderColor = layerCol; } catch (e) { 
                     this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setBorderColor');
                 }
-                try { if (typeof colorToRgba === 'function') this.tooltip.style.background = colorToRgba(layerCol, 0.12) || this.tooltip.style.background; } catch (e) { 
+                try {
+                    let bg = null;
+                    if (typeof RenderUtils !== 'undefined' && typeof RenderUtils.hexToRgba === 'function') {
+                        bg = RenderUtils.hexToRgba(layerCol, 0.12);
+                    } else if (typeof ColorUtils !== 'undefined' && typeof ColorUtils.hexToRgba === 'function') {
+                        bg = ColorUtils.hexToRgba(layerCol, 0.12);
+                    } else if (typeof colorToRgba === 'function') {
+                        bg = colorToRgba(layerCol, 0.12);
+                    }
+                    this.tooltip.style.background = bg || this.tooltip.style.background;
+                } catch (e) { 
                     this.errorHandler.logError(e, 'InteractiveMap.showTooltip.setBackgroundColor');
                 }
             } else {
@@ -1811,7 +1823,7 @@ class InteractiveMap {
     clearRoute() {
         // Check for active drag operations and cancel them before clearing
         if (this.pointerHandler && 
-            (this._routeInsert || this._routeNodeCandidate || this._draggingMarker)) {
+            (this._routeInsert || this.pointerHandler.dragState.routeNodeCandidate || this._draggingMarker)) {
             this.pointerHandler._cancelRouteDragOperations('Route clearing');
         }
         
@@ -2526,12 +2538,12 @@ async function init() {
                     event: window.EventTypes.ROUTE_UPDATED,
                     handler: (data) => {
                         // Update route state
-                        if (data && map && map.routeState) {
+                        if (data && map && map.routeManager) {
                             if (data.route) {
-                                map.routeState.setRoute(data.route);
+                                map.routeManager.setRoute(data.route);
                             }
                             if (typeof data.looping === 'boolean') {
-                                map.routeState.setRouteLooping(data.looping);
+                                map.routeManager.setRouteLooping(data.looping);
                             }
                             // Update layer counts for route length display
                             if (map && typeof map.updateLayerCounts === 'function') {
@@ -3405,7 +3417,7 @@ async function init() {
     try {
         if (typeof RouteComputeController !== 'undefined') {
             const routeComputeController = new RouteComputeController({
-                routeState: map.routeState,
+                routeManager: map.routeManager,
                 routeAnimationState: map.routeAnimationState,
                 layerState: map.layerState,
                 selectionState: map.selectionState,
@@ -3414,6 +3426,7 @@ async function init() {
                 pointerHandler: map.pointerHandler,
                 eventBus: eventBus,
                 config: MP4Config,
+                routeManager: map.routeManager,
                 errorHandler: moduleErrorHandler
             });
             routeComputeController.init();

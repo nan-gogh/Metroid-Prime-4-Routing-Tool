@@ -52,6 +52,9 @@ global.LAYERS = {
 // Execute RouteRenderer code
 eval(routeRendererCode);
 
+// Ensure module-scoped `this.errorHandler` exists for logging in test harness
+this.errorHandler = this.errorHandler || global.errorHandler || { logError: () => {}, logDebug: () => {} };
+
 this.errorHandler.logError('RouteRenderer loaded successfully', 'require');
 
 // Create mock state managers

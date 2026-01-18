@@ -1,6 +1,5 @@
 // rendering/utils/colorUtils.js
 // Small color utilities for converting hex colors to rgba strings
-
 (function (global) {
   const ColorUtils = {
     // Convert #RRGGBB or #RRGGBBAA or short forms to rgba(r,g,b,a)

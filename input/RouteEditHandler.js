@@ -17,7 +17,17 @@
       this.editModeState = editModeState || (map && map.editModeState);
 
       // Route utilities for calculations
-      this.routeUtils = window.RouteUtilsCore || {};
+
+      // Canonical route-length computation: use RouteManager only
+      try {
+        if (map && map.routeManager && typeof map.routeManager.computeRouteLengthNormalized === 'function') {
+          this._computeRouteLengthNormalized = map.routeManager.computeRouteLengthNormalized.bind(map.routeManager);
+        } else {
+          this._computeRouteLengthNormalized = null;
+        }
+      } catch (e) {
+        this._computeRouteLengthNormalized = null;
+      }
 
       // Route finding functions
       this._findRouteWaypointAt = (screenX, screenY) => {
@@ -54,11 +64,6 @@
           _waypointDrag: {
             get: () => this.dragState.waypointDrag,
             set: (v) => this.dragState.setWaypointDrag(v)
-          },
-          _routeNodeCandidate: {
-            get: () => this.dragState.routeNodeCandidate,
-            set: (v) => this.dragState.setRouteNodeCandidate(v),
-            configurable: true
           }
         });
       } catch (e) {
@@ -171,8 +176,8 @@
         const hit = this.map.checkMarkerHover ? this.map.checkMarkerHover(localX, localY) : null;
         if (hit && this.editRouteMode && hit.marker && hit.marker.uid) {
           // Find route position and set local candidate state
-          const routePos = this.routeUtils.findRoutePositionOfMarker ?
-            this.routeUtils.findRoutePositionOfMarker(hit.marker.uid, this.currentRoute, this._routeSources) : -1;
+          const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
+            this.map.routeManager.findRoutePositionOfMarker(hit.marker.uid) : -1;
           if (routePos !== -1) {
             this.dragState.setRouteNodeCandidate({
               pointerId: ev.pointerId,
@@ -189,8 +194,8 @@
           const waypointHit = this._findRouteWaypointAt ? this._findRouteWaypointAt(localX, localY) : null;
           if (waypointHit && waypointHit.marker) {
             // Find route position and set local candidate state
-            const routePos = this.routeUtils.findRoutePositionOfMarker ?
-              this.routeUtils.findRoutePositionOfMarker(waypointHit.marker.uid, this.currentRoute, this._routeSources) : -1;
+            const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
+              this.map.routeManager.findRoutePositionOfMarker(waypointHit.marker.uid) : -1;
             if (routePos !== -1) {
               this.dragState.setRouteNodeCandidate({
                 pointerId: ev.pointerId,
@@ -253,7 +258,7 @@
     handlePointerUp(ev, localX, localY) {
       try {
         // Clear route node candidate if active
-        if (this._routeNodeCandidate && ev.pointerId === this._routeNodeCandidate.pointerId) {
+        if (this.dragState.routeNodeCandidate && ev.pointerId === this.dragState.routeNodeCandidate.pointerId) {
           this.dragState.setRouteNodeCandidate(null);
         }
 
@@ -307,7 +312,7 @@
         }
 
         // Clear any unpromoted route-node candidate
-        if (this._routeNodeCandidate) {
+        if (this.dragState.routeNodeCandidate) {
           this.dragState.setRouteNodeCandidate(null);
         }
 
@@ -321,9 +326,9 @@
     // ===== ROUTE-SPECIFIC METHODS =====
 
     _handleRouteNodePromotion(ev, localX, localY) {
-      if (this._routeNodeCandidate && ev.pointerId === this._routeNodeCandidate.pointerId) {
-        const dxn = ev.clientX - this._routeNodeCandidate.startClientX;
-        const dyn = ev.clientY - this._routeNodeCandidate.startClientY;
+      if (this.dragState.routeNodeCandidate && ev.pointerId === this.dragState.routeNodeCandidate.pointerId) {
+        const dxn = ev.clientX - this.dragState.routeNodeCandidate.startClientX;
+        const dyn = ev.clientY - this.dragState.routeNodeCandidate.startClientY;
         const dist = Math.hypot(dxn, dyn);
         if (dist > (this.config.ROUTE?.MOVE_THRESHOLD || 5)) {
           this._promoteRouteNodeDrag(ev, localX, localY);
@@ -441,7 +446,7 @@
     _handleRoutePreview(localX, localY) {
       try {
         const canPreview = !this.map.isDragging && !this.map._draggingMarker && !this.map._draggingCandidate &&
-                          !this._routeInsert && !this._routeNodeCandidate && this.editRouteMode;
+                          !this._routeInsert && !this.dragState.routeNodeCandidate && this.editRouteMode;
         if (canPreview) {
           const seg = this._findRouteSegmentAt ?
             this._findRouteSegmentAt(localX, localY, this.config.ROUTE?.SEGMENT_DETECTION_THRESHOLD || 20) : null;
@@ -480,7 +485,7 @@
 
     _promoteRouteNodeDrag(ev, localX, localY) {
       try {
-        const routePos = Number(this._routeNodeCandidate.routePos) || 0;
+        const routePos = Number(this.dragState.routeNodeCandidate.routePos) || 0;
 
         // Get the current marker position
         const sourceIndex = this.currentRoute[routePos];
@@ -778,7 +783,7 @@
     cancelOperations(reason = 'Operation cancelled') {
       try {
         this._cancelRouteInsert(reason);
-        if (this._routeNodeCandidate) {
+        if (this.dragState.routeNodeCandidate) {
           this.dragState.setRouteNodeCandidate(null);
         }
         if (this._waypointDrag) {

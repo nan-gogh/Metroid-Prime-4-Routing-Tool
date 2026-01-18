@@ -38,6 +38,40 @@
       this._colorCache = {}; // Cache for hex to rgba conversions
       
       // Map reference removed - RouteRenderer is now decoupled from map object
+      // Helper that delegates to RenderUtils if available, otherwise falls back
+      this._hexToRgba = (h, a) => {
+        try {
+          if (typeof RenderUtils !== 'undefined' && typeof RenderUtils.hexToRgba === 'function') {
+            return RenderUtils.hexToRgba(h, a);
+          }
+
+          if (!h || typeof h !== 'string') return null;
+          let s = h.replace('#', '').trim();
+          if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
+          if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
+
+          let r = 0, g = 0, b = 0, alphaFromHex = 1;
+
+          if (s.length === 6) {
+            r = parseInt(s.slice(0, 2), 16);
+            g = parseInt(s.slice(2, 4), 16);
+            b = parseInt(s.slice(4, 6), 16);
+          } else if (s.length === 8) {
+            r = parseInt(s.slice(0, 2), 16);
+            g = parseInt(s.slice(2, 4), 16);
+            b = parseInt(s.slice(4, 6), 16);
+            alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
+          } else {
+            return null;
+          }
+
+          const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        } catch (e) {
+          (this.errorHandler || global.errorHandler).logDebug && (this.errorHandler || global.errorHandler).logDebug('RouteRenderer._hexToRgba fallback failed', 'RouteRenderer._hexToRgba', { error: e });
+          return null;
+        }
+      };
     }
 
     /**
@@ -371,41 +405,7 @@
       ctx.restore();
     }
 
-    // Optimized hex to rgba conversion with caching
-    _hexToRgba(h, a) {
-      if (!h || typeof h !== 'string') return null;
-
-      // Simple cache for common colors
-      const cacheKey = h + '_' + a;
-      if (this._colorCache[cacheKey]) {
-        return this._colorCache[cacheKey];
-      }
-
-      let s = h.replace('#', '').trim();
-      if (s.length === 3) s = s.split('').map(ch => ch + ch).join('');
-      if (s.length === 4) s = s.split('').map(ch => ch + ch).join('');
-
-      let r = 0, g = 0, b = 0, alphaFromHex = 1;
-
-      if (s.length === 6) {
-        r = parseInt(s.slice(0, 2), 16);
-        g = parseInt(s.slice(2, 4), 16);
-        b = parseInt(s.slice(4, 6), 16);
-      } else if (s.length === 8) {
-        r = parseInt(s.slice(0, 2), 16);
-        g = parseInt(s.slice(2, 4), 16);
-        b = parseInt(s.slice(4, 6), 16);
-        alphaFromHex = parseInt(s.slice(6, 8), 16) / 255;
-      } else {
-        return null;
-      }
-
-      const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
-      const result = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-
-      this._colorCache[cacheKey] = result;
-      return result;
-    }
+    
 
     /**
      * Invalidates all internal caches when route data changes.
@@ -444,28 +444,7 @@
         let nodeFill = null;
 
         try {
-          if (typeof ColorUtils !== 'undefined' && ColorUtils.hexToRgba) {
-            nodeFill = ColorUtils.hexToRgba(routeHex, 0.95);
-          } else if (routeHex && typeof routeHex === 'string') {
-            // Simple hex -> rgba fallback
-            const s = routeHex.replace('#', '').trim();
-            let r = 34, g = 211, b = 238, a = 0.95;
-            if (s.length === 6) {
-              r = parseInt(s.slice(0,2),16);
-              g = parseInt(s.slice(2,4),16);
-              b = parseInt(s.slice(4,6),16);
-            } else if (s.length === 8) {
-              r = parseInt(s.slice(0,2),16);
-              g = parseInt(s.slice(2,4),16);
-              b = parseInt(s.slice(4,6),16);
-              a = parseInt(s.slice(6,8),16) / 255 * 0.95;
-            } else if (s.length === 3) {
-              r = parseInt(s[0]+s[0],16);
-              g = parseInt(s[1]+s[1],16);
-              b = parseInt(s[2]+s[2],16);
-            }
-            nodeFill = `rgba(${r}, ${g}, ${b}, ${a})`;
-          }
+          nodeFill = this._hexToRgba(routeHex, 0.95);
         } catch (e) {
           this.errorHandler && this.errorHandler.logDebug('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e });
         }

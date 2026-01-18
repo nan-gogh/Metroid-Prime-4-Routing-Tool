@@ -4,7 +4,7 @@
 class RouteComputeController {
     constructor(options) {
         // Required dependencies
-        this.routeState = options.routeState;
+        this.routeManager = options.routeManager;
         this.routeAnimationState = options.routeAnimationState;
         this.layerState = options.layerState;
         this.selectionState = options.selectionState;
@@ -17,6 +17,8 @@ class RouteComputeController {
 
         // Optional dependencies
         this.config = options.config || MP4Config;
+        // Optional access to centralized route manager for consistent calculations
+        this.routeManager = options.routeManager || null;
         this.errorHandler = options.errorHandler || new ErrorHandler();
 
         // For compatibility with extracted code
@@ -110,18 +112,21 @@ class RouteComputeController {
             const toggleRouteDirection = () => {
                 try { this.routeAnimationState.setLastAnimationTime(performance.now()); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.setLastRouteAnimTime'); }
                 try {
-                    if (Array.isArray(this.routeState.getRoute()) && this.routeState.getRoute().length > 1 && Array.isArray(this.routeState.getRouteSources())) {
+                    if (Array.isArray(this.routeManager.getRoute()) && this.routeManager.getRoute().length > 1 && Array.isArray(this.routeManager.getRouteSources())) {
                         const ordered = [];
-                        for (let i = 0; i < this.routeState.getRoute().length; i++) {
-                            const idx = this.routeState.getRoute()[i];
-                            const src = this.routeState.getRouteSources() && this.routeState.getRouteSources()[idx];
+                        for (let i = 0; i < this.routeManager.getRoute().length; i++) {
+                            const idx = this.routeManager.getRoute()[i];
+                            const src = this.routeManager.getRouteSources() && this.routeManager.getRouteSources()[idx];
                             if (src && src.marker) ordered.push({ marker: src.marker, layerKey: src.layerKey });
                         }
                         if (ordered.length > 1) {
                             ordered.reverse();
                             const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
                             const newIndices = newSources.map((_, i) => i);
-                            try { this.routeState.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, this.config.MAP_SIZE), newSources); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.setReversedRoute'); }
+                            try { 
+                                const len = this.routeManager ? this.routeManager.computeRouteLengthNormalized(newSources, this.config.MAP_SIZE) : 0;
+                                this.routeManager.setRoute(newIndices, len, newSources);
+                            } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.setReversedRoute'); }
                         }
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.reverseRouteDirection'); }
@@ -253,7 +258,7 @@ class RouteComputeController {
                             length = (typeof result.length === 'number') ? result.length : 0;
                             this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.getRouteLength');
                         }
-                        this.routeState.setRoute(finalTour, length, sources);
+                        this.routeManager.setRoute(finalTour, length, sources);
                         // Do not change looping preference when computing a route; looping is explicit via UI.
                         // Deselect the marker after route is computed
                         try {
@@ -310,14 +315,14 @@ class RouteComputeController {
     }
 
     clearRoute() {
-        if (!this.routeState.getRoute() || this.routeState.getRoute().length === 0) {
+        if (!this.routeManager.getRoute() || this.routeManager.getRoute().length === 0) {
             NotificationUtils.showInfo('No route to clear.');
             return;
         }
         // Use async confirmation to properly handle blocking dialog in separate macrotask
         NotificationUtils.confirmDestructiveActionAsync('Clear route? This cannot be undone.').then(confirmed => {
             if (confirmed) {
-                this.routeState.clearRoute();
+                this.routeManager.clearRoute();
                 // Exit route edit mode when route is cleared
                 this.editModeState.setEditRouteMode(false);
                 // Clean up pooled objects before clearing state

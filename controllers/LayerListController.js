@@ -511,7 +511,23 @@
       try {
         if (!color) return null;
         const c = String(color).trim();
+
+        // Prefer RenderUtils/ColorUtils for hex conversion
         if (c.startsWith('#')) {
+          try {
+            if (typeof RenderUtils !== 'undefined' && typeof RenderUtils.hexToRgba === 'function') {
+              const out = RenderUtils.hexToRgba(c, typeof alpha === 'number' ? alpha : 1);
+              if (out) return out;
+            }
+            if (typeof ColorUtils !== 'undefined' && typeof ColorUtils.hexToRgba === 'function') {
+              const out = ColorUtils.hexToRgba(c, typeof alpha === 'number' ? alpha : 1);
+              if (out) return out;
+            }
+          } catch (e) {
+            // fall through to manual parsing
+          }
+
+          // Manual hex parsing fallback
           let s = c.replace('#','');
           if (s.length === 3) s = s.split('').map(ch => ch+ch).join('');
           if (s.length === 6 || s.length === 8) {
@@ -523,6 +539,7 @@
             return `rgba(${r}, ${g}, ${b}, ${a})`;
           }
         }
+
         // rgb/rgba input: try to extract numbers
         const m = c.match(/rgba?\(([^)]+)\)/i);
         if (m) {

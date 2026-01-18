@@ -192,17 +192,34 @@
      */
     _bindEventListeners() {
       try {
-        // Listen for display settings changes to update button states
-        this.eventBus.on(this.eventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
-          try {
-            // Update grid button state when grid visibility changes
-            if (data && typeof data.gridVisible === 'boolean') {
-              this._updateGridButtonState();
+        // Standardized event listener setup using EventUtils
+        if (window.EventUtils && typeof window.EventUtils.setupEventListeners === 'function') {
+          window.EventUtils.setupEventListeners(this.eventBus, [
+            {
+              event: this.eventTypes.DISPLAY_SETTINGS_CHANGED,
+              handler: (data) => {
+                try {
+                  if (data && typeof data.gridVisible === 'boolean') {
+                    this._updateGridButtonState();
+                  }
+                } catch (e) {
+                  this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
+                }
+              }
             }
-          } catch (e) {
-            this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
-          }
-        });
+          ], this, this.errorHandler);
+        } else {
+          // Fallback
+          this.eventBus.on(this.eventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
+            try {
+              if (data && typeof data.gridVisible === 'boolean') {
+                this._updateGridButtonState();
+              }
+            } catch (e) {
+              this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
+            }
+          });
+        }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to bind event listeners', 'SettingsController._bindEventListeners', { error: e });
       }

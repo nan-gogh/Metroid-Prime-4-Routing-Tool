@@ -81,10 +81,6 @@
           get: () => this.dragState.waypointDrag,
           set: (v) => this.dragState.setWaypointDrag(v)
         },
-        _routeNodeCandidate: {
-          get: () => this.dragState.routeNodeCandidate,
-          set: (v) => this.dragState.setRouteNodeCandidate(v)
-        },
         _routePreview: {
           get: () => this.dragState.routePreview,
           set: (v) => this.dragState.setRoutePreview(v)
@@ -166,46 +162,59 @@
       log('test4-result', `Exception: ${e.message}`, false);
     }
     
-      // Simulate RouteEditHandler setting waypoint drag via property
-      // This should call dragState.setWaypointDrag(v)
-      const mockRouteEditHandler = {
-        dragState: dragState,
-        _waypointDrag: null,
-        routeUtils: { findRoutePositionOfMarker: () => 0 }
-      };
-      
-      // Define the property like RouteEditHandler does
-      Object.defineProperties(mockRouteEditHandler, {
-        _routeNodeCandidate: {
-          get: () => mockRouteEditHandler._routeNodeCandidate,
-          set: (v) => mockRouteEditHandler._routeNodeCandidate = v
-        },
-        _waypointDrag: {
-          get: () => mockRouteEditHandler.dragState.waypointDrag,
-          set: (v) => mockRouteEditHandler.dragState.setWaypointDrag(v)
-        }
-      });
-      
-      // Set route node candidate
-      mockRouteEditHandler._routeNodeCandidate = {
-        pointerId: 1,
-        routePos: 0,
-        startClientX: 100,
-        startClientY: 100
-      };
-      
-      // Simulate promotion
-      mockRouteEditHandler._waypointDrag = {
-        pointerId: 1,
-        waypointIndex: 0,
-        startWorldX: 0.1,
-        startWorldY: 0.2
-      };
-      
-      log('test5-result', 'RouteEditHandler local state works', mockRouteEditHandler._routeNodeCandidate.routePos === 0);
-      log('test5-result', 'RouteEditHandler property setter works', waypointDragSet);
-      log('test5-result', 'DragState has waypoint drag', dragState.hasWaypointDrag);
-      log('test5-result', 'hasActiveDrag includes waypoint drag', dragState.hasActiveDrag);
+      // Modernized: use a real RouteManager and a fresh DragState for this test
+      try {
+        const ds = new DragState(eventBus);
+
+        // Minimal marker manager and storage for RouteManager
+        const markerManager = { markers: [{ uid: 'm1', x: 0.1, y: 0.2 }] };
+        const storage = {
+          loadRoute: () => null,
+          loadRouteLoopingFlag: () => false,
+          saveRoute: () => {},
+          saveRouteLoopingFlag: () => {}
+        };
+
+        const rm = new RouteManager(markerManager, storage, null, eventBus);
+        // Populate a simple route with one point so findRoutePositionOfMarker works
+        rm.currentRoute = [0];
+        rm.routeSources = [{ marker: markerManager.markers[0] }];
+
+        // Simulate RouteEditHandler local state wiring
+        const mockRouteEditHandler = { dragState: ds, routeManager: rm };
+
+        let waypointDragSet = false;
+
+        Object.defineProperties(mockRouteEditHandler, {
+          _waypointDrag: {
+            get: () => mockRouteEditHandler.dragState.waypointDrag,
+            set: (v) => { mockRouteEditHandler.dragState.setWaypointDrag(v); waypointDragSet = true; }
+          }
+        });
+
+        // Set route node candidate (simulating hit on a marker)
+        ds.setRouteNodeCandidate({
+          pointerId: 1,
+          routePos: rm.findRoutePositionOfMarker('m1'),
+          startClientX: 100,
+          startClientY: 100
+        });
+
+        // Simulate promotion to waypoint drag
+        mockRouteEditHandler._waypointDrag = {
+          pointerId: 1,
+          waypointIndex: 0,
+          startWorldX: 0.1,
+          startWorldY: 0.2
+        };
+
+        log('test5-result', 'RouteEditHandler local state works', ds.routeNodeCandidate.routePos === 0);
+        log('test5-result', 'RouteEditHandler property setter works', waypointDragSet === true);
+        log('test5-result', 'DragState has waypoint drag', ds.hasWaypointDrag === true);
+        log('test5-result', 'hasActiveDrag includes waypoint drag', ds.hasActiveDrag === true);
+      } catch (e) {
+        log('test5-result', `Exception: ${e.message}`, false);
+      }
     
     // Summary
     setTimeout(() => {

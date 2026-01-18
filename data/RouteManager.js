@@ -216,34 +216,136 @@ class RouteManager {
         this.storage.saveRouteLoopingFlag(this.routeLooping);
     }
 
+    // Get current route indices
+    getRoute() {
+        return this.currentRoute;
+    }
+
+    // Get route sources
+    getRouteSources() {
+        return this.routeSources;
+    }
+
     // Get route data for export
     getRouteDataForExport() {
-        return RouteUtilsCore.extractRoutePoints(this.currentRoute, this.routeSources);
+        return this.extractRoutePoints(this.currentRoute, this.routeSources);
     }
 
     // Compute route length
     computeRouteLength(mapSize) {
-        return RouteUtilsCore.computeRouteLength(this.currentRoute, this.routeSources, mapSize);
+        return RouteMath.computeRouteLength(this.currentRoute, this.routeSources, mapSize);
     }
 
     // Compute normalized route length (divided by mapSize for 0-1 range)
-    computeRouteLengthNormalized(mapSize) {
-        return RouteUtilsCore.computeRouteLengthNormalized(this.routeSources, mapSize);
+    // Accepts either `(mapSize)` to operate on current `routeSources`, or `(sources, mapSize)`.
+    computeRouteLengthNormalized(sourcesOrMapSize, mapSizeOptional) {
+        try {
+            let sources = this.routeSources;
+            let mapSize = 8192;
+
+            if (Array.isArray(sourcesOrMapSize)) {
+                sources = sourcesOrMapSize;
+                mapSize = mapSizeOptional || mapSize;
+            } else if (typeof sourcesOrMapSize === 'number') {
+                mapSize = sourcesOrMapSize || mapSize;
+            }
+
+            if (!Array.isArray(sources)) return 0;
+
+            // Compute total length in pixels, then normalize by mapSize
+            let length = 0;
+            for (let i = 1; i < sources.length; i++) {
+                const prev = sources[i - 1];
+                const curr = sources[i];
+                if (prev && curr && prev.marker && curr.marker) {
+                    const dx = (curr.marker.x - prev.marker.x) * mapSize;
+                    const dy = (curr.marker.y - prev.marker.y) * mapSize;
+                    length += Math.sqrt(dx * dx + dy * dy);
+                }
+            }
+
+            return length / mapSize;
+        } catch (e) {
+            this.errorHandler.logDebug('RouteManager.computeRouteLengthNormalized failed', 'RouteManager.computeRouteLengthNormalized', { error: e });
+            return 0;
+        }
     }
 
     // Find position of marker in current route
     findRoutePositionOfMarker(markerUid) {
-        return RouteUtilsCore.findRoutePositionOfMarker(markerUid, this.currentRoute, this.routeSources);
+        if (!Array.isArray(this.currentRoute) || !Array.isArray(this.routeSources)) return -1;
+        if (typeof markerUid !== 'string') return -1;
+
+        for (let i = 0; i < this.currentRoute.length; i++) {
+            const idx = this.currentRoute[i];
+            const source = this.routeSources[idx];
+            if (source && source.marker && source.marker.uid === markerUid) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     // Find route segment at screen position
     findRouteSegmentAt(screenX, screenY, viewState, mapSize, threshold = 10) {
-      return RouteUtilsCore.findRouteSegmentAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+        // Convert screen to world coordinates
+        const worldX = (screenX - viewState.panX) / (mapSize * viewState.zoom);
+        const worldY = (screenY - viewState.panY) / (mapSize * viewState.zoom);
+
+        // Find closest segment
+        let closestDist = Infinity;
+        let closestSegment = null;
+
+        for (let i = 1; i < this.currentRoute.length; i++) {
+            const prev = this.routeSources[this.currentRoute[i-1]];
+            const curr = this.routeSources[this.currentRoute[i]];
+
+            if (!prev || !curr || !prev.marker || !curr.marker) continue;
+
+            // Check distance to line segment
+            const dist = RouteMath._pointToLineDistance(worldX, worldY, prev.marker.x, prev.marker.y, curr.marker.x, curr.marker.y);
+            if (dist < closestDist && dist <= threshold / (mapSize * viewState.zoom)) {
+                closestDist = dist;
+                closestSegment = {
+                    index: i - 1,
+                    t: RouteMath._getParameterT(worldX, worldY, prev.marker.x, prev.marker.y, curr.marker.x, curr.marker.y)
+                };
+            }
+        }
+
+        return closestSegment;
     }
 
     // Find route waypoint at screen position
     findRouteWaypointAt(screenX, screenY, viewState, mapSize, threshold = 30) {
-      return RouteUtilsCore.findRouteWaypointAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+        // Convert screen to world coordinates
+        const worldX = (screenX - viewState.panX) / (mapSize * viewState.zoom);
+        const worldY = (screenY - viewState.panY) / (mapSize * viewState.zoom);
+
+        // Find closest waypoint
+        let closestDist = Infinity;
+        let closestWaypoint = null;
+
+        for (let i = 0; i < this.currentRoute.length; i++) {
+            const source = this.routeSources[this.currentRoute[i]];
+            if (!source || !source.marker) continue;
+
+            // Check distance to waypoint
+            const dx = worldX - source.marker.x;
+            const dy = worldY - source.marker.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const thresholdWorld = threshold / (mapSize * viewState.zoom);
+
+            if (dist < closestDist && dist <= thresholdWorld) {
+                closestDist = dist;
+                closestWaypoint = {
+                    marker: source.marker,
+                    index: i
+                };
+            }
+        }
+
+        return closestWaypoint;
     }
 
     // Insert waypoint at segment
@@ -252,10 +354,10 @@ class RouteManager {
             const prevIndices = Array.isArray(this.currentRoute) ? this.currentRoute.slice() : [];
             const prevSources = Array.isArray(this.routeSources) ? this.routeSources.slice() : [];
 
-            const ordered = RouteUtilsCore.createOrderedSources(prevIndices, prevSources);
+            const ordered = this.createOrderedSources(prevIndices, prevSources);
 
             // Calculate insertion position
-            const insertPosition = RouteUtilsCore.calculateSegmentInsertionPosition(segmentIndex, t, ordered, this.routeLooping);
+            const insertPosition = this.calculateSegmentInsertionPosition(segmentIndex, t, ordered, this.routeLooping);
             if (!insertPosition) return;
 
             // Use provided temp marker
@@ -263,13 +365,13 @@ class RouteManager {
             tempMarker.y = insertPosition.y;
 
             // Insert into ordered sources
-            const newOrdered = RouteUtilsCore.insertWaypointIntoOrderedSources(ordered, insertPosition, tempMarker, 'temp');
+            const newOrdered = this.insertWaypointIntoOrderedSources(ordered, insertPosition, tempMarker, 'temp');
 
             const newSources = newOrdered;
             const newIndices = newSources.map((_, i) => i);
 
             // Set the route
-            this.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, 8192), newSources); // Use default map size
+            this.setRoute(newIndices, this.computeRouteLengthNormalized(newSources, 8192), newSources); // Use default map size
 
         } catch (e) {
             this.errorHandler.logDebug('RouteManager.insertWaypointAtSegment failed', 'RouteManager.insertWaypointAtSegment', { error: e });
@@ -331,7 +433,7 @@ class RouteManager {
             // Update current route temporarily for rendering
             this.routeSources = tempSources;
             this.currentRoute = tempIndices;
-            this.currentRouteLengthNormalized = RouteUtilsCore.computeRouteLengthNormalized(tempSources, 8192);
+            this.currentRouteLengthNormalized = this.computeRouteLengthNormalized(tempSources, 8192);
 
             // Notify of change for rendering
             this._notifyRouteChanged();
@@ -368,7 +470,7 @@ class RouteManager {
                     };
 
                     // Recalculate route length
-                    this.currentRouteLengthNormalized = RouteUtilsCore.computeRouteLengthNormalized(this.routeSources, 8192);
+                    this.currentRouteLengthNormalized = this.computeRouteLengthNormalized(this.routeSources, 8192);
 
                     this.errorHandler.logDebug('Snapped waypoint to marker', 'RouteManager.finalizeWaypointDrag', { markerUid: snapToMarker.uid });
                 } else {
@@ -403,11 +505,11 @@ class RouteManager {
     // Export route to file
     exportRoute(viewState, mapSize) {
         try {
-            RouteUtilsCore.validateRouteForExport(this.currentRoute, this.routeSources);
-            const points = this.getRouteDataForExport();
+            this.validateRouteForExport(this.currentRoute, this.routeSources);
+            const points = this.extractRoutePoints(this.currentRoute, this.routeSources);
             const timestamp = Date.now();
-            const hash = RouteUtilsCore.generateRouteHash(points);
-            const json = RouteUtilsCore.createRouteJson(points, timestamp, hash, this.currentRouteLengthNormalized);
+            const hash = this.generateRouteHash(points);
+            const json = this.createRouteJson(points, timestamp, hash, this.currentRouteLengthNormalized);
 
             // Download the file
             this._downloadRouteFile(json, timestamp, hash);
@@ -494,9 +596,9 @@ class RouteManager {
 
         // Fall back to coordinate matching
         if (this.markerManager) {
-            const targetHash = RouteUtilsCore.getCoordinateHash(point.x, point.y);
+            const targetHash = RouteMath.getCoordinateHash(point.x, point.y);
             const marker = this.markerManager.markers.find(m =>
-                RouteUtilsCore.markerMatchesCoordinates(m, targetHash)
+                RouteMath.markerMatchesCoordinates(m, targetHash)
             );
             if (marker) return marker;
         }
@@ -517,7 +619,123 @@ class RouteManager {
 
     // Get route node size for rendering
     getRouteNodeSize(lineWidth, zoom, scale = 1) {
-        return RouteUtilsCore.getRouteNodeSize(lineWidth, zoom, scale);
+        return RouteMath.getRouteNodeSize(lineWidth, zoom, scale);
+    }
+
+    // Create ordered sources array from indices
+    createOrderedSources(indices, sources) {
+        return indices.map(idx => sources[idx]).filter(Boolean);
+    }
+
+    // Calculate insertion position along a route segment
+    calculateSegmentInsertionPosition(segmentIndex, t, orderedSources, routeLooping) {
+        if (!Array.isArray(orderedSources) || orderedSources.length < 2) return null;
+        if (typeof t !== 'number' || t < 0 || t > 1) return null;
+
+        const len = orderedSources.length;
+        const isLastSegment = segmentIndex >= len - 1;
+
+        let p1, p2;
+        if (isLastSegment && routeLooping && len > 2) {
+            // Last segment connects back to first
+            p1 = orderedSources[len - 1];
+            p2 = orderedSources[0];
+        } else if (segmentIndex < len - 1) {
+            p1 = orderedSources[segmentIndex];
+            p2 = orderedSources[segmentIndex + 1];
+        } else {
+            return null;
+        }
+
+        if (!p1 || !p2 || !p1.marker || !p2.marker) return null;
+
+        // Interpolate between the two points
+        const x = p1.marker.x + (p2.marker.x - p1.marker.x) * t;
+        const y = p1.marker.y + (p2.marker.y - p1.marker.y) * t;
+
+        return { x, y, segmentIndex, t };
+    }
+
+    // Insert waypoint into ordered sources array
+    insertWaypointIntoOrderedSources(orderedSources, insertPosition, tempMarker, type) {
+        if (!Array.isArray(orderedSources) || !insertPosition || !tempMarker) return orderedSources;
+
+        const newOrdered = [...orderedSources];
+        const insertIndex = insertPosition.segmentIndex + 1;
+
+        // Create source object for the temp marker
+        const source = {
+            marker: tempMarker,
+            type: type || 'temp'
+        };
+
+        // Insert at the calculated position
+        newOrdered.splice(insertIndex, 0, source);
+
+        return newOrdered;
+    }
+
+    // Validate route data for export
+    validateRouteForExport(routeIndices, routeSources) {
+        if (!Array.isArray(routeIndices) || routeIndices.length === 0) {
+            throw new Error('No route to export.');
+        }
+        if (!Array.isArray(routeSources)) {
+            throw new Error('Invalid route sources.');
+        }
+    }
+
+    // Extract route points from route data
+    extractRoutePoints(routeIndices, routeSources) {
+        const pts = [];
+        for (let i = 0; i < routeIndices.length; i++) {
+            const idx = routeIndices[i];
+            const src = routeSources[idx];
+            if (src && src.marker) {
+                pts.push({
+                    uid: src.marker.uid || '',
+                    x: Number(src.marker.x),
+                    y: Number(src.marker.y)
+                });
+            }
+        }
+        if (!pts.length) throw new Error('No valid points to export.');
+        return pts;
+    }
+
+    // Create JSON string for route export
+    createRouteJson(points, timestamp, hash, length) {
+        const exported = new Date(timestamp).toISOString();
+        const pointsJson = points.map(p => JSON.stringify({ uid: p.uid, x: p.x, y: p.y })).join(',\n    ');
+        return `{
+  "exported": "${exported}",
+  "count": ${points.length},
+  "length": ${length || 0},
+  "points": [
+    ${pointsJson}
+  ]
+}`;
+    }
+
+    // Generate hash for route points (similar to marker hash)
+    generateRouteHash(points) {
+        try {
+            // Use similar hashing logic as markers
+            const dataStr = points.map(p => `${p.x.toFixed(10)},${p.y.toFixed(10)}`).join('|');
+            let hash = 5381;
+            for (let j = 0; j < dataStr.length; j++) {
+                hash = ((hash << 5) + hash) + dataStr.charCodeAt(j);
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16).padStart(8, '0').slice(-8);
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // Get route preview screen position
+    getRoutePreviewScreenPosition(routePreview, viewState, mapSize) {
+        return RouteMath.getRoutePreviewScreenPosition(routePreview, viewState, mapSize);
     }
 
     // Get route statistics

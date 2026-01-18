@@ -29,7 +29,7 @@ const RouteComputation = {
             }
 
             // Check for active drag operations and cancel them before expanding
-            const hasActiveDrags = map._routeInsert || map._draggingCandidate || map._routeNodeCandidate;
+            const hasActiveDrags = map._routeInsert || map._draggingCandidate || map.pointerHandler.dragState.routeNodeCandidate;
             if (hasActiveDrags && map.pointerHandler && typeof map.pointerHandler._cancelRouteDragOperations === 'function') {
                 map.pointerHandler._cancelRouteDragOperations('Route expansion');
             }

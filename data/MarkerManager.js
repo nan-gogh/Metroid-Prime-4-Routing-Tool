@@ -29,17 +29,40 @@ class MarkerManager {
     // Set up event listeners for decoupled communication
     _setupEventListeners() {
         if (this.eventBus && window.EventTypes) {
-            this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
-                try {
-                    if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
-                        this.addMarker(data.x, data.y);
-                    } else if (data && data.action === 'remove' && data.uid) {
-                        this.removeMarker(data.uid);
-                    }
-                } catch (e) {
-                    this.errorHandler.logDebug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+            try {
+                const eventManager = (window.EventUtils && typeof window.EventUtils.createEventManager === 'function') ?
+                    window.EventUtils.createEventManager(this) : null;
+
+                if (eventManager) {
+                    eventManager.setup(this.eventBus, [
+                        {
+                            event: window.EventTypes.MARKER_EDIT_REQUESTED,
+                            handler: (data) => {
+                                if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
+                                    this.addMarker(data.x, data.y);
+                                } else if (data && data.action === 'remove' && data.uid) {
+                                    this.removeMarker(data.uid);
+                                }
+                            }
+                        }
+                    ], this, this.errorHandler);
+                } else {
+                    // Fallback: subscribe directly
+                    this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
+                        try {
+                            if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
+                                this.addMarker(data.x, data.y);
+                            } else if (data && data.action === 'remove' && data.uid) {
+                                this.removeMarker(data.uid);
+                            }
+                        } catch (e) {
+                            this.errorHandler.logDebug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                        }
+                    });
                 }
-            });
+            } catch (e) {
+                this.errorHandler.logDebug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
+            }
         }
     }
 

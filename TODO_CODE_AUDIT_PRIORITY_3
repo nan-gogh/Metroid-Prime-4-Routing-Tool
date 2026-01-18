@@ -39,27 +39,40 @@ Based on my analysis of both the `COMPREHENSIVE_CODE_AUDIT.md` and TODO_CODE_AUD
 
 ### **2. Code Deduplication**
 
-#### **2.1 Remove Duplicate Route Calculations**
-- **Consolidate route length calculations** - Currently in 4 places:
-  - `RouteManager.computeRouteLengthNormalized()`
-  - `RouteUtilsCore.computeRouteLengthNormalized()` 
-  - `RouteEditHandler` inline calculation
-  - map.js loop button handler
-- **Create single source of truth** in `RouteManager` and update all callers
+#### **2.1 Remove Duplicate Route Calculations** ✅ COMPLETED
+- **Consolidate route length calculations** - Single source of truth in `RouteManager.computeRouteLengthNormalized()`
+- **Split legacy utilities** into pure utilities (`RouteMath`) and stateful operations (`RouteManager`) — completed
 
-#### **2.2 Standardize Event Listener Patterns**
-- **Extract common listener setup** - All modules currently have similar:
+#### **2.2 Standardize Event Listener Patterns** ✅ COMPLETED
+- **Extract common listener setup** - All modules now use standardized pattern:
   ```javascript
-  this.eventBus.on(EventTypes.SOME_EVENT, (data) => { ... });
+  const eventManager = EventUtils.createEventManager(this);
+  eventManager.setup(eventBus, [...listeners...], this, errorHandler);
   ```
-- **Create standardized pattern** with consistent error handling and cleanup
+- **Create standardized pattern** with consistent error handling and cleanup ✅
+- **Status:** `utils/EventUtils.js` implemented and included; all production modules migrated:
+  - ✅ `data/MarkerManager.js` - Uses `EventUtils.createEventManager(this)` with fallback
+  - ✅ `controllers/SettingsController.js` - Uses `EventUtils.setupEventListeners()` with fallback
+  - ✅ `data/RouteManager.js` - Uses `EventUtils.createEventManager(this)`
+  - ✅ `map.js` - Uses `EventUtils.createEventManager(window, '_pendingEventUnsubscribers')` for 20+ listeners; cleanup in `destroy()`
+  - Direct `eventBus.on()` calls are **intentional fallbacks** when EventUtils unavailable at runtime
+  - `EventUtils.createEventManager(target)` provides `setup()` and `cleanup()` helpers
+  - `EventUtils.setupEventListeners(eventBus, listeners, context, errorHandler)` wraps handlers with error handling and returns unsubscribe functions
 
-#### **2.3 Extract Common Rendering Utilities**
+**Remaining work (optional enhancement):**
+- Add unit tests to verify listener cleanup on component `destroy()` paths for `RouteManager`, `MarkerManager`, `SettingsController`, and `map` (currently working but untested)
+
+#### **2.3 Extract Common Rendering Utilities** ✅ COMPLETED
 - **Create `rendering/RenderUtils.js`** - Common canvas operations
-  - Color conversion utilities (already partially in RouteRenderer)
-  - Coordinate transformation helpers
-  - Common shape drawing functions
+  - ✅ Color conversion utilities (`hexToRgba` delegates to ColorUtils; includes fallback)
+  - ✅ Coordinate transformation helpers (`worldToScreen`)
+  - ✅ Common shape drawing functions (`drawCircle`, `drawRoundedRect`)
 - **Refactor renderers** to use shared utilities instead of duplicated code
+  - ✅ `rendering/RouteRenderer.js` - Now delegates color conversion to RenderUtils with safe fallbacks
+  - ✅ `controllers/LayerListController.js` - `_colorToRgba()` now tries RenderUtils/ColorUtils first, then manual parsing
+  - ✅ `map.js` tooltip color - Uses RenderUtils.hexToRgba with ColorUtils and legacy fallbacks
+  - ✅ Edit mode functions (`updateEditOverlay`, `setEditToggleColor`) - Intentionally left isolated (UI state management coupling, not rendering utils)
+- **Removed Markdown fences** from `rendering/utils/colorUtils.js` and `rendering/RenderContext.js` for valid JavaScript
 
 ### **3. Documentation and Naming**
 
@@ -86,8 +99,8 @@ Based on my analysis of both the `COMPREHENSIVE_CODE_AUDIT.md` and TODO_CODE_AUD
 #### **4.1 Remove Dead Code**
 - **Clean up unused EventTypes** - Remove events that are defined but never emitted:
   - `RENDER_COMPLETED`, `RENDERER_*_UPDATED`, `INPUT_*` events, etc.
-- **Remove RouteState if unused** - Or complete migration to use it properly
-- **Remove duplicate state properties** - Like `_routeNodeCandidate` in RouteEditHandler
+- **Remove RouteState if unused** - ✅ COMPLETED: Migrated all callers to RouteManager, removed script include, deleted file and test
+- **Remove duplicate state properties** - Like `_routeNodeCandidate` in RouteEditHandler ✅ COMPLETED: Removed all _routeNodeCandidate duplication - RouteEditHandler, InteractiveMap, and RouteComputation now use `DragState.routeNodeCandidate` consistently; updated tests
 
 #### **4.2 Fix Remaining Architecture Issues**
 - **Fix OverlayRenderer global access** - Replace `window.interactiveMap` with event emission
