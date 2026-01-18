@@ -104,6 +104,12 @@ const EventTypes = {
      * @param {string} [data.layerKey] - Layer key for operations
      */
     MARKER_EDIT_REQUESTED: 'marker:edit-requested',
+    /**
+     * Emitted to request clearing all custom markers.
+     * Handled by MarkerManager to perform an authoritative clear and persistence.
+     * @event MARKER_CLEAR_REQUESTED
+     */
+    MARKER_CLEAR_REQUESTED: 'marker:clear-requested',
     MARKER_ADDED: 'marker:added',
     MARKER_REMOVED: 'marker:removed',
     MARKER_MOVED: 'marker:moved',

@@ -310,7 +310,8 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 │   └── tsp_euclid.js       # Euclidean TSP solver (NN + 2-opt, 3-opt option)
 ├── data/
 │   ├── init.js             # LAYERS bootstrap
-│   ├── markerUtils.js      # Marker persistence, import/export, UID generation
+│   ├── markerUtilsCore.js   # Pure marker helpers (UID/hash/validation/screen position)
+│   ├── MarkerManager.js     # Authoritative marker state, persistence, import/export
 │   ├── routeMath.js        # Pure route utilities (math, distances, insertion helpers)
 │   ├── RouteManager.js     # Stateful route operations (create/set/export routes)
 │   ├── storageUtils.js    # LocalStorage consent gating (consolidated)
@@ -364,12 +365,10 @@ The app renders layers, builds the sidebar, and performs hit-testing dynamically
 
 **All collectible layers** follow the same structure with unique prefixes and markers extracted from game data.
 
-**Custom markers** are pure data in `data/customMarkers.js`; `data/markerUtils.js` centralizes:
-- localStorage load/save with consent gating
-- Import/export with JSON format validation
-- Position-based UID generation with DJB2-like hash algorithm
-- Collision handling with counter suffix (`{uid}_1`, `{uid}_2`, etc.)
-- Drag-and-drop repositioning in Edit Markers mode
+**Custom markers** are pure data in `data/customMarkers.js`; marker helpers and persistence are separated:
+- `data/markerUtilsCore.js`: pure, stateless helpers (UID/hash/validation/screen-position)
+- `data/MarkerManager.js`: authoritative state, localStorage persistence, import/export, and marker lifecycle
+This separation makes render helpers usable without loading stateful persistence shims.
 
 **UID Generation**: `MarkerUtils.generateUID(x, y, prefix)`
 - Hashes coordinates to 8-character hex string: `{prefix}_{hash}`

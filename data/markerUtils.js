@@ -99,6 +99,16 @@ const MarkerUtils = {
 
     // Delete all custom markers - delegates to manager
     clearCustomMarkers() {
+        // Prefer event-driven clear so MarkerManager remains authoritative.
+        if (window.eventBus && window.EventTypes && window.EventTypes.MARKER_CLEAR_REQUESTED) {
+            try {
+                window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
+                return;
+            } catch (e) {
+                this.errorHandler.logDebug('MarkerUtils.clearCustomMarkers emit failed', 'MarkerUtils.clearCustomMarkers', { error: e });
+                // Fall through to direct call
+            }
+        }
         return this.getManager().clearMarkers();
     },
 

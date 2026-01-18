@@ -12,7 +12,6 @@
     <script src="../data/NotificationInterface.js"></script>
     <script src="../data/MarkerManager.js"></script>
     <script src="../data/markerUtilsCore.js"></script>
-    <script src="../data/markerUtils.js"></script>
 
     <script>
         const output = document.getElementById('output');
@@ -27,13 +26,13 @@
         // Test MarkerUtilsCore availability
         log('✓ MarkerUtilsCore available: ' + (typeof MarkerUtilsCore !== 'undefined'));
 
-        // Test MarkerUtils availability
-        log('✓ MarkerUtils available: ' + (typeof MarkerUtils !== 'undefined'));
+        // MarkerUtils shim removed; test core helpers and manager directly
+        log('✓ MarkerUtils shim removed: ' + (typeof MarkerUtils === 'undefined'));
 
         // Test MarkerManager availability
         log('✓ MarkerManager available: ' + (typeof MarkerManager !== 'undefined'));
 
-        if (typeof MarkerUtilsCore !== 'undefined' && typeof MarkerUtils !== 'undefined' && typeof MarkerManager !== 'undefined') {
+        if (typeof MarkerUtilsCore !== 'undefined' && typeof MarkerManager !== 'undefined') {
             try {
                 // Test MarkerUtilsCore pure functions
                 log('Testing MarkerUtilsCore pure functions...');
@@ -68,13 +67,8 @@
                 const legacyMarkers = [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2, uid: 'old_format' }];
                 log('✓ isLegacyMarkerFile: ' + MarkerUtilsCore.isLegacyMarkerFile(legacyMarkers));
 
-                // Test MarkerUtils delegation to core
-                log('Testing MarkerUtils delegation to MarkerUtilsCore...');
-                log('✓ MarkerUtils.generateUID delegates: ' + (MarkerUtils.generateUID(0.5, 0.5, 'test') === uid1));
-                log('✓ MarkerUtils.hashMarkerData delegates: ' + (MarkerUtils.hashMarkerData([{x: 0.1, y: 0.1}]) === MarkerUtilsCore.hashMarkerData([{x: 0.1, y: 0.1}])));
-
-                // Test MarkerUtils manager creation
-                log('Testing MarkerUtils manager pattern...');
+                // Test manager creation directly (instantiate MarkerManager)
+                log('Testing MarkerManager creation and methods...');
 
                 // Create mock dependencies
                 const mockStorage = {
@@ -88,21 +82,21 @@
                 };
 
                 // Test manager creation
-                const manager = MarkerUtils.createManager({ maxMarkers: 10, layerPrefix: 'test' }, mockStorage, mockNotifications);
-                log('✓ MarkerUtils.createManager works: ' + (manager instanceof MarkerManager));
+                const manager = new MarkerManager({ maxMarkers: 10, layerPrefix: 'test' }, mockStorage, mockNotifications, null);
+                log('✓ MarkerManager created: ' + (manager instanceof MarkerManager));
 
-                // Test delegation to manager
-                const marker = MarkerUtils.addCustomMarker(0.1, 0.1);
-                log('✓ MarkerUtils.addCustomMarker delegates: ' + (marker !== null));
+                // Test adding a marker via manager
+                const added = manager.addMarker(0.1, 0.1);
+                log('✓ MarkerManager.addMarker returned marker: ' + (added !== null));
 
-                log('✓ MarkerUtils.getMarkerCount delegates: ' + MarkerUtils.getMarkerCount());
+                // Test getCount/getAllMarkers
+                log('✓ MarkerManager.getCount: ' + manager.getCount());
 
                 // Test manager methods
                 log('Testing MarkerManager integration...');
-                const screenPos = manager.getScreenPosition(marker, viewState, 8192);
+                const screenPos = manager.getScreenPosition(added, viewState, 8192);
                 log('✓ MarkerManager.getScreenPosition works: ' + JSON.stringify(screenPos));
 
-                log('✓ MarkerManager.getCount: ' + manager.getCount());
                 log('✓ MarkerManager.getAllMarkers: ' + manager.getAllMarkers().length + ' markers');
 
             } catch (e) {

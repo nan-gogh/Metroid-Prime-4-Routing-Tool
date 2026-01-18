@@ -180,7 +180,12 @@
         } else if (ev.key === 'x' || ev.key === 'X') {
           try {
             const btn = document.getElementById('clearCustom');
-            if (btn) btn.click(); else if (this.map && this.map.markerManager && typeof this.map.markerManager.clearMarkers === 'function') this.map.markerManager.clearMarkers();
+            if (btn) btn.click();
+            else if (this.eventBus && this.eventTypes && this.eventTypes.MARKER_CLEAR_REQUESTED) {
+              try { this.eventBus.emit(this.eventTypes.MARKER_CLEAR_REQUESTED); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.clearCustom.emit'); }
+            } else if (this.map && this.map.markerManager && typeof this.map.markerManager.clearMarkers === 'function') {
+              this.map.markerManager.clearMarkers();
+            }
           } catch (err) { this.errorHandler.logError('Failed to clear custom markers via X key', err); }
           try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on X key', err); }
           return;

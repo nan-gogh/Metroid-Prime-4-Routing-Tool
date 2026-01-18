@@ -3292,7 +3292,16 @@ async function init() {
         if (confirmed) {
             // Heavy work runs in separate macrotask due to async confirmation
                 try {
-                    if (map.markerManager) {
+                    if (window.eventBus && window.EventTypes && window.EventTypes.MARKER_CLEAR_REQUESTED) {
+                        try {
+                            window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
+                        } catch (e) {
+                            moduleErrorHandler.logDebug('Failed to emit MARKER_CLEAR_REQUESTED', 'InteractiveMap.clearMarkers', { error: e });
+                            // Fallback to direct call when emit fails
+                            if (map.markerManager && typeof map.markerManager.clearMarkers === 'function') map.markerManager.clearMarkers();
+                            else { moduleErrorHandler.logWarning('markerManager not available during clear markers', 'InteractiveMap.clearMarkers'); map.customMarkers = []; }
+                        }
+                    } else if (map.markerManager && typeof map.markerManager.clearMarkers === 'function') {
                         map.markerManager.clearMarkers();
                         // The clearMarkers method handles updating LAYERS and triggering callbacks
                     } else {

@@ -47,11 +47,21 @@ class MarkerManager {
                                     this.removeMarker(data.uid);
                                 }
                             }
+                        },
+                        {
+                            event: window.EventTypes.MARKER_CLEAR_REQUESTED,
+                            handler: () => {
+                                try {
+                                    this.clearMarkers();
+                                } catch (e) {
+                                    this.errorHandler.logDebug('MarkerManager clear handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                                }
+                            }
                         }
                     ], this, this.errorHandler);
                 } else {
                     // Fallback: subscribe directly and store unsubscriber
-                    const unsubscribe = this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
+                    const unsubscribeEdit = this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
                         try {
                             if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
                                 this.addMarker(data.x, data.y);
@@ -63,9 +73,17 @@ class MarkerManager {
                         }
                     });
 
-                    if (typeof unsubscribe === 'function') {
-                        this._eventUnsubscribers.push(unsubscribe);
-                    }
+                    if (typeof unsubscribeEdit === 'function') this._eventUnsubscribers.push(unsubscribeEdit);
+
+                    const unsubscribeClear = this.eventBus.on(window.EventTypes.MARKER_CLEAR_REQUESTED, () => {
+                        try {
+                            this.clearMarkers();
+                        } catch (e) {
+                            this.errorHandler.logDebug('MarkerManager MARKER_CLEAR_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                        }
+                    });
+
+                    if (typeof unsubscribeClear === 'function') this._eventUnsubscribers.push(unsubscribeClear);
                 }
             } catch (e) {
                 this.errorHandler.logDebug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
