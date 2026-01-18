@@ -145,17 +145,6 @@ const routeSourcePool = new ObjectPool(
     typeof window !== 'undefined' ? window.errorHandler : null
 );
 
-// Waypoint pool for route waypoints (separate from markers)
-const waypointPool = new ObjectPool(
-    () => ({ x: 0, y: 0 }),
-    (waypoint) => {
-        waypoint.x = 0;
-        waypoint.y = 0;
-    },
-    200, // Pre-allocate 200 waypoints (can be as many as total markers in app)
-    typeof window !== 'undefined' ? window.errorHandler : null
-);
-
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {
     const eh = typeof window !== 'undefined' ? window.errorHandler : null;
@@ -163,12 +152,10 @@ function checkPoolStats() {
         eh.logError('=== Object Pool Statistics ===', 'ObjectPool');
         eh.logError('Marker Pool:', 'ObjectPool', markerPool.getStats());
         eh.logError('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
-        eh.logError('Waypoint Pool:', 'ObjectPool', waypointPool.getStats());
     } else {
         console.error('=== Object Pool Statistics ===', 'ObjectPool');
         console.error('Marker Pool:', 'ObjectPool', markerPool.getStats());
         console.error('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
-        console.error('Waypoint Pool:', 'ObjectPool', waypointPool.getStats());
     }
 }
 
@@ -179,5 +166,5 @@ if (typeof window !== 'undefined') {
 
 // Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ObjectPool, markerPool, routeSourcePool, waypointPool };
+    module.exports = { ObjectPool, markerPool, routeSourcePool };
 }
