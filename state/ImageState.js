@@ -57,8 +57,13 @@
         const dpr = this.mapState.devicePixelRatio;
 
         // Calculate the resolution needed for current zoom level
-        // Multiply by 3.5 to get reasonable detail levels (1024 at page load zoom ~0.15)
-        const pixelsNeeded = Math.max(canvasWidth, canvasHeight) * zoom * dpr * 3.5;
+        // Base multiplier tuned for small screens; scale up on larger canvases so
+        // desktop monitors request higher-resolution tiles.
+        const baseMultiplier = 3.5;
+        const widthScale = Math.max(1, canvasWidth / 1200); // >1 for wider viewports
+        const multiplier = Math.min(6, baseMultiplier * widthScale);
+        const pixelsNeeded = Math.max(canvasWidth, canvasHeight) * zoom * dpr * multiplier;
+
 
         // Find the best resolution from available ones
         // We need the smallest tile resolution that is >= pixelsNeeded
@@ -74,6 +79,8 @@
           }
         }
 
+        
+
         return bestIndex;
       } catch (e) {
         this.errorHandler.logError(e, 'ImageState.getNeededResolution failed');
@@ -84,6 +91,8 @@
     // Update resolution after loading
     updateResolution() {
       try {
+        // Log displayed resolution for debugging
+        try { console.debug('ImageState.updateResolution current', { currentResolution: this.currentResolution, pixelSize: this.config.TILE_RESOLUTIONS && this.config.TILE_RESOLUTIONS[this.currentResolution] }); } catch (e) {}
         // Mark renderer dirty so UI updates reflect new resolution
         if (this.onMarkRendererDirty) {
           this.onMarkRendererDirty('TileRenderer');

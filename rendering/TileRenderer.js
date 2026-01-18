@@ -177,9 +177,11 @@
               if ((imgFolder && imgFolder === curFolder) || (!this.imageState.currentImage || resolutionIndex === this.imageState.getNeededResolution())) {
                 this.imageState.currentImage = bmp;
                 this.imageState.currentResolution = resolutionIndex;
+                try { console.debug('TileRenderer: displayed resolution (bitmap)', { resolutionIndex, size, href }); } catch (e) {}
                 try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to render after setting current image'); }
               }
             } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to set current image'); }
+            
             try { this.imageState.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to update resolution'); }
             return;
           }
@@ -202,9 +204,11 @@
             if ((imgFolder && imgFolder === curFolder) || (!this.imageState.currentImage || resolutionIndex === this.imageState.getNeededResolution())) {
               this.imageState.currentImage = img;
               this.imageState.currentResolution = resolutionIndex;
+              try { console.debug('TileRenderer: displayed resolution (img)', { resolutionIndex, src: img.src, size, href }); } catch (e) {}
               try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logDebug('TileRenderer: render failed after image load', 'TileRenderer.loadImage.markDirtyAfterLoad', { error: e.message }); }
             }
             try { this.imageState.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to update resolution after image load'); }
+            
           } catch (e) { this.imageState.loadingResolution = null; }
         };
         img.onerror = () => { this.imageState.loadingResolution = null; };

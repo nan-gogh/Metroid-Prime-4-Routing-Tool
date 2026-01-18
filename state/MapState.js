@@ -174,6 +174,24 @@
       });
     }
 
+    /**
+     * Public helper to emit a MAP_VIEW_CHANGED event from external callers.
+     * Use this instead of calling the protected `_emitChange` directly.
+     * @param {string} [triggeredBy]
+     */
+    emitViewChange(triggeredBy) {
+      try {
+        this._emitChange(window.EventTypes.MAP_VIEW_CHANGED, {
+          panX: this.panX,
+          panY: this.panY,
+          zoom: this.zoom,
+          triggeredBy: triggeredBy || null
+        });
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('MapState.emitViewChange failed', 'MapState.emitViewChange', { error: e });
+      }
+    }
+
     // View state management
     setView(panX, panY, zoom) {
       this.panX = panX;

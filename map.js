@@ -1166,17 +1166,24 @@ class InteractiveMap {
         const current = this.imageState.currentResolution;
         const loading = this.imageState.loadingResolution;
         
-        if (needed !== current && loading !== needed) {
-            this.tileRenderer.loadImage(needed);
+
+        if (typeof needed !== 'number') {
+            try { console.warn('InteractiveMap.updateResolution: needed is not a number', needed); } catch (e) {}
         }
-        
+
+        if (needed !== current && loading !== needed) {
+            
+            try { if (this.tileRenderer && typeof this.tileRenderer.loadImage === 'function') this.tileRenderer.loadImage(needed); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage'); }
+        }
+
         // Update status display
         const status = document.getElementById('resolutionStatus');
         if (status) {
             const res = MP4Config.TILE_RESOLUTIONS[this.imageState.currentResolution] || MP4Config.TILE_RESOLUTIONS[0];
             status.textContent = `${res}px`;
+            try { console.debug('InteractiveMap.updateResolution status set', { res, currentResolution: this.imageState.currentResolution }); } catch (e) {}
         }
-        
+
         const zoomStatus = document.getElementById('zoomStatus');
         if (zoomStatus) {
             zoomStatus.textContent = `${(this.zoom * 100).toFixed(0)}%`;
@@ -2517,28 +2524,18 @@ async function init() {
                 {
                     event: window.EventTypes.MAP_VIEW_CHANGED,
                     handler: (data) => {
-                        // MAP_VIEW_CHANGED event comes FROM MapState. Sync the map's local
-                        // mirror of pan/zoom (but avoid calling MapState setters here to
-                        // prevent loops). If zoom changed, update image resolution and UI.
-                        if (!data || !map) return;
-
-                        const newZoom = (typeof data.zoom === 'number') ? data.zoom : map.zoom;
-                        const zoomChanged = (typeof newZoom === 'number' && newZoom !== map.zoom);
-
-                        // Sync local mirror values (safe, does not re-emit MAP_VIEW_CHANGED)
-                        map.zoom = newZoom;
-                        if (typeof data.panX === 'number') map.panX = data.panX;
-                        if (typeof data.panY === 'number') map.panY = data.panY;
-
-                        // If zoom changed, recompute image resolution requirements
-                        if (zoomChanged) {
-                            try { map.imageState && map.imageState.updateResolution && map.imageState.updateResolution(); } catch (e) {}
-                            try { map.updateResolution && map.updateResolution(); } catch (e) {}
-                        }
-
-                        // Trigger a render for view changes
-                        if (typeof map.render === 'function') {
-                            try { map.render(); } catch (e) {}
+                        // MAP_VIEW_CHANGED event comes FROM mapState, so don't call setPan/setZoom again
+                        // (that would create an infinite loop). Just handle derived effects and rendering.
+                        if (data && map && map.mapState) {
+                            // Always update resolution when MAP_VIEW_CHANGED is received (mapState already updated)
+                                if (typeof data.zoom === 'number') {
+                                map.imageState && map.imageState.updateResolution && map.imageState.updateResolution();
+                                map.updateResolution && map.updateResolution();
+                            }
+                            // Trigger render for view changes (map.mapState already has the new panX, panY, zoom)
+                            if (map && typeof map.render === 'function') {
+                                map.render();
+                            }
                         }
                     }
                 },

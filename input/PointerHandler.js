@@ -52,6 +52,8 @@
       this.lastMouseY = 0;
       this.pointerDownTime = 0;
       this.minClickDuration = 150; // ms
+      this._cachedRect = null;
+      this._panFrameScheduled = false;
     }
 
     // Performance optimization: Create fast property accessors and method bindings
@@ -147,10 +149,17 @@
         const worldX = (mouseX - this.panX) / this.zoom;
         const worldY = (mouseY - this.panY) / this.zoom;
         
-        this.zoom = newZoom;
-        
-        this.panX = mouseX - worldX * this.zoom;
-        this.panY = mouseY - worldY * this.zoom;
+        // Use MapState APIs so MAP_VIEW_CHANGED is emitted and other subsystems react
+        try {
+          this.mapState.setZoom(newZoom, mouseX, mouseY);
+        } catch (e) {
+          // Fallback to direct set if mapState methods unavailable
+          this.zoom = newZoom;
+          this.panX = mouseX - worldX * this.zoom;
+          this.panY = mouseY - worldY * this.zoom;
+          // Emit a view change manually
+          try { this.mapState && this.mapState._emitChange && this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy: 'wheel' }); } catch (e) {}
+        }
         
         this._updateResolution();
         this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
@@ -168,7 +177,9 @@
 
     _onPointerDown(ev) {
       try {
-        const rect = this.map.canvas.getBoundingClientRect();
+        // Cache canvas rect for the active pointer interaction to avoid layout thrash
+        this._cachedRect = this.map.canvas.getBoundingClientRect();
+        const rect = this._cachedRect;
         const localX = ev.clientX - rect.left;
         const localY = ev.clientY - rect.top;
         const downTime = Date.now();
@@ -217,7 +228,7 @@
             this.pointerDownTime = downTime;
             try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           } else {
-            // Normal mode - record for click detection
+                try { this.mapState && this.mapState._emitChange && this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy: 'wheel' }); } catch (e) {}
             this.pointerDownTime = downTime;
             try { this.canvas.style.cursor = 'pointer'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           }
@@ -234,7 +245,8 @@
 
     _onPointerMove(ev) {
       try {
-        const rect = this.canvas.getBoundingClientRect();
+        // Use cached rect during pointer interactions to avoid reflow/layout costs
+        const rect = this._cachedRect || this.canvas.getBoundingClientRect();
         const localX = ev.clientX - rect.left;
         const localY = ev.clientY - rect.top;
 
@@ -265,9 +277,21 @@
             rect, 
             { panX: this.panX, panY: this.panY, zoom: this.zoom }
           );
-          this.panX = updatedView.panX;
-          this.panY = updatedView.panY;
-          this.zoom = updatedView.zoom;
+          // Apply view via MapState API (update internal state) and batch emission to rAF
+          try {
+            if (this.mapState && typeof this.mapState.setView === 'function') {
+              this.mapState.setView(updatedView.panX, updatedView.panY, updatedView.zoom);
+              this._scheduleEmitViewChange('pinch');
+            } else {
+              this.panX = updatedView.panX;
+              this.panY = updatedView.panY;
+              this.zoom = updatedView.zoom;
+            }
+          } catch (e) {
+            this.panX = updatedView.panX;
+            this.panY = updatedView.panY;
+            this.zoom = updatedView.zoom;
+          }
           this._updateResolution();
           this.map.updateResolution();
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
@@ -283,8 +307,22 @@
 
         // Handle basic panning (only when basic panning is active and no specialized drags)
         if (this.isDragging) {
-          this.panX += ev.clientX - this.lastMouseX;
-          this.panY += ev.clientY - this.lastMouseY;
+          const dx = ev.clientX - this.lastMouseX;
+          const dy = ev.clientY - this.lastMouseY;
+          try {
+            if (this.mapState && typeof this.mapState.setView === 'function') {
+              // Update view without emitting every move; batch emit once per rAF
+              this.mapState.setView(this.mapState.panX + dx, this.mapState.panY + dy, this.mapState.zoom);
+              this._scheduleEmitViewChange('pan');
+            } else {
+              this.panX += dx;
+              this.panY += dy;
+              try { this.mapState && this.mapState._emitChange && this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy: 'pan' }); } catch (e) {}
+            }
+          } catch (e) {
+            this.panX += dx;
+            this.panY += dy;
+          }
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
@@ -298,9 +336,11 @@
 
     _onPointerUp(ev) {
       try {
-        const rect = this.canvas.getBoundingClientRect();
+        // Clear cached rect when interaction ends
+        const rect = this._cachedRect || this.canvas.getBoundingClientRect();
         const localX = ev.clientX - rect.left;
         const localY = ev.clientY - rect.top;
+        this._cachedRect = null;
 
         const p = this.pointers.get(ev.pointerId);
         const downTime = p ? p.downTime : 0;
@@ -328,6 +368,19 @@
         }
         
       } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
+    }
+
+    _scheduleEmitViewChange(triggeredBy) {
+      if (this._panFrameScheduled) return;
+      this._panFrameScheduled = true;
+      requestAnimationFrame(() => {
+        this._panFrameScheduled = false;
+        try {
+          if (this.mapState && this.mapState._emitChange) {
+            this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy });
+          }
+        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._scheduleEmitViewChange'); }
+      });
     }
 
     // ===== PERFORMANCE-OPTIMIZED EXTRACTION METHODS =====
