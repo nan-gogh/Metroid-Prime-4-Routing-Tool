@@ -48,220 +48,93 @@ class InteractiveMap {
         this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
 
+        console.log('✅ State managers initialized');
+
+        // Initialize controllers
+        this.dataController = null;
+        this.renderController = null;
+        this.inputController = null;
+
         // Initialize canvas dimensions for mapState
         if (this.mapState) {
             this.mapState.setCanvasSize(this.canvas.width, this.canvas.height, window.devicePixelRatio || 1);
         }
+    }
 
-        // Create managers BEFORE renderers so renderers can access them
-        if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
-            this.markerManager = new MarkerManager(
-                { maxMarkers: 50, layerPrefix: 'cm' },
-                StorageInterface,
-                NotificationInterface,
-                window.eventBus
-            );
-        }
-        // Create RouteManager
+    // Asynchronous initialization of controllers and complex setup
+    async init() {
+        // Phase 1: data and render controllers
         try {
-            if (typeof RouteManager !== 'undefined') {
-                this.routeManager = new RouteManager(
-                    this.markerManager,
-                    StorageInterface,
-                    NotificationInterface,
-                    eventBus
-                );
-            }
-        } catch (e) {
-                this.errorHandler.logError(e, 'RouteManager creation failed');
-                // Continue without route manager - markers still work
-            }
-
-        // Initialize routeState with current route looping (after routeManager is created)
-        // RouteState removed - route looping is managed by RouteManager
-
-        // Set up ImageState callback for renderer dirty marking
-        if (this.imageState) {
-            this.imageState.setOnMarkRendererDirty((rendererName) => {
-                this.markRendererDirty(rendererName);
-            });
-        }
-
-        try {
-            if (typeof TileRenderer !== 'undefined') {
-                this.tileRenderer = new TileRenderer(this.mapState, this.tilesetState, this.imageState, MP4Config, { lowSpec: this._lowSpec });
-                try { this.tileRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('TileRenderer.init failed', 'InteractiveMap.init.tileRenderer', { error: e }); }
-            }
-            if (typeof HeatmapRenderer !== 'undefined') {
-                // Create layer config for heatmap rendering
-                const layerConfig = {};
-                if (typeof LAYERS !== 'undefined') {
-                    Object.keys(LAYERS).forEach(key => {
-                        layerConfig[key] = { ...LAYERS[key] };
-                    });
-                }
-                // HeatmapRenderer now uses dedicated HeatmapDisplayState instead of layerState for visibility
-                this.heatmapRenderer = new HeatmapRenderer(this.mapState, this.heatmapDisplayState, MP4Config, layerConfig, GREEN_CRYSTAL_LAYERS);
-                try { this.heatmapRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('HeatmapRenderer.init failed', 'InteractiveMap.init.heatmapRenderer', { error: e }); }
-            }
-            if (typeof GridRenderer !== 'undefined') {
-                // Create layer config for grid rendering
-                const layerConfig = {};
-                if (typeof LAYERS !== 'undefined') {
-                    Object.keys(LAYERS).forEach(key => {
-                        layerConfig[key] = { ...LAYERS[key] };
-                    });
-                }
-                this.gridRenderer = new GridRenderer(this.mapState, this.layerState, this.highlightState, MP4Config, layerConfig, GREEN_CRYSTAL_LAYERS, this._showGridHeatmap);
-                try { this.gridRenderer.init(this.canvas.parentElement); } catch (e) { moduleErrorHandler.logDebug('GridRenderer.init failed', 'InteractiveMap.init.gridRenderer', { error: e }); }
-            }
-            if (typeof MarkerRenderer !== 'undefined') {
-                // Create layer config for rendering (exclude customMarkers.markers since it's managed by markerManager)
-                const layerConfig = {};
-                if (typeof LAYERS !== 'undefined') {
-                    Object.keys(LAYERS).forEach(key => {
-                        layerConfig[key] = { ...LAYERS[key] };
-                        if (key === 'customMarkers') {
-                            // Remove markers array since it's managed by markerManager
-                            delete layerConfig[key].markers;
-                        }
-                    });
-                }
-                this.markerRenderer = new MarkerRenderer(this.mapState, this.layerState, this.selectionState, this.markerManager, MP4Config, layerConfig, this.highlightState);
-                try { this.markerRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('MarkerRenderer.init failed', 'InteractiveMap.init.markerRenderer', { error: e }); }
-            }
-            if (typeof RouteRenderer !== 'undefined') {
-                const routeColor = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : '#00ffb7ff';
-                this.routeRenderer = new RouteRenderer(this.mapState, this.layerState, this.routeAnimationState, this.routeManager, this.dragState, this.highlightState, MP4Config, routeColor);
-                try { this.routeRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('RouteRenderer.init failed', 'InteractiveMap.init.routeRenderer', { error: e }); }
-            }
-            if (typeof OverlayRenderer !== 'undefined') {
-                const routeColor = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : '#00ffb7ff';
-                this.overlayRenderer = new OverlayRenderer(this.mapState, this.selectionState, MP4Config, routeColor, window.eventBus);
-                try { this.overlayRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('OverlayRenderer.init failed', 'InteractiveMap.init.overlayRenderer', { error: e }); }
-            }
-            if (typeof RenderPipeline !== 'undefined') {
-                // Sub-canvas architecture: Each overlay renderer has its own canvas
-                // They render independently and are composited onto the main display by CompositeStage
-                // Each renderer clears its own canvas, eliminating the need for separate clear stages
-                
-                // Composite stage: Layers all sub-canvases onto the main display
-                // This runs AFTER all overlay renderers complete
-                const compositeStage = typeof CompositeStage !== 'undefined' ?
-                    new CompositeStage() : null;
-                
-                // Create RenderContext for clean canvas access abstraction
-                const renderContext = typeof RenderContext !== 'undefined' ?
-                    RenderContext.fromMap(this) : null;
-
-                // Pipeline order is critical: 
-                // TileRenderer → HeatmapRenderer → GridRenderer/Markers/Route/Overlay → CompositeStage
-                // Each renderer clears its own canvas at the start of render()
-                this.renderPipeline = new RenderPipeline([
-                    this.tileRenderer,
-                    this.heatmapRenderer,
-                    this.gridRenderer,
-                    this.markerRenderer,
-                    this.routeRenderer,
-                    this.overlayRenderer,
-                    compositeStage
-                ].filter(Boolean), renderContext);
-            }
-
-            // Set up callbacks AFTER managers are created
-            if (this.markerManager) {
-                this.markerManager.setOnCleanupRouteReferences((deletedMarkerUid) => {
-                    try {
-                        if (this.routeManager) {
-                            this.routeManager.cleanupRouteReferences(deletedMarkerUid);
-                        }
-                    } catch (e) {
-                        moduleErrorHandler.logDebug('Route cleanup failed', 'InteractiveMap.init.routeCleanup', { error: e });
+            // Initialize DataController (managers)
+            if (typeof DataController !== 'undefined') {
+                this.dataController = new DataController({
+                    mapState: this.mapState,
+                    eventBus: window.eventBus,
+                    errorHandler: this.errorHandler,
+                    config: MP4Config,
+                    storageUtils: {
+                        StorageInterface: typeof StorageInterface !== 'undefined' ? StorageInterface : null,
+                        NotificationInterface: typeof NotificationInterface !== 'undefined' ? NotificationInterface : null
                     }
                 });
+                try {
+                    await this.dataController.init();
+                    // Get manager references for backward compatibility
+                    this.markerManager = this.dataController.getMarkerManager();
+                    this.routeManager = this.dataController.getRouteManager();
+                } catch (e) {
+                    this.errorHandler.logDebug('DataController.init failed', 'InteractiveMap.init', { error: e });
+                }
             }
-            // Set up route callbacks AFTER routeManager is created
-            if (this.routeManager) {
-                this.routeManager.setOnRouteChanged(() => {
-                    try {
-                        this.markRendererDirty('RouteRenderer');
-                    } catch (e) {
-                        moduleErrorHandler.logDebug('Route callback failed', 'InteractiveMap.init.routeCallback', { error: e });
-                    }
+
+            // Initialize routeState with current route looping (after routeManager is created)
+            // RouteState removed - route looping is managed by RouteManager
+
+            // Initialize RenderController (renderers and pipeline)
+            if (typeof RenderController !== 'undefined') {
+                this.renderController = new RenderController({
+                    mapState: this.mapState,
+                    tilesetState: this.tilesetState,
+                    imageState: this.imageState,
+                    eventBus: window.eventBus,
+                    errorHandler: this.errorHandler,
+                    config: MP4Config,
+                    markerManager: this.markerManager,
+                    routeManager: this.routeManager,
+                    layerState: this.layerState,
+                    selectionState: this.selectionState,
+                    routeAnimationState: this.routeAnimationState,
+                    dragState: this.dragState,
+                    highlightState: this.highlightState,
+                    heatmapDisplayState: this.heatmapDisplayState,
+                    canvas: {
+                        main: this.canvas,
+                        tiles: this.canvasTiles,
+                        heatmap: this.canvasHeatmap,
+                        grid: this.canvasGrid,
+                        marker: this.canvasMarker,
+                        route: this.canvasRoute,
+                        overlay: this.canvasOverlay
+                    },
+                    containerNode: this.canvas.parentElement,
+                    map: this  // Pass map instance for RenderContext creation
                 });
+                try {
+                    await this.renderController.init();
+                    // Get renderer references for backward compatibility
+                    this.tileRenderer = this.renderController.getRenderer('TileRenderer');
+                    this.heatmapRenderer = this.renderController.getRenderer('HeatmapRenderer');
+                    this.gridRenderer = this.renderController.getRenderer('GridRenderer');
+                    this.markerRenderer = this.renderController.getRenderer('MarkerRenderer');
+                    this.routeRenderer = this.renderController.getRenderer('RouteRenderer');
+                    this.overlayRenderer = this.renderController.getRenderer('OverlayRenderer');
+                    this.renderPipeline = this.renderController.renderPipeline;
+                } catch (e) {
+                    this.errorHandler.logDebug('RenderController.init failed', 'InteractiveMap.init', { error: e });
+                }
             }
+        } catch (e) { this.errorHandler.logDebug('InteractiveMap: renderer and manager initialization failed', 'InteractiveMap.init.rendererManagerInit', { error: e }); }
 
-            // Loop Route toggle: explicit control for closing/opening computed/manual routes
-            try {
-                const loopBtn = document.getElementById('loopRouteBtn');
-                const updateLoopUI = () => {
-                    if (!loopBtn) return;
-                    try { 
-                        loopBtn.classList.toggle('active', this.routeLooping);
-                        loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
-                    } catch (e) { moduleErrorHandler.logDebug('updateLoopUI: failed to update button state', 'InteractiveMap.init.updateLoopUI', { error: e }); }
-                };
-                if (loopBtn) {
-                    loopBtn.addEventListener('click', () => {
-                        this.routeLooping = !this.routeLooping;
-
-                        // Recalculate route length to account for added/removed closing segment
-                        if (this.currentRoute && this._routeSources && this.currentRoute.length >= 3) {
-                            let lengthNormalized = this.routeManager ? this.routeManager.computeRouteLengthNormalized(MP4Config.MAP_SIZE) : 0;
-                            // Add closing segment length if looping is enabled
-                            if (this.routeLooping) {
-                                const firstSrc = this._routeSources[this.currentRoute[0]];
-                                const lastSrc = this._routeSources[this.currentRoute[this.currentRoute.length - 1]];
-                                if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
-                                    const dx = (firstSrc.marker.x - lastSrc.marker.x) * MP4Config.MAP_SIZE;
-                                    const dy = (firstSrc.marker.y - lastSrc.marker.y) * MP4Config.MAP_SIZE;
-                                    const closingSegmentLength = Math.hypot(dx, dy) / MP4Config.MAP_SIZE;
-                                    lengthNormalized += closingSegmentLength;
-                                }
-                            }
-                            // Update route length via manager
-                            if (this.routeManager) {
-                                this.routeManager.currentRouteLengthNormalized = lengthNormalized;
-                            }
-                        }
-
-                        // Invalidate route renderer caches when looping changes
-                        try {
-                            if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
-                                this.routeRenderer.invalidateCache();
-                            }
-                        } catch (e) {
-                            this.errorHandler.logDebug('Failed to invalidate route renderer cache on loop toggle', 'InteractiveMap.loopRoute.invalidateCache', { error: e });
-                        }
-
-                        try {
-                            if (this.routeManager) this.routeManager.saveRouteLoopingFlag(this.routeLooping);
-                        } catch (e) { this.errorHandler.logDebug('loopRoute: failed to persist loop flag', 'InteractiveMap.loopRoute.persistFlag', { error: e }); }
-                        try { this.render(); } catch (e) { this.errorHandler.logDebug('loopRoute: failed to request render', 'InteractiveMap.loopRoute.render', { error: e }); }
-                        updateLoopUI();
-                    });
-                }
-                updateLoopUI();
-            } catch (e) { moduleErrorHandler.logDebug('InteractiveMap: loop controls initialization failed', 'InteractiveMap.init.loopControls', { error: e }); }
-
-            // Phase 2: input and state scaffolds
-            try {
-                // State managers are already initialized above
-
-                if (typeof GestureHandler !== 'undefined') {
-                    this.gestureHandler = new GestureHandler(this, MP4Config);
-                    try { this.gestureHandler.init(); } catch (e) { moduleErrorHandler.logDebug('GestureHandler.init failed', 'InteractiveMap.init.gestureHandler', { error: e }); }
-                }
-                if (typeof PointerHandler !== 'undefined') {
-                    this.pointerHandler = new PointerHandler(this, MP4Config, eventBus);
-                    try { this.pointerHandler.init(); } catch (e) { moduleErrorHandler.logDebug('PointerHandler.init failed', 'InteractiveMap.init.pointerHandler', { error: e }); }
-                }
-                if (typeof KeyboardHandler !== 'undefined') {
-                    this.keyboardHandler = new KeyboardHandler(this, MP4Config, eventBus);
-                    try { this.keyboardHandler.init(); } catch (e) { moduleErrorHandler.logDebug('KeyboardHandler.init failed', 'InteractiveMap.init.keyboardHandler', { error: e }); }
-                }
-            } catch (e) { moduleErrorHandler.logDebug('InteractiveMap: input/state scaffolding setup failed', 'InteractiveMap.init.inputStateSetup', { error: e }); }
-        } catch (e) { moduleErrorHandler.logDebug('InteractiveMap: renderer and manager initialization failed', 'InteractiveMap.init.rendererManagerInit', { error: e }); }
         // Initialize map state through state manager
         if (this.mapState) {
             this.mapState.setView(0, 0, MP4Config.ZOOM.DEFAULT_MIN);
@@ -293,15 +166,15 @@ class InteractiveMap {
             }
         } catch (e) { this.errorHandler.logDebug('InteractiveMap: device detection failed', 'InteractiveMap.deviceDetection', { error: e }); }
 
-    // Method to update loop UI (called when route changes)
-    this.updateLoopUI = () => {
-        try {
-            const loopBtn = document.getElementById('loopRouteBtn');
-            if (!loopBtn) return;
-            loopBtn.classList.toggle('active', this.routeLooping);
-            loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
-        } catch (e) { this.errorHandler.logDebug('updateLoopUI: failed to update button state', 'InteractiveMap.updateLoopUI', { error: e }); }
-    };
+        // Method to update loop UI (called when route changes)
+        this.updateLoopUI = () => {
+            try {
+                const loopBtn = document.getElementById('loopRouteBtn');
+                if (!loopBtn) return;
+                loopBtn.classList.toggle('active', this.routeLooping);
+                loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
+            } catch (e) { this.errorHandler.logDebug('updateLoopUI: failed to update button state', 'InteractiveMap.updateLoopUI', { error: e }); }
+        };
         
         // Markers
         this.markers = [];
@@ -489,6 +362,114 @@ class InteractiveMap {
         }
 
         this.render();
+
+        // Loop Route toggle: explicit control for closing/opening computed/manual routes
+        try {
+            const loopBtn = document.getElementById('loopRouteBtn');
+            const updateLoopUI = () => {
+                if (!loopBtn) return;
+                try { 
+                    loopBtn.classList.toggle('active', this.routeLooping);
+                    loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
+                } catch (e) { moduleErrorHandler.logDebug('updateLoopUI: failed to update button state', 'InteractiveMap.init.updateLoopUI', { error: e }); }
+            };
+            if (loopBtn) {
+                loopBtn.addEventListener('click', () => {
+                    this.routeLooping = !this.routeLooping;
+
+                    // Recalculate route length to account for added/removed closing segment
+                    if (this.currentRoute && this._routeSources && this.currentRoute.length >= 3) {
+                        let lengthNormalized = this.routeManager ? this.routeManager.computeRouteLengthNormalized(MP4Config.MAP_SIZE) : 0;
+                        // Add closing segment length if looping is enabled
+                        if (this.routeLooping) {
+                            const firstSrc = this._routeSources[this.currentRoute[0]];
+                            const lastSrc = this._routeSources[this.currentRoute[this.currentRoute.length - 1]];
+                            if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
+                                const dx = (firstSrc.marker.x - lastSrc.marker.x) * MP4Config.MAP_SIZE;
+                                const dy = (firstSrc.marker.y - lastSrc.marker.y) * MP4Config.MAP_SIZE;
+                                const closingSegmentLength = Math.hypot(dx, dy) / MP4Config.MAP_SIZE;
+                                lengthNormalized += closingSegmentLength;
+                            }
+                        }
+                        // Update route length via manager
+                        if (this.routeManager) {
+                            this.routeManager.currentRouteLengthNormalized = lengthNormalized;
+                        }
+                    }
+
+                    // Invalidate route renderer caches when looping changes
+                    try {
+                        if (this.routeRenderer && typeof this.routeRenderer.invalidateCache === 'function') {
+                            this.routeRenderer.invalidateCache();
+                        }
+                    } catch (e) {
+                        this.errorHandler.logDebug('Failed to invalidate route renderer cache on loop toggle', 'InteractiveMap.loopRoute.invalidateCache', { error: e });
+                    }
+
+                    try {
+                        if (this.routeManager) this.routeManager.saveRouteLoopingFlag(this.routeLooping);
+                    } catch (e) { moduleErrorHandler.logDebug('loopRoute: failed to persist loop flag', 'InteractiveMap.loopRoute.persistFlag', { error: e }); }
+                    try { this.render(); } catch (e) { this.errorHandler.logDebug('loopRoute: failed to request render', 'InteractiveMap.loopRoute.render', { error: e }); }
+                    updateLoopUI();
+                });
+            }
+            updateLoopUI();
+        } catch (e) { moduleErrorHandler.logDebug('InteractiveMap: loop controls initialization failed', 'InteractiveMap.init.loopControls', { error: e }); }
+
+        // Phase 2: input and state scaffolds
+        try {
+            // Initialize InputController (gesture, keyboard, pointer handlers)
+            if (typeof InputController !== 'undefined') {
+                this.inputController = new InputController({
+                    map: this,
+                    eventBus: window.eventBus,
+                    errorHandler: this.errorHandler,
+                    config: MP4Config
+                });
+                try {
+                    await this.inputController.init();
+                    // Get handler references for backward compatibility
+                    this.gestureHandler = this.inputController.getGestureHandler();
+                    this.pointerHandler = this.inputController.getPointerHandler();
+                    this.keyboardHandler = this.inputController.getKeyboardHandler();
+                } catch (e) {
+                    this.errorHandler.logDebug('InputController.init failed', 'InteractiveMap.init', { error: e });
+                }
+            }
+        } catch (e) { moduleErrorHandler.logDebug('InteractiveMap: input/state scaffolding setup failed', 'InteractiveMap.init.inputStateSetup', { error: e }); }
+    }
+
+    // Cleanup method to properly destroy controllers and resources
+    destroy() {
+        // Destroy controllers in reverse order of initialization
+        if (this.inputController && typeof this.inputController.destroy === 'function') {
+            try {
+                this.inputController.destroy();
+            } catch (e) {
+                this.errorHandler.logDebug('InputController.destroy failed', 'InteractiveMap.destroy', { error: e });
+            }
+        }
+
+        if (this.renderController && typeof this.renderController.destroy === 'function') {
+            try {
+                this.renderController.destroy();
+            } catch (e) {
+                this.errorHandler.logDebug('RenderController.destroy failed', 'InteractiveMap.destroy', { error: e });
+            }
+        }
+
+        if (this.dataController && typeof this.dataController.destroy === 'function') {
+            try {
+                this.dataController.destroy();
+            } catch (e) {
+                this.errorHandler.logDebug('DataController.destroy failed', 'InteractiveMap.destroy', { error: e });
+            }
+        }
+
+        // Clear controller references
+        this.inputController = null;
+        this.renderController = null;
+        this.dataController = null;
     }
 
     // Getters for backward compatibility - delegate to state managers
@@ -1571,9 +1552,12 @@ class InteractiveMap {
      * @param {string} rendererName - The constructor name of the renderer (e.g., 'TileRenderer')
      */
     markRendererDirty(rendererName) {
-        if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
+        if (this.renderController && typeof this.renderController.markRendererDirty === 'function') {
+            this.renderController.markRendererDirty(rendererName);
+        } else if (this.renderPipeline && typeof this.renderPipeline.markDirty === 'function') {
+            // Fallback to direct pipeline access if renderController not available
             this.renderPipeline.markDirty(rendererName);
-            
+
             // Sub-canvas architecture: Each renderer manages its own canvas independently
             // CompositeStage must be marked dirty whenever a sub-canvas renderer changes
             // to ensure sub-canvases are composited onto the display
@@ -2220,14 +2204,19 @@ async function init() {
                 await new Promise((resolve, reject) => {
                     const scriptEl = document.createElement('script');
                     scriptEl.src = script;
-                    scriptEl.onload = resolve;
-                    scriptEl.onerror = reject;
+                    scriptEl.onload = () => {
+                        resolve();
+                    };
+                    scriptEl.onerror = (e) => {
+                        reject(e);
+                    };
                     document.head.appendChild(scriptEl);
                 });
             }
         }
     } catch (e) {
-        moduleErrorHandler.logDebug('Failed to load controller modules', 'InteractiveMap.loadControllerModules', { error: e });
+        console.error('❌ Failed to load controller modules:', e);
+        // Continue anyway - some controllers might still work
     }
 
     // Initialize StorageService with consent checker
@@ -2722,10 +2711,14 @@ async function init() {
 
     // Create map
     map = new InteractiveMap('mapCanvas');
+
     // Expose map globally for renderers and other modules to access
     window.interactiveMap = map;
     // Flush any event unsubscriber functions that were queued before `map` existed
     try { flushPendingUnsubscribers(); } catch (e) { moduleErrorHandler.logDebug('Failed to flush pending unsubscribers', 'init', { error: e }); }
+
+    // Initialize controllers asynchronously
+    await map.init();
         // Highlighting runtime state: delegated to HighlightState
         try {
             // For backward compatibility, expose highlighting through modular HighlightState
