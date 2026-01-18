@@ -141,7 +141,7 @@ const routeSourcePool = new ObjectPool(
         source.layerKey = '';
         source.layerIndex = -1;
     },
-    50, // Pre-allocate 50 sources (matches marker pool size for consistency)
+    50, // Pre-allocate 50 sources 
     typeof window !== 'undefined' ? window.errorHandler : null
 );
 
