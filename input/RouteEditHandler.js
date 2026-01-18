@@ -29,6 +29,9 @@
         this._computeRouteLengthNormalized = null;
       }
 
+      // Helper to call marker hover without touching map directly
+      this._checkMarkerHover = map.checkMarkerHover ? map.checkMarkerHover.bind(map) : () => null;
+
       // Route finding functions
       this._findRouteWaypointAt = (screenX, screenY) => {
         if (this.map.routeController && typeof this.map.routeController.findRouteWaypointAt === 'function') {
@@ -173,10 +176,10 @@
     handlePointerDown(ev, localX, localY, downTime) {
       try {
         // Route node drag start - check regular markers first
-        const hit = this.map.checkMarkerHover ? this.map.checkMarkerHover(localX, localY) : null;
+        const hit = this._checkMarkerHover ? this._checkMarkerHover(localX, localY) : null;
         if (hit && this.editRouteMode && hit.marker && hit.marker.uid) {
           // Find route position and set local candidate state
-          const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
+            const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
             this.map.routeManager.findRoutePositionOfMarker(hit.marker.uid) : -1;
           if (routePos !== -1) {
             this.dragState.setRouteNodeCandidate({
@@ -352,15 +355,9 @@
           });
         }
 
-        // Invalidate route renderer cache
-        try {
-          if (this.map.routeRenderer && typeof this.map.routeRenderer.invalidateCache === 'function') {
-            this.map.routeRenderer.invalidateCache();
-          }
-        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._handleWaypointDrag.invalidateCache'); }
-
-        // Trigger render
-        this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
+        // Invalidate route renderer cache via events
+        try { this.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: 'RouteRenderer' }); } catch (e) {}
+        try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED); } catch (e) {}
 
       } catch (e) {
         this.errorHandler.logError('Error in _handleWaypointDrag:', 'interactions', e);
@@ -396,19 +393,16 @@
           this._routeInsert.hoverOccupied = false;
         }
 
-        // Update route and render
-        try {
-          if (this.map.routeRenderer && typeof this.map.routeRenderer.invalidateCache === 'function') {
-            this.map.routeRenderer.invalidateCache();
-          }
-        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.invalidateCache'); }
+        // Update route and render via events
+        try { this.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: 'RouteRenderer' }); } catch (e) {}
+        try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED); } catch (e) {}
 
         try {
           let newLengthNormalized = this._computeRouteLengthNormalized ?
             this._computeRouteLengthNormalized(this._routeSources) : 0;
 
           // Adjust for looping if enabled and we have 3+ waypoints
-          if (this.map.routeLooping && this._routeSources && this._routeSources.length >= 3) {
+          if ((this.map && this.map.routeLooping) && this._routeSources && this._routeSources.length >= 3) {
             const firstSrc = this._routeSources[0];
             const lastSrc = this._routeSources[this._routeSources.length - 1];
             if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
@@ -419,34 +413,29 @@
             }
           }
 
-          // Route length is updated by RouteManager.updateWaypointPosition via the event
-
           // Update UI display
           try {
-            // Emit layer counts changed event instead of direct call
             this.eventBus.emit(window.EventTypes.LAYER_COUNTS_CHANGED);
           } catch (e) {
             this.errorHandler.logDebug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
           }
 
-          // Update route length display immediately
+          // Update route length display immediately using computed value
           try {
             const dev_routeLength = document.getElementById('dev_routeLength');
             if (dev_routeLength) {
-              dev_routeLength.textContent = (typeof this.map.currentRouteLengthNormalized === 'number' && !isNaN(this.map.currentRouteLengthNormalized)) ?
-                this.map.currentRouteLengthNormalized.toFixed(3) : '—';
+              dev_routeLength.textContent = (typeof newLengthNormalized === 'number' && !isNaN(newLengthNormalized)) ?
+                newLengthNormalized.toFixed(3) : '—';
             }
           } catch (e) { this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
-
-        this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
     }
 
     _handleRoutePreview(localX, localY) {
       try {
-        const canPreview = !this.map.isDragging && !this.map._draggingMarker && !this.map._draggingCandidate &&
-                          !this._routeInsert && !this.dragState.routeNodeCandidate && this.editRouteMode;
+        const canPreview = !this.dragState.isDragging && !this.dragState.hasDraggingMarker && !this.dragState.hasDraggingCandidate &&
+              !this._routeInsert && !this.dragState.hasRouteNodeCandidate && this.editRouteMode;
         if (canPreview) {
           const seg = this._findRouteSegmentAt ?
             this._findRouteSegmentAt(localX, localY, this.config.ROUTE?.SEGMENT_DETECTION_THRESHOLD || 20) : null;
@@ -515,7 +504,6 @@
 
         // Clear local candidate state
         this.dragState.setRouteNodeCandidate(null);
-        this.map.pointerDownTime = 0;
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._promoteRouteNodeDrag.setCursor'); }
       } catch (err) {
         this.errorHandler.logError('Error in _promoteRouteNodeDrag:', 'interactions', err);
