@@ -58,10 +58,13 @@
 
         // Calculate the resolution needed for current zoom level
         // Base multiplier tuned for small screens; scale up on larger canvases so
-        // desktop monitors request higher-resolution tiles.
-        const baseMultiplier = 3.5;
-        const widthScale = Math.max(1, canvasWidth / 1200); // >1 for wider viewports
-        const multiplier = Math.min(6, baseMultiplier * widthScale);
+        // desktop monitors request higher-resolution tiles. Make values configurable
+        // via `this.config` so they can be tuned without code changes.
+        const baseMultiplier = (this.config && this.config.IMAGE_RESOLUTION_BASE_MULTIPLIER) || 3.5;
+        const maxMultiplier = (this.config && this.config.IMAGE_RESOLUTION_MAX_MULTIPLIER) || 6;
+        const widthRef = (this.config && this.config.IMAGE_RESOLUTION_WIDTH_REF) || 1200;
+        const widthScale = Math.max(1, canvasWidth / widthRef); // >1 for wider viewports
+        const multiplier = Math.min(maxMultiplier, baseMultiplier * widthScale);
         const pixelsNeeded = Math.max(canvasWidth, canvasHeight) * zoom * dpr * multiplier;
 
 
