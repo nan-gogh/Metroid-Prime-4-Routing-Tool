@@ -8,6 +8,64 @@
       this.selectedMarker = null;
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
+
+      // Set up event listeners
+      this._setupEventListeners();
+    }
+
+    _setupEventListeners() {
+      try {
+        const EventUtils = (typeof window !== 'undefined' && window.EventUtils) || (typeof global !== 'undefined' && global.EventUtils);
+        const EventTypes = (typeof window !== 'undefined' && window.EventTypes) || (typeof global !== 'undefined' && global.EventTypes);
+        if (this.eventBus && EventUtils && EventTypes) {
+          this._eventManager = EventUtils.createEventManager(this, '_eventUnsubscribers');
+          this._eventManager.setup(this.eventBus, [
+            {
+              event: EventTypes.LAYER_VISIBILITY_CHANGED,
+              handler: this._handleLayerVisibilityChanged.bind(this)
+            }
+          ]);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('SelectionState._setupEventListeners failed', 'SelectionState._setupEventListeners', { error: e });
+      }
+    }
+
+    _handleLayerVisibilityChanged(data) {
+      try {
+        if (data && data.layerKey && data.visible === false) {
+          // Layer is being turned off - check if we have a selected marker on this layer
+          if (this.selectedMarker && this.selectedMarkerLayer === data.layerKey) {
+            // Clear the selection since the layer is no longer visible
+            this.clearSelectedMarker();
+          }
+
+          // Also check multi-selection (for future use)
+          const markersToRemove = [];
+          this.multiSelectedMarkers.forEach(key => {
+            const [layerKey] = key.split(':');
+            if (layerKey === data.layerKey) {
+              markersToRemove.push(key);
+            }
+          });
+
+          markersToRemove.forEach(key => {
+            this.multiSelectedMarkers.delete(key);
+          });
+
+          // Emit change if any multi-selections were removed
+          if (markersToRemove.length > 0) {
+            this._emitChange(window.EventTypes.MARKER_MULTI_SELECTED, {
+              action: 'clear_layer',
+              layerKey: data.layerKey,
+              removedCount: markersToRemove.length,
+              multiSelectedCount: this.multiSelectedMarkers.size
+            });
+          }
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('SelectionState._handleLayerVisibilityChanged failed', 'SelectionState._handleLayerVisibilityChanged', { error: e });
+      }
     }
 
     // Marker selection management
@@ -202,6 +260,11 @@
       try {
         this.clearSelectedMarker();
         this.clearMultiSelection();
+
+        // Clean up event listeners
+        if (this._eventManager) {
+          this._eventManager.cleanup();
+        }
       } catch (e) {
         this.errorHandler.logDebug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
       }
