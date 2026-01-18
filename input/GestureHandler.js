@@ -123,6 +123,15 @@
         if (typeof this.map.onPinch === 'function') this.map.onPinch(centroid, scale);
       } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'GestureHandler.onPinch'); }
     }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+      // Clear gesture state
+      this.pinch = null;
+      this.pointers.clear();
+    }
   }
 
   global.GestureHandler = GestureHandler;

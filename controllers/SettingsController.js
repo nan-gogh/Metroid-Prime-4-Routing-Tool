@@ -17,6 +17,9 @@
       this.config = options.config || global.MP4Config || {};
       this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
       this.eventTypes = window.EventTypes || {};
+
+      // Event listener cleanup
+      this._eventUnsubscribers = [];
     }
 
     /**
@@ -194,7 +197,7 @@
       try {
         // Standardized event listener setup using EventUtils
         if (window.EventUtils && typeof window.EventUtils.setupEventListeners === 'function') {
-          window.EventUtils.setupEventListeners(this.eventBus, [
+          const unsubscribers = window.EventUtils.setupEventListeners(this.eventBus, [
             {
               event: this.eventTypes.DISPLAY_SETTINGS_CHANGED,
               handler: (data) => {
@@ -208,9 +211,14 @@
               }
             }
           ], this, this.errorHandler);
+
+          // Store unsubscribers for cleanup
+          if (Array.isArray(unsubscribers)) {
+            this._eventUnsubscribers.push(...unsubscribers);
+          }
         } else {
-          // Fallback
-          this.eventBus.on(this.eventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
+          // Fallback - store unsubscribe function
+          const unsubscribe = this.eventBus.on(this.eventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
             try {
               if (data && typeof data.gridVisible === 'boolean') {
                 this._updateGridButtonState();
@@ -219,6 +227,10 @@
               this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
             }
           });
+
+          if (typeof unsubscribe === 'function') {
+            this._eventUnsubscribers.push(unsubscribe);
+          }
         }
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to bind event listeners', 'SettingsController._bindEventListeners', { error: e });
@@ -528,6 +540,25 @@
 
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to load saved settings', 'SettingsController.loadSavedSettings', { error: e });
+      }
+    }
+
+    /**
+     * Clean up event listeners to prevent memory leaks
+     */
+    destroy() {
+      try {
+        // Unsubscribe all event listeners
+        if (Array.isArray(this._eventUnsubscribers)) {
+          for (const unsub of this._eventUnsubscribers) {
+            if (typeof unsub === 'function') {
+              unsub();
+            }
+          }
+          this._eventUnsubscribers = [];
+        }
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('SettingsController.destroy failed', 'SettingsController.destroy', { error: e });
       }
     }
   }

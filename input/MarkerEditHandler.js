@@ -159,6 +159,17 @@
 
       return false; // Not handled
     }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+      // Clear references to prevent memory leaks
+      this.markerManager = null;
+      this.showTooltip = null;
+      this.hideTooltip = null;
+      this._checkMarkerHover = null;
+    }
   }
 
   // Export to global scope

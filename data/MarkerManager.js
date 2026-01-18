@@ -401,6 +401,25 @@ class MarkerManager {
 
         return this.markers;
     }
+
+    /**
+     * Clean up event listeners to prevent memory leaks
+     */
+    destroy() {
+        try {
+            // Unsubscribe all event listeners
+            if (Array.isArray(this._eventUnsubscribers)) {
+                for (const unsub of this._eventUnsubscribers) {
+                    if (typeof unsub === 'function') {
+                        unsub();
+                    }
+                }
+                this._eventUnsubscribers = [];
+            }
+        } catch (e) {
+            this.errorHandler && this.errorHandler.logDebug('MarkerManager.destroy failed', 'MarkerManager.destroy', { error: e });
+        }
+    }
 }
 
 // Make MarkerManager globally available

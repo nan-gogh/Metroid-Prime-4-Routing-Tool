@@ -103,9 +103,12 @@ Based on my analysis of both the `COMPREHENSIVE_CODE_AUDIT.md` and TODO_CODE_AUD
 - **Remove duplicate state properties** - Like `_routeNodeCandidate` in RouteEditHandler ✅ COMPLETED: Removed all _routeNodeCandidate duplication - RouteEditHandler, InteractiveMap, and RouteComputation now use `DragState.routeNodeCandidate` consistently; updated tests
 
 #### **4.2 Fix Remaining Architecture Issues**
-- **Fix OverlayRenderer global access** - Replace `window.interactiveMap` with event emission
-- **Standardize error handling** - Remove any remaining `console.log/error` calls
-- **Fix inconsistent patterns** - Make all handlers follow same constructor/destroy pattern
+- **Fix OverlayRenderer global access** - Replace `window.interactiveMap` with event emission ✅ COMPLETED: OverlayRenderer already uses eventBus.emit for tooltip positioning; no global access found
+- **Standardize error handling** - Remove any remaining `console.log/error` calls ✅ COMPLETED: Replaced console.warn/error calls in map.js and index.html with proper errorHandler.logWarn/logDebug calls
+- **Fix inconsistent patterns** - Make all handlers follow same constructor/destroy pattern ✅ COMPLETED:
+  - ✅ Added destroy() methods to GestureHandler, MarkerEditHandler, MarkerManager, SettingsController
+  - ✅ Updated InteractiveMap.destroy() to clean up SettingsController and MarkerManager
+  - ✅ All handlers now follow consistent constructor/init/destroy pattern with proper event listener cleanup
 
 ### **5. Implementation Priority Order**
 

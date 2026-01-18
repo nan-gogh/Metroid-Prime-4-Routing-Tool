@@ -1963,6 +1963,15 @@ class InteractiveMap {
             this.errorHandler.logDebug('Failed to destroy marker manager', 'InteractiveMap.destroy.markerManager', { error: e });
         }
 
+        // Clean up settings controller if it has destroy method
+        try {
+            if (this.settingsController && typeof this.settingsController.destroy === 'function') {
+                this.settingsController.destroy();
+            }
+        } catch (e) {
+            this.errorHandler.logDebug('Failed to destroy settings controller', 'InteractiveMap.destroy.settingsController', { error: e });
+        }
+
         // Clear references to prevent memory leaks
         this.canvas = null;
         this.ctx = null;
@@ -2227,7 +2236,7 @@ async function init() {
             initializeStorageService(window._mp4Storage.hasStorageConsent.bind(window._mp4Storage));
         }
     } catch (e) {
-        console.warn('Failed to initialize StorageService:', e);
+        moduleErrorHandler.logWarn('Failed to initialize StorageService', 'InteractiveMap.init.StorageService', { error: e });
     }
 
     // Initialize EventBus for cross-module communication
@@ -2243,7 +2252,7 @@ async function init() {
             
             // Only set up event listeners if EventTypes are available
             if (!window.EventTypes) {
-                console.warn('EventTypes not available, skipping event listener setup');
+                moduleErrorHandler.logWarn('EventTypes not available, skipping event listener setup', 'InteractiveMap.init.eventSetup');
                 return;
             }
             
@@ -2708,7 +2717,7 @@ async function init() {
             ], null, moduleErrorHandler);
         }
     } catch (e) {
-        console.warn('Failed to initialize EventBus:', e);
+        moduleErrorHandler.logWarn('Failed to initialize EventBus', 'InteractiveMap.init.EventBus', { error: e });
     }
 
     // Create map

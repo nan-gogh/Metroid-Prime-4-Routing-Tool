@@ -327,7 +327,7 @@
         try {
             document.addEventListener('mp4-ready', removeFade, { once: true });
             // Fallback: ensure fade removed after 7s even if event not fired
-            setTimeout(() => { try { removeFade(); } catch (e) { console.error('Failed to remove fade in fallback timeout:', e); } }, 7000);
+            setTimeout(() => { try { removeFade(); } catch (e) { /* Silent fallback timeout error */ } }, 7000);
         } catch (e) {
             // As a final fallback, remove fade on window load
             if (document.readyState === 'complete') removeFade(); else window.addEventListener('load', removeFade);
