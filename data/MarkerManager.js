@@ -15,6 +15,9 @@ class MarkerManager {
         this.markers = [];
         this.onCleanupRouteReferences = null;
 
+        // Event listener cleanup
+        this._eventUnsubscribers = [];
+
         // Set up event listeners for decoupled communication
         this._setupEventListeners();
 
@@ -47,8 +50,8 @@ class MarkerManager {
                         }
                     ], this, this.errorHandler);
                 } else {
-                    // Fallback: subscribe directly
-                    this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
+                    // Fallback: subscribe directly and store unsubscriber
+                    const unsubscribe = this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
                         try {
                             if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
                                 this.addMarker(data.x, data.y);
@@ -59,6 +62,10 @@ class MarkerManager {
                             this.errorHandler.logDebug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
                         }
                     });
+
+                    if (typeof unsubscribe === 'function') {
+                        this._eventUnsubscribers.push(unsubscribe);
+                    }
                 }
             } catch (e) {
                 this.errorHandler.logDebug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
