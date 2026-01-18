@@ -2,12 +2,10 @@
 // Manages layer visibility, display states, and layer configuration
 
 (function (global) {
-  class LayerState {
+  class LayerState extends BaseStateManager {
     constructor(layerKeys, config, options = {}) {
-      this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
-      
+      super(config, options);
+
       this.layerVisibility = {};
       this.layerConfig = {};
       this._showGridHeatmap = false;
@@ -389,17 +387,6 @@
         delete this.layerConfig[layerKey];
       } catch (e) {
         this.errorHandler.logDebug('LayerState.removeLayer failed', 'LayerState.removeLayer', { error: e });
-      }
-    }
-
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('LayerState._emitChange failed', 'LayerState._emitChange', { error: e, event });
       }
     }
   }

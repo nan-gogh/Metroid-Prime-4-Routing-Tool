@@ -9,7 +9,6 @@
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
       this.eventBus = eventBus || window.eventBus;
-      this.eventTypes = window.EventTypes || {};
       this.dragState = dragState;
 
       // Get state managers from map
@@ -79,88 +78,86 @@
     // Set up listeners for waypoint drag finalization events
     _setupDragFinalizeListeners() {
       try {
-        if (!this.eventBus) return;
+        if (!this.eventBus || !window.EventTypes) return;
 
-        // Listen for DragState's finalization signal (contains pointer coordinates)
-        const unsub1 = this.eventBus.on(this.eventTypes.ROUTE_WAYPOINT_DRAG_FINALIZED, (data) => {
-          try {
-            // Store the finalize event with pointer coords for processing
-            // when ROUTE_WAYPOINT_DRAG_CHANGED fires with null drag
-            if (data && (data.clientX !== undefined || data.pointerId !== undefined)) {
-              this._pendingWaypointFinalize = data;
+        // Use EventUtils for standardized event handling
+        const eventManager = window.EventUtils.createEventManager(this);
+
+        eventManager.setup(this.eventBus, [
+          {
+            event: window.EventTypes.ROUTE_WAYPOINT_DRAG_FINALIZED,
+            handler: (data) => {
+              // Store the finalize event with pointer coords for processing
+              // when ROUTE_WAYPOINT_DRAG_CHANGED fires with null drag
+              if (data && (data.clientX !== undefined || data.pointerId !== undefined)) {
+                this._pendingWaypointFinalize = data;
+              }
             }
-          } catch (e) {
-            this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._setupDragFinalizeListeners.finalized');
-          }
-        });
-        if (typeof unsub1 === 'function') this._eventUnsubscribers.push(unsub1);
+          },
+          {
+            event: window.EventTypes.ROUTE_WAYPOINT_DRAG_CHANGED,
+            handler: (data) => {
+              // When drag transitions to null, we need to finalize
+              if (!data.drag) {
+                if (this._pendingWaypointFinalize) {
+                  // Normal finalization: process drop target
+                  const ev = this._pendingWaypointFinalize;
+                  this._pendingWaypointFinalize = null;
 
-        // Handle waypoint drag completion when DragState clears the drag
-        const unsub2 = this.eventBus.on(this.eventTypes.ROUTE_WAYPOINT_DRAG_CHANGED, (data) => {
-          try {
-            // When drag transitions to null, we need to finalize
-            if (!data.drag) {
-              if (this._pendingWaypointFinalize) {
-                // Normal finalization: process drop target
-                const ev = this._pendingWaypointFinalize;
-                this._pendingWaypointFinalize = null;
+                  // Check if we dropped on a valid marker
+                  let localX = 0, localY = 0;
+                  try {
+                    const rect = this.canvas.getBoundingClientRect();
+                    localX = (ev.clientX || 0) - rect.left;
+                    localY = (ev.clientY || 0) - rect.top;
+                  } catch (e) {
+                    this.errorHandler && this.errorHandler.logDebug('Failed to get local coords', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
+                  }
 
-                // Check if we dropped on a valid marker
-                let localX = 0, localY = 0;
-                try {
-                  const rect = this.canvas.getBoundingClientRect();
-                  localX = (ev.clientX || 0) - rect.left;
-                  localY = (ev.clientY || 0) - rect.top;
-                } catch (e) {
-                  this.errorHandler && this.errorHandler.logDebug('Failed to get local coords', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
-                }
+                  const hit = this._findMarkerAt(localX, localY);
 
-                const hit = this._findMarkerAt(localX, localY);
+                  let snapToMarker = null;
+                  let cancel = true;
 
-                let snapToMarker = null;
-                let cancel = true;
+                  if (hit && hit.marker && hit.marker.uid) {
+                    // Check if this marker is already in the route
+                    let alreadyInRoute = false;
+                    for (let i = 0; i < this.currentRoute.length; i++) {
+                      const src = this._routeSources[this.currentRoute[i]];
+                      if (src && src.marker && src.marker.uid === hit.marker.uid) {
+                        alreadyInRoute = true;
+                        break;
+                      }
+                    }
 
-                if (hit && hit.marker && hit.marker.uid) {
-                  // Check if this marker is already in the route
-                  let alreadyInRoute = false;
-                  for (let i = 0; i < this.currentRoute.length; i++) {
-                    const src = this._routeSources[this.currentRoute[i]];
-                    if (src && src.marker && src.marker.uid === hit.marker.uid) {
-                      alreadyInRoute = true;
-                      break;
+                    if (!alreadyInRoute) {
+                      snapToMarker = {
+                        uid: hit.marker.uid,
+                        layerKey: hit.layerKey
+                      };
+                      cancel = false;
                     }
                   }
 
-                  if (!alreadyInRoute) {
-                    snapToMarker = {
-                      uid: hit.marker.uid,
-                      layerKey: hit.layerKey
-                    };
-                    cancel = false;
-                  }
+                  // Emit finalize event to RouteManager with drop target information
+                  this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
+                    finalizeWaypointDrag: true,
+                    snapToMarker: snapToMarker,
+                    cancel: cancel
+                  });
+                } else {
+                  // External cancellation (escape, mouse leave, etc.)
+                  // No pending finalize means drag was aborted, cancel it
+                  this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
+                    finalizeWaypointDrag: true,
+                    snapToMarker: null,
+                    cancel: true
+                  });
                 }
-
-                // Emit finalize event to RouteManager with drop target information
-                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
-                  finalizeWaypointDrag: true,
-                  snapToMarker: snapToMarker,
-                  cancel: cancel
-                });
-              } else {
-                // External cancellation (escape, mouse leave, etc.)
-                // No pending finalize means drag was aborted, cancel it
-                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
-                  finalizeWaypointDrag: true,
-                  snapToMarker: null,
-                  cancel: true
-                });
               }
             }
-          } catch (e) {
-            this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._setupDragFinalizeListeners.changed');
           }
-        });
-        if (typeof unsub2 === 'function') this._eventUnsubscribers.push(unsub2);
+        ], this, this.errorHandler);
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._setupDragFinalizeListeners failed', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
       }
@@ -342,8 +339,8 @@
         const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
 
         // Emit waypoint drag update
-        if (this.eventBus && this.eventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED) {
-          this.eventBus.emit(this.eventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED, {
+        if (this.eventBus && window.EventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED) {
+          this.eventBus.emit(window.EventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED, {
             waypointIndex: this.dragState.waypointDrag.waypointIndex,
             worldX: Math.max(0, Math.min(1, Number(worldX))),
             worldY: Math.max(0, Math.min(1, Number(worldY)))
@@ -358,7 +355,7 @@
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._handleWaypointDrag.invalidateCache'); }
 
         // Trigger render
-        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+        this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
 
       } catch (e) {
         this.errorHandler.logError('Error in _handleWaypointDrag:', 'interactions', e);
@@ -422,7 +419,7 @@
           // Update UI display
           try {
             // Emit layer counts changed event instead of direct call
-            this.eventBus.emit(this.eventTypes.LAYER_COUNTS_CHANGED);
+            this.eventBus.emit(window.EventTypes.LAYER_COUNTS_CHANGED);
           } catch (e) {
             this.errorHandler.logDebug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
           }
@@ -437,7 +434,7 @@
           } catch (e) { this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
 
-        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+        this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
     }
 
@@ -467,7 +464,7 @@
                 const worldY = (py - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
                 this.dragState.setRoutePreview({ index: seg.index, t, worldX, worldY, screenX: px, screenY: py });
                 try { this.canvas.style.cursor = 'pointer'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerMove.setCursor'); }
-                this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+                this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                 return;
               }
             }
@@ -497,7 +494,7 @@
         // DragState.setWaypointDrag() emits ROUTE_WAYPOINT_DRAG_CHANGED
         // which RouteManager also listens to. Without this order,
         // RouteManager sees the CHANGED event with no dragWaypointState.
-        this.eventBus.emit(this.eventTypes.ROUTE_WAYPOINT_DRAG_STARTED, {
+        this.eventBus.emit(window.EventTypes.ROUTE_WAYPOINT_DRAG_STARTED, {
           waypointIndex: routePos
         });
 
@@ -527,7 +524,7 @@
         if (!seg || typeof seg.index !== 'number') return;
 
         // Emit route segment insert request event (decoupled architecture)
-        this.eventBus.emit(this.eventTypes.ROUTE_SEGMENT_INSERT_REQUESTED, {
+        this.eventBus.emit(window.EventTypes.ROUTE_SEGMENT_INSERT_REQUESTED, {
           segmentIndex: seg.index,
           t: seg.t,
           tempMarker: { x: 0, y: 0, uid: '' } // Temporary marker will be positioned by RouteManager
@@ -563,8 +560,8 @@
             const indices = this._routeSources.map((_, i) => i);
             
             // Emit route edit request instead of direct call (decoupled architecture)
-            if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
-              this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+            if (this.eventBus && window.EventTypes.ROUTE_EDIT_REQUESTED) {
+              this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
                 indices: indices,
                 lengthNormalized: len,
                 sources: this._routeSources
@@ -596,8 +593,8 @@
               const indices = newSources.map((_, i) => i);
               
               // Emit route edit request instead of direct call (decoupled architecture)
-              if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
-                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+              if (this.eventBus && window.EventTypes.ROUTE_EDIT_REQUESTED) {
+                this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
                   indices: indices,
                   lengthNormalized: len,
                   sources: newSources
@@ -614,8 +611,8 @@
                 this._computeRouteLengthNormalized(prev) : 0;
               
               // Emit route edit request instead of direct call (decoupled architecture)
-              if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
-                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+              if (this.eventBus && window.EventTypes.ROUTE_EDIT_REQUESTED) {
+                this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
                   indices: prevIdx,
                   lengthNormalized: len,
                   sources: prev
@@ -623,15 +620,15 @@
               }
               
               // Emit route looping change instead of direct assignment (decoupled architecture)
-              if (this.eventBus && this.eventTypes.ROUTE_LOOPING_CHANGED) {
-                this.eventBus.emit(this.eventTypes.ROUTE_LOOPING_CHANGED, {
+              if (this.eventBus && window.EventTypes.ROUTE_LOOPING_CHANGED) {
+                this.eventBus.emit(window.EventTypes.ROUTE_LOOPING_CHANGED, {
                   looping: !!this._routeInsert.prevRouteLooping
                 });
               }
             } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.restoreRoute'); }
           }
           this.dragState.setRouteInsert(null);
-          this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+          this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
         }
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.main'); }
     }
@@ -695,7 +692,7 @@
         const lengthNormalized = lengthPx / (this.config.MAP_SIZE || 8192);
 
         // Emit route edit request event (decoupled from map)
-        this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+        this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
           indices: newIndices,
           lengthNormalized: lengthNormalized,
           sources: newSources
@@ -724,8 +721,8 @@
               this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
             
             // Emit route edit request instead of direct call (decoupled architecture)
-            if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
-              this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+            if (this.eventBus && window.EventTypes.ROUTE_EDIT_REQUESTED) {
+              this.eventBus.emit(window.EventTypes.ROUTE_EDIT_REQUESTED, {
                 indices: prevIdx,
                 lengthNormalized: len,
                 sources: prev
@@ -733,8 +730,8 @@
             }
 
             // Emit route looping change instead of direct assignment (decoupled architecture)
-            if (this.eventBus && this.eventTypes.ROUTE_LOOPING_CHANGED && this._routeInsert.prevRouteLooping !== undefined) {
-              this.eventBus.emit(this.eventTypes.ROUTE_LOOPING_CHANGED, {
+            if (this.eventBus && window.EventTypes.ROUTE_LOOPING_CHANGED && this._routeInsert.prevRouteLooping !== undefined) {
+              this.eventBus.emit(window.EventTypes.ROUTE_LOOPING_CHANGED, {
                 looping: !!this._routeInsert.prevRouteLooping
               });
             }

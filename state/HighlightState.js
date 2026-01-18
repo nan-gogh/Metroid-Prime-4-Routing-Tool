@@ -2,11 +2,9 @@
 // Manages layer highlighting state and configuration
 
 (function (global) {
-  class HighlightState {
+  class HighlightState extends BaseStateManager {
     constructor(config, options = {}) {
-      this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      super(config, options);
       this.highlightedLayers = new Set();
       this.highlightConfig = {}; // layerKey -> { scale }
       this.highlightScaleMultiplier = 1.0;
@@ -183,17 +181,6 @@
         }
       } catch (e) {
         this.errorHandler.logDebug('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e });
-      }
-    }
-
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('HighlightState._emitChange failed', 'HighlightState._emitChange', { error: e, event });
       }
     }
 

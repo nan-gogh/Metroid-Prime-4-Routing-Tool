@@ -2,11 +2,9 @@
 // Manages marker selection state
 
 (function (global) {
-  class SelectionState {
+  class SelectionState extends BaseStateManager {
     constructor(config, options = {}) {
-      this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      super(config, options);
       this.selectedMarker = null;
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
@@ -183,17 +181,6 @@
         }
       } catch (e) {
         this.errorHandler.logDebug('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e });
-      }
-    }
-
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('SelectionState._emitChange failed', 'SelectionState._emitChange', { error: e, event });
       }
     }
 

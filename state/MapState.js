@@ -2,11 +2,9 @@
 // Complete view/pan/zoom state management for the map
 
 (function (global) {
-  class MapState {
+  class MapState extends BaseStateManager {
     constructor(config, options = {}) {
-      this.config = config || global.MP4Config || {};
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      super(config, options);
 
       // View state
       this.panX = 0;
@@ -243,17 +241,6 @@
              screen.x <= this.canvasWidth + padding &&
              screen.y >= -padding &&
              screen.y <= this.canvasHeight + padding;
-    }
-
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('MapState._emitChange failed', 'MapState._emitChange', { error: e, event });
-      }
     }
 
     // State persistence (consent-gated)

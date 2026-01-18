@@ -3,10 +3,9 @@
 // Single source of truth for drag state across the application
 
 (function (global) {
-  class DragState {
-    constructor(eventBus, errorHandler) {
-      this.eventBus = eventBus || window.eventBus;
-      this.errorHandler = errorHandler || (global.errorHandler);
+  class DragState extends BaseStateManager {
+    constructor(config, options = {}) {
+      super(config, options);
 
       // Core dragging states
       this.isDragging = false; // Basic panning
@@ -294,18 +293,6 @@
       }
 
       return cancelled;
-    }
-
-    // ===== INTERNAL =====
-
-    _emitChange(eventType, data) {
-      if (this.eventBus && eventType) {
-        try {
-          this.eventBus.emit(eventType, data);
-        } catch (e) {
-          this.errorHandler && this.errorHandler.logDebug(`DragState event emission failed: ${eventType}`, 'DragState._emitChange', { error: e, eventType, data });
-        }
-      }
     }
 
     // ===== SERIALIZATION =====

@@ -1,8 +1,7 @@
 // utils/EventTypes.js
 // Event type constants for EventBus communication
 
-(function (global) {
-  const EventTypes = {
+const EventTypes = {
     // Render Events
     RENDER_REQUESTED: 'render:requested',
     /**
@@ -61,6 +60,7 @@
      */
     ROUTE_UPDATED: 'route:updated',
     ROUTE_CLEARED: 'route:cleared',
+    ROUTE_LOOPING_CHANGED: 'route:looping-changed',
     ROUTE_DIRECTION_CHANGED: 'route:direction-changed',
     /**
      * Scaffolding: emitted when a route is expanded (e.g. nearby expansion
@@ -183,6 +183,9 @@
 
     // Storage Events (enhanced)
     HIGHLIGHT_SETTINGS_SAVE_REQUESTED: 'storage:highlight-settings-save',
+    LAYER_VISIBILITY_SAVE_REQUESTED: 'storage:layer-visibility-save',
+    HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED: 'storage:highlight-multiplier-save',
+    HIGHLIGHTED_LAYERS_SAVE_REQUESTED: 'storage:highlighted-layers-save',
 
     // Tileset Events (enhanced)
     TILESET_STATE_CHANGED: 'tileset:state-changed',
@@ -204,6 +207,4 @@
   };
 
   // Make constants available globally
-  global.EventTypes = EventTypes;
-
-})(typeof window !== 'undefined' ? window : global);
+  window.EventTypes = EventTypes;

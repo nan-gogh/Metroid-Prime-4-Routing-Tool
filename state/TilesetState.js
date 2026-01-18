@@ -2,11 +2,9 @@
 // Manages tileset and display settings
 
 (function (global) {
-  class TilesetState {
+  class TilesetState extends BaseStateManager {
     constructor(config, options = {}) {
-      this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      super(config, options);
       this.tileset = 'sat'; // Default tileset
       this.grayscale = false;
     }
@@ -109,17 +107,6 @@
         }
       } catch (e) {
         this.errorHandler.logDebug('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e });
-      }
-    }
-
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('TilesetState._emitChange failed', 'TilesetState._emitChange', { error: e, event });
       }
     }
 

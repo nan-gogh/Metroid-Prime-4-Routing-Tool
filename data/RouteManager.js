@@ -33,69 +33,59 @@ class RouteManager {
     // Set up event listeners for decoupled communication
     _setupEventListeners() {
         if (this.eventBus && window.EventTypes) {
-            // Store unsubscribe handles for cleanup on destroy()
-            const unsub1 = this.eventBus.on(window.EventTypes.ROUTE_EDIT_REQUESTED, (data) => {
-                try {
-                    // Handle waypoint drag finalization via ROUTE_EDIT_REQUESTED
-                    // This is how RouteEditHandler signals drop target detection completion
-                    if (data && data.finalizeWaypointDrag) {
-                        this.finalizeWaypointDrag(data.snapToMarker, data.cancel);
-                        return;
-                    }
-                    
-                    // Normal route edit request
-                    if (data && typeof data.indices !== 'undefined') {
-                        this.setRoute(data.indices, data.lengthNormalized, data.sources);
-                    }
-                } catch (e) {
-                    this.errorHandler.logDebug('RouteManager ROUTE_EDIT_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
-                }
-            });
-            if (typeof unsub1 === 'function') this._eventUnsubscribers.push(unsub1);
+            // Use EventUtils for standardized event handling
+            const eventManager = window.EventUtils.createEventManager(this);
 
-            const unsub2 = this.eventBus.on(window.EventTypes.ROUTE_LOOPING_CHANGED, (data) => {
-                try {
-                    if (typeof data.looping === 'boolean') {
-                        this.setRouteLooping(data.looping);
-                    }
-                } catch (e) {
-                    this.errorHandler.logDebug('RouteManager ROUTE_LOOPING_CHANGED handler failed', 'RouteManager._setupEventListeners', { error: e });
-                }
-            });
-            if (typeof unsub2 === 'function') this._eventUnsubscribers.push(unsub2);
+            eventManager.setup(this.eventBus, [
+                {
+                    event: window.EventTypes.ROUTE_EDIT_REQUESTED,
+                    handler: (data) => {
+                        // Handle waypoint drag finalization via ROUTE_EDIT_REQUESTED
+                        // This is how RouteEditHandler signals drop target detection completion
+                        if (data && data.finalizeWaypointDrag) {
+                            this.finalizeWaypointDrag(data.snapToMarker, data.cancel);
+                            return;
+                        }
 
-            const unsub3 = this.eventBus.on(window.EventTypes.ROUTE_SEGMENT_INSERT_REQUESTED, (data) => {
-                try {
-                    if (data && typeof data.segmentIndex === 'number' && typeof data.t === 'number' && data.tempMarker) {
-                        this.insertWaypointAtSegment(data.segmentIndex, data.t, data.tempMarker);
+                        // Normal route edit request
+                        if (data && typeof data.indices !== 'undefined') {
+                            this.setRoute(data.indices, data.lengthNormalized, data.sources);
+                        }
                     }
-                } catch (e) {
-                    this.errorHandler.logDebug('RouteManager ROUTE_SEGMENT_INSERT_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
-                }
-            });
-            if (typeof unsub3 === 'function') this._eventUnsubscribers.push(unsub3);
-
-            const unsub4 = this.eventBus.on(window.EventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED, (data) => {
-                try {
-                    if (data && typeof data.waypointIndex === 'number' && typeof data.worldX === 'number' && typeof data.worldY === 'number') {
-                        this.updateWaypointPosition(data.waypointIndex, data.worldX, data.worldY);
+                },
+                {
+                    event: window.EventTypes.ROUTE_LOOPING_CHANGED,
+                    handler: (data) => {
+                        if (typeof data.looping === 'boolean') {
+                            this.setRouteLooping(data.looping);
+                        }
                     }
-                } catch (e) {
-                    this.errorHandler.logDebug('RouteManager ROUTE_WAYPOINT_DRAG_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
-                }
-            });
-            if (typeof unsub4 === 'function') this._eventUnsubscribers.push(unsub4);
-
-            const unsub5 = this.eventBus.on(window.EventTypes.ROUTE_WAYPOINT_DRAG_STARTED, (data) => {
-                try {
-                    if (data && typeof data.waypointIndex === 'number') {
-                        this.startWaypointDrag(data.waypointIndex);
+                },
+                {
+                    event: window.EventTypes.ROUTE_SEGMENT_INSERT_REQUESTED,
+                    handler: (data) => {
+                        if (data && typeof data.segmentIndex === 'number' && typeof data.t === 'number' && data.tempMarker) {
+                            this.insertWaypointAtSegment(data.segmentIndex, data.t, data.tempMarker);
+                        }
                     }
-                } catch (e) {
-                    this.errorHandler.logDebug('RouteManager ROUTE_WAYPOINT_DRAG_STARTED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                },
+                {
+                    event: window.EventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED,
+                    handler: (data) => {
+                        if (data && typeof data.waypointIndex === 'number' && typeof data.worldX === 'number' && typeof data.worldY === 'number') {
+                            this.updateWaypointPosition(data.waypointIndex, data.worldX, data.worldY);
+                        }
+                    }
+                },
+                {
+                    event: window.EventTypes.ROUTE_WAYPOINT_DRAG_STARTED,
+                    handler: (data) => {
+                        if (data && typeof data.waypointIndex === 'number') {
+                            this.startWaypointDrag(data.waypointIndex);
+                        }
+                    }
                 }
-            });
-            if (typeof unsub5 === 'function') this._eventUnsubscribers.push(unsub5);
+            ], this, this.errorHandler);
 
             // NOTE: ROUTE_WAYPOINT_DRAG_FINALIZED is handled by RouteEditHandler, which
             // detects the drop target and emits ROUTE_EDIT_REQUESTED with proper data.

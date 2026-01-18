@@ -2,16 +2,14 @@
 // Manages edit mode state (markers and route editing)
 
 (function (global) {
-  class EditModeState {
+  class EditModeState extends BaseStateManager {
     /**
      * Creates a new EditModeState for managing edit mode state
      * @param {Object} config - Configuration object (defaults to global MP4Config)
      * @param {Object} options - Options object with eventBus and errorHandler (defaults to window.eventBus)
      */
     constructor(config, options = {}) {
-      this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
-      this.errorHandler = options.errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+      super(config, options);
       this.editMarkersMode = false;
       this.editRouteMode = false;
     }
@@ -174,16 +172,7 @@
       }
     }
 
-    // Event emission helper
-    _emitChange(event, data) {
-      try {
-        if (this.eventBus) {
-          this.eventBus.emit(event, data);
-        }
-      } catch (e) {
-        this.errorHandler.logDebug('EditModeState._emitChange failed', 'EditModeState._emitChange', { error: e, event });
-      }
-    }
+
 
     // State serialization for debugging/testing
     toJSON() {

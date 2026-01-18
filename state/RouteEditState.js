@@ -2,10 +2,9 @@
 // Manages route editing state (insertion points, candidates, etc.)
 
 (function (global) {
-  class RouteEditState {
-    constructor(config) {
-      this.eventBus = config.eventBus;
-      this.errorHandler = config.errorHandler || new ErrorHandler();
+  class RouteEditState extends BaseStateManager {
+    constructor(config, options = {}) {
+      super(config, options);
     }
 
     /**
@@ -94,18 +93,6 @@
      */
     hasRouteNodeCandidate() {
       return this.routeNodeCandidate !== null;
-    }
-
-    /**
-     * Emit state change event
-     * @private
-     */
-    _emitChange(eventType, data) {
-      try {
-        this.eventBus.emit(eventType, data);
-      } catch (e) {
-        this.errorHandler.logError(e, 'RouteEditState._emitChange');
-      }
     }
   }
 
