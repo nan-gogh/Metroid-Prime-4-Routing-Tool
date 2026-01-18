@@ -61,8 +61,23 @@
         }
         
         // Ignore when typing in form controls, buttons, links or contenteditable elements
+        // Exception: allow `Space` to be handled when a slider (`<input type="range">`) has focus
         const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.tagName === 'BUTTON' || active.tagName === 'A' || active.isContentEditable)) return;
+        if (active) {
+          const tag = active.tagName;
+          const type = (active.type || '').toLowerCase();
+          const isFormControl = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A' || active.isContentEditable);
+          if (isFormControl) {
+            // If it's a range input (slider) and the user pressed Space, allow the Space
+            // key to be handled by global shortcuts (toggle sidebar). For all other
+            // form controls, ignore keyboard shortcuts to avoid interfering with typing.
+            if ((ev.code === 'Space' || ev.key === ' ') && tag === 'INPUT' && type === 'range') {
+              // fall through and handle Space below
+            } else {
+              return;
+            }
+          }
+        }
 
         // Toggle sidebar with Space
         if (ev.code === 'Space' || ev.key === ' ') {
