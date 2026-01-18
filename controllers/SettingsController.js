@@ -255,7 +255,8 @@
           let initial = (this.highlightState && typeof this.highlightState.highlightScaleMultiplier === 'number') ? this.highlightState.highlightScaleMultiplier : (this.config && this.config.MARKER_SCALING ? this.config.MARKER_SCALING.highlightMultiplier : 2.0);
           highlightSlider.value = initial;
           // Display a user-facing mapped value (legacy UI expectation)
-          const displayInitial = Number(initial) + 0.6;
+          // Map internal highlight multiplier (1.5-2.5) to a user percent starting near 110%
+          const displayInitial = Number(initial) - 0.4;
           highlightLabel.textContent = `${Math.round(displayInitial * 100)}%`;
 
           // Initial slider fill calculation
@@ -273,7 +274,7 @@
             if (evTarget) evTarget.value = val;
 
             // Update UI label (legacy mapping)
-            const display = Number(val) + 0.6;
+            const display = Number(val) - 0.4;
             highlightLabel.textContent = `${Math.round(display * 100)}%`;
 
             try {
