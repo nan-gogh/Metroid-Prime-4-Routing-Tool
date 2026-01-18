@@ -25,6 +25,15 @@
     RENDERER_OVERLAY_UPDATED: 'renderer:overlay-updated',
 
     // Layer Events
+    /**
+     * Emitted when layer visibility changes.
+     * @event LAYER_VISIBILITY_CHANGED
+     * @param {Object} data
+     * @param {string} data.layerKey - The layer identifier
+     * @param {boolean} data.visible - Whether the layer is visible
+     * @param {Object} [data.layerVisibility] - Complete layer visibility state (emitted by LayerState)
+     * @param {string} [data.source] - Source of the change (emitted by controllers)
+     */
     LAYER_VISIBILITY_CHANGED: 'layer:visibility-changed',
     LAYER_COUNTS_CHANGED: 'layer:counts-changed',
     LAYER_HIGHLIGHT_CHANGED: 'layer:highlight-changed',
@@ -39,6 +48,17 @@
     ROUTE_COMPUTATION_COMPLETED: 'route:computation-completed',
     ROUTE_COMPUTATION_FAILED: 'route:computation-failed',
     ROUTE_EDIT_REQUESTED: 'route:edit-requested',
+    /**
+     * Emitted when route data changes.
+     * @event ROUTE_UPDATED
+     * @param {Object} data
+     * @param {Array<number>} [data.route] - Array of route indices (RouteState format)
+     * @param {number} [data.lengthNormalized] - Normalized route length 0-1 (RouteState format)
+     * @param {Array} [data.sources] - Route source objects (RouteState format)
+     * @param {boolean} [data.looping] - Whether route loops (RouteState format)
+     * @param {number} [data.routeLength] - Route length in pixels (RouteManager format)
+     * @param {number} [data.pointCount] - Number of points in route (RouteManager format)
+     */
     ROUTE_UPDATED: 'route:updated',
     ROUTE_CLEARED: 'route:cleared',
     ROUTE_DIRECTION_CHANGED: 'route:direction-changed',
@@ -62,9 +82,27 @@
     ROUTE_WAYPOINT_DRAG_FINALIZED: 'route:waypoint-drag-finalized',
 
     // Marker Events
+    /**
+     * Emitted when a marker is selected.
+     * @event MARKER_SELECTED
+     * @param {Object} data
+     * @param {Object} data.marker - The selected marker object
+     * @param {string} data.layerKey - The layer containing the marker
+     * @param {number} data.layerIndex - Index of marker in layer array
+     */
     MARKER_SELECTED: 'marker:selected',
     MARKER_DESELECTED: 'marker:deselected',
     MARKER_MULTI_SELECTED: 'marker:multi-selected',
+    /**
+     * Emitted to request marker editing operations.
+     * @event MARKER_EDIT_REQUESTED
+     * @param {Object} data
+     * @param {string} data.action - Action type ('add', 'remove', 'move', 'edit')
+     * @param {number} [data.x] - X coordinate for add operations
+     * @param {number} [data.y] - Y coordinate for add operations
+     * @param {Object} [data.marker] - Marker object for edit operations
+     * @param {string} [data.layerKey] - Layer key for operations
+     */
     MARKER_EDIT_REQUESTED: 'marker:edit-requested',
     MARKER_ADDED: 'marker:added',
     MARKER_REMOVED: 'marker:removed',
@@ -72,6 +110,16 @@
     MARKER_EDITED: 'marker:edited',
 
     // Input Events
+    /**
+     * Emitted on pointer down events.
+     * @event INPUT_POINTER_DOWN
+     * @param {Object} data
+     * @param {number} data.pointerId - Unique pointer identifier
+     * @param {number} data.clientX - Client X coordinate
+     * @param {number} data.clientY - Client Y coordinate
+     * @param {number} data.button - Mouse button (0=left, 1=middle, 2=right)
+     * @param {number} data.timeStamp - Event timestamp
+     */
     INPUT_POINTER_DOWN: 'input:pointer-down',
     INPUT_POINTER_MOVE: 'input:pointer-move',
     INPUT_POINTER_UP: 'input:pointer-up',
@@ -84,6 +132,15 @@
     INPUT_ROTATE: 'input:rotate',
 
     // State Events
+    /**
+     * Emitted when map view (pan/zoom) changes.
+     * @event MAP_VIEW_CHANGED
+     * @param {Object} data
+     * @param {number} data.panX - X pan offset
+     * @param {number} data.panY - Y pan offset
+     * @param {number} data.zoom - Zoom level
+     * @param {string} [data.triggeredBy] - What triggered the change ('pan', 'zoomIn', 'zoomOut', etc.)
+     */
     MAP_VIEW_CHANGED: 'map:view-changed',
     MAP_RESOLUTION_CHANGED: 'map:resolution-changed',
     /**

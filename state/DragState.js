@@ -321,6 +321,18 @@
         hasActiveDrag: this.hasActiveDrag
       };
     }
+
+    // State persistence methods (for consistency with other state managers)
+    // DragState manages transient operations, so these are no-ops
+    saveToStorage() {
+      // Drag state is transient and not persisted
+      return false;
+    }
+
+    loadFromStorage() {
+      // Drag state is transient and not loaded from storage
+      return false;
+    }
   }
 
   // Export to global scope

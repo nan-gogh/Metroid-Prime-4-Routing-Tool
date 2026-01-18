@@ -12,15 +12,13 @@
      * Creates a new RouteRenderer instance.
      * @param {Object} mapState - The map state manager
      * @param {Object} layerState - The layer state manager
-     * @param {Object} routeState - The route state manager
      * @param {Object} routeAnimationState - The route animation state manager
      * @param {Object} config - Configuration object from MP4Config
      * @param {string} routeColor - Route color (defaults to LAYERS.route.color)
      */
-    constructor(mapState, layerState, routeState, routeAnimationState, config, routeColor) {
+    constructor(mapState, layerState, routeAnimationState, config, routeColor) {
       this.mapState = mapState;
       this.layerState = layerState;
-      this.routeState = routeState;
       this.routeAnimationState = routeAnimationState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');

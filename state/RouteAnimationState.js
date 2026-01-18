@@ -226,6 +226,54 @@
         this.errorHandler.logDebug('RouteAnimationState._emitChange failed', 'RouteAnimationState._emitChange', { error: e, event });
       }
     }
+
+    // State persistence methods
+    saveToStorage() {
+      try {
+        const animationData = {
+          animationSpeed: this.animationSpeed,
+          lineWidth: this.lineWidth,
+          animationDirection: this.animationDirection
+        };
+        
+        if (window.storageService) {
+          window.storageService.set(this.config.STORAGE_KEYS?.ROUTE_ANIMATION, animationData);
+        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveRouteAnimation === 'function') {
+          StorageUtils.saveRouteAnimation(animationData);
+        }
+      } catch (e) {
+        this.errorHandler.logDebug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
+      }
+    }
+
+    loadFromStorage() {
+      try {
+        let animationData = null;
+        
+        if (window.storageService) {
+          animationData = window.storageService.get(this.config.STORAGE_KEYS?.ROUTE_ANIMATION);
+        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadRouteAnimation === 'function') {
+          animationData = StorageUtils.loadRouteAnimation();
+        }
+        
+        if (animationData && typeof animationData === 'object') {
+          if (typeof animationData.animationSpeed === 'number') {
+            this.animationSpeed = animationData.animationSpeed;
+          }
+          if (typeof animationData.lineWidth === 'number') {
+            this.lineWidth = animationData.lineWidth;
+          }
+          if (typeof animationData.animationDirection === 'number') {
+            this.animationDirection = animationData.animationDirection;
+          }
+          return true;
+        }
+        return false;
+      } catch (e) {
+        this.errorHandler.logDebug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
+        return false;
+      }
+    }
   }
 
   // Register globally

@@ -3,10 +3,9 @@
 
 (function (global) {
   class OverlayRenderer {
-    constructor(mapState, selectionState, routeState, config, routeColor, eventBus) {
+    constructor(mapState, selectionState, config, routeColor, eventBus) {
       this.mapState = mapState;
       this.selectionState = selectionState;
-      this.routeState = routeState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
       this.errorHandler = global.errorHandler;

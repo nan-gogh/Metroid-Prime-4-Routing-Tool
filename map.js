@@ -36,7 +36,6 @@ class InteractiveMap {
         this.editModeState = new EditModeState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.highlightState = new HighlightState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.tilesetState = new TilesetState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.routeState = new RouteState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.routeEditState = new RouteEditState({ eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.dragState = new DragState(window.eventBus, this.errorHandler);
@@ -74,9 +73,7 @@ class InteractiveMap {
             }
 
         // Initialize routeState with current route looping (after routeManager is created)
-        if (this.routeState) {
-            this.routeState.setRouteLooping(this.routeLooping || false);
-        }
+        // RouteState removed - route looping is managed by RouteManager
 
         // Set up ImageState callback for renderer dirty marking
         if (this.imageState) {
@@ -130,13 +127,13 @@ class InteractiveMap {
             }
             if (typeof RouteRenderer !== 'undefined') {
                 const routeColor = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : '#00ffb7ff';
-                this.routeRenderer = new RouteRenderer(this.mapState, this.layerState, this.routeState, this.routeAnimationState, MP4Config, routeColor);
+                this.routeRenderer = new RouteRenderer(this.mapState, this.layerState, this.routeAnimationState, MP4Config, routeColor);
                 this.routeRenderer.map = this; // Keep map reference for canvas access
                 try { this.routeRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('RouteRenderer.init failed', 'InteractiveMap.init.routeRenderer', { error: e }); }
             }
             if (typeof OverlayRenderer !== 'undefined') {
                 const routeColor = (typeof LAYERS !== 'undefined' && LAYERS.route) ? LAYERS.route.color : '#00ffb7ff';
-                this.overlayRenderer = new OverlayRenderer(this.mapState, this.selectionState, this.routeState, MP4Config, routeColor);
+                this.overlayRenderer = new OverlayRenderer(this.mapState, this.selectionState, MP4Config, routeColor, window.eventBus);
                 try { this.overlayRenderer.init(); } catch (e) { moduleErrorHandler.logDebug('OverlayRenderer.init failed', 'InteractiveMap.init.overlayRenderer', { error: e }); }
             }
             if (typeof RenderPipeline !== 'undefined') {
