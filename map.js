@@ -2517,18 +2517,28 @@ async function init() {
                 {
                     event: window.EventTypes.MAP_VIEW_CHANGED,
                     handler: (data) => {
-                        // MAP_VIEW_CHANGED event comes FROM mapState, so don't call setPan/setZoom again
-                        // (that would create an infinite loop). Just handle derived effects and rendering.
-                        if (data && map && map.mapState) {
-                            // If zoom changed, update resolution and image state
-                            if (typeof data.zoom === 'number' && data.zoom !== map.mapState.zoom) {
-                                map.imageState && map.imageState.updateResolution && map.imageState.updateResolution();
-                                map.updateResolution && map.updateResolution();
-                            }
-                            // Trigger render for view changes (map.mapState already has the new panX, panY, zoom)
-                            if (map && typeof map.render === 'function') {
-                                map.render();
-                            }
+                        // MAP_VIEW_CHANGED event comes FROM MapState. Sync the map's local
+                        // mirror of pan/zoom (but avoid calling MapState setters here to
+                        // prevent loops). If zoom changed, update image resolution and UI.
+                        if (!data || !map) return;
+
+                        const newZoom = (typeof data.zoom === 'number') ? data.zoom : map.zoom;
+                        const zoomChanged = (typeof newZoom === 'number' && newZoom !== map.zoom);
+
+                        // Sync local mirror values (safe, does not re-emit MAP_VIEW_CHANGED)
+                        map.zoom = newZoom;
+                        if (typeof data.panX === 'number') map.panX = data.panX;
+                        if (typeof data.panY === 'number') map.panY = data.panY;
+
+                        // If zoom changed, recompute image resolution requirements
+                        if (zoomChanged) {
+                            try { map.imageState && map.imageState.updateResolution && map.imageState.updateResolution(); } catch (e) {}
+                            try { map.updateResolution && map.updateResolution(); } catch (e) {}
+                        }
+
+                        // Trigger a render for view changes
+                        if (typeof map.render === 'function') {
+                            try { map.render(); } catch (e) {}
                         }
                     }
                 },
