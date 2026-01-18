@@ -56,7 +56,7 @@
     }
 
     run() {
-      console.log('Running LayerState tests...\n');
+      this.errorHandler.logError('Running LayerState tests...\n', 'function');
 
       for (const test of this.tests) {
         try {

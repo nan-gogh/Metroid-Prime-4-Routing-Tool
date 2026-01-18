@@ -16,13 +16,12 @@
       this.mapState = map.mapState;
       this.selectionState = map.selectionState;
       this.editModeState = map.editModeState;
-      this.routeState = map.routeState;
-      this.layerState = map.layerState;
+      this.dragState = map.dragState; // Centralized drag state
       this.imageState = map.imageState;
 
       // Create route edit handler for route-specific interactions
       if (typeof RouteEditHandler !== 'undefined') {
-        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus, this.editModeState);
+        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus, this.editModeState, this.dragState);
       }
 
       // Create marker edit handler for marker-specific interactions
@@ -48,7 +47,6 @@
       
       // Pointer state
       this.pointers = new Map(); // pointerId -> {x, y, clientX, clientY, downTime}
-      this.isDragging = false;
       this.lastMouseX = 0;
       this.lastMouseY = 0;
       this.pointerDownTime = 0;
@@ -64,9 +62,11 @@
           panY: { get: () => this.mapState.panY, set: (v) => this.mapState.panY = v },
           zoom: { get: () => this.mapState.zoom, set: (v) => this.mapState.zoom = v },
           canvas: { get: () => this.map.canvas },
+          isDragging: { get: () => this.dragState.isDragging },
+          hasActiveDrag: { get: () => this.dragState.hasActiveDrag },
           editMarkersMode: { get: () => this.editModeState ? this.editModeState.editMarkersMode : false },
           editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
-          _draggingMarker: { get: () => this.map._draggingMarker, set: (v) => this.map._draggingMarker = v }
+          _draggingMarker: { get: () => this.dragState.draggingMarker, set: (v) => this.dragState.draggingMarker = v }
         });
 
         // Pre-bind frequently called methods (eliminates lookup overhead)
@@ -205,7 +205,7 @@
         if (hit && hit.layerKey === 'customMarkers') {
           if (this.editMarkersMode) {
             // Prepare for marker drag
-            this.map._draggingCandidate = {
+            this.dragState.setDraggingCandidate({
               uid: hit.marker.uid,
               layerKey: hit.layerKey,
               pointerId: ev.pointerId,
@@ -213,21 +213,20 @@
               offsetY: localY - (hit.marker.y * (this.config.MAP_SIZE || 8192) * this.map.zoom + this.map.panY),
               startClientX: ev.clientX,
               startClientY: ev.clientY
-            };
-            this.isDragging = false;
+            });
+            this.dragState.setDragging(false);
             this.pointerDownTime = downTime;
             this.map.pointerDownTime = downTime; // Set on map for click handler
             this.map.canvas.style.cursor = 'grabbing';
           } else {
             // Normal mode - record for click detection
-            this.isDragging = false;
             this.pointerDownTime = downTime;
             this.map.pointerDownTime = downTime; // Set on map for click handler
             try { this.map.canvas.style.cursor = 'pointer'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           }
         } else {
           // Start single-pointer pan
-          this.isDragging = true;
+          this.dragState.setDragging(true);
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
           this.pointerDownTime = downTime;
@@ -286,7 +285,7 @@
           return;
         }
 
-        // Handle basic panning
+        // Handle basic panning (only when basic panning is active and no specialized drags)
         if (this.isDragging) {
           this.panX += ev.clientX - this.lastMouseX;
           this.panY += ev.clientY - this.lastMouseY;
@@ -294,8 +293,8 @@
           this.lastMouseY = ev.clientY;
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
           // Skip hover check during pan - it's expensive and unnecessary
-        } else {
-          // Update hover state (only when not panning)
+        } else if (!this.hasActiveDrag) {
+          // Update hover state (only when not dragging anything)
           this._checkMarkerHover(localX, localY);
         }
       } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
@@ -339,9 +338,9 @@
 
     _handleMarkerDragPromotion(ev, localX, localY) {
       // Promote marker drag candidates
-      if (this.map._draggingCandidate && ev.pointerId === this.map._draggingCandidate.pointerId) {
-        const dx = ev.clientX - this.map._draggingCandidate.startClientX;
-        const dy = ev.clientY - this.map._draggingCandidate.startClientY;
+      if (this.dragState.draggingCandidate && ev.pointerId === this.dragState.draggingCandidate.pointerId) {
+        const dx = ev.clientX - this.dragState.draggingCandidate.startClientX;
+        const dy = ev.clientY - this.dragState.draggingCandidate.startClientY;
         if (Math.hypot(dx, dy) > MP4Config.ROUTE.MOVE_THRESHOLD) { // MOVE_THRESHOLD
           this._promoteMarkerDrag(ev);
         }
@@ -358,86 +357,52 @@
         const nx = Math.max(0, Math.min(1, worldX));
         const ny = Math.max(0, Math.min(1, worldY));
 
-        // Update marker in LAYERS
-        if (global.LAYERS && global.LAYERS.customMarkers && Array.isArray(global.LAYERS.customMarkers.markers)) {
-          const idx = global.LAYERS.customMarkers.markers.findIndex(m => m.uid === this._draggingMarker.uid);
-          if (idx >= 0) {
-            const oldX = global.LAYERS.customMarkers.markers[idx].x;
-            const oldY = global.LAYERS.customMarkers.markers[idx].y;
-            global.LAYERS.customMarkers.markers[idx].x = nx;
-            global.LAYERS.customMarkers.markers[idx].y = ny;
-            this.errorHandler && this.errorHandler.logDebug(`Marker ${this._draggingMarker.uid} moved from (${oldX}, ${oldY}) to (${nx}, ${ny})`, 'PointerHandler._onPointerMove.markerMoved', { markerUid: this._draggingMarker.uid, oldX, oldY, newX: nx, newY: ny });
-            
-            // Note: Save only happens at drag end to avoid excessive storage writes
-            try { this.map.customMarkers = global.LAYERS.customMarkers.markers; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerMove.updateCustomMarkers'); }
-            this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
-            try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerMove.setCursor'); }
-          }
+        // Use DragState to update marker position during drag
+        this.dragState.updateDraggingMarkerPosition(nx, ny);
+        
+        // Mark marker renderer dirty for immediate visual feedback
+        if (this.map && typeof this.map.markRendererDirty === 'function') {
+          this.map.markRendererDirty('MarkerRenderer');
         }
+        
+        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._handleMarkerDrag.setCursor'); }
       } catch (err) {
         NotificationUtils.showSaveError('Error in marker drag: ' + err.message);
       }
     }
 
     _promoteMarkerDrag(ev) {
-      // Find the actual marker object to store original position for cleanup
-      let markerObj = null;
-      try {
-        if (this.map._draggingCandidate && this.map._draggingCandidate.layerKey && LAYERS[this.map._draggingCandidate.layerKey]) {
-          const layer = LAYERS[this.map._draggingCandidate.layerKey];
-          if (Array.isArray(layer.markers)) {
-            markerObj = layer.markers.find(m => m.uid === this.map._draggingCandidate.uid);
+      // Use DragState to promote the candidate to active drag
+      if (this.dragState.promoteDraggingCandidate(ev)) {
+        // Clear selection if dragging currently selected marker
+        try {
+          if (this.map.selectedMarker && this.map.selectedMarker.uid === this._draggingMarker.uid &&
+              this.map.selectedMarkerLayer === this._draggingMarker.layerKey) {
+            this.map.selectedMarker = null;
+            this.map.selectedMarkerLayer = null;
+            try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
           }
-        }
-      } catch (e) { this.errorHandler.logDebug('Failed to find marker object for drag:', 'PointerHandler._promoteMarkerDrag', { error: e }); }
-      
-      this._draggingMarker = {
-        uid: this.map._draggingCandidate.uid,
-        layerKey: this.map._draggingCandidate.layerKey,
-        pointerId: this.map._draggingCandidate.pointerId,
-        offsetX: this.map._draggingCandidate.offsetX,
-        offsetY: this.map._draggingCandidate.offsetY,
-        // Store original position for cleanup on page unload
-        _originalX: markerObj ? markerObj.x : undefined,
-        _originalY: markerObj ? markerObj.y : undefined
-      };
-      
-      // Clear selection if dragging currently selected marker
-      try {
-        if (this.map.selectedMarker && this.map.selectedMarker.uid === this._draggingMarker.uid && 
-            this.map.selectedMarkerLayer === this._draggingMarker.layerKey) {
-          this.map.selectedMarker = null;
-          this.map.selectedMarkerLayer = null;
-          try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
-        }
-      } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
-      
-      this.map._draggingCandidate = null;
-      this.map.pointerDownTime = 0;
-      try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
+        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
+
+        this.map.pointerDownTime = 0;
+        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
+      }
     }
 
     _finalizeDrags(ev, localX, localY) {
-      this.isDragging = false;
+      // Use DragState to finalize all drags
+      const hadDraggingMarker = this.dragState.hasDraggingMarker;
+      this.dragState.finalizeAllDrags(ev);
       
-      if (this.map._draggingCandidate && ev.pointerId === this.map._draggingCandidate.pointerId) {
-        this.map._draggingCandidate = null;
-      }
-      if (this._draggingMarker && ev.pointerId === this._draggingMarker.pointerId) {
-        this.errorHandler && this.errorHandler.logDebug(`Drag ended for marker: ${this._draggingMarker.uid}`, 'PointerHandler._onPointerUp.dragEnded', { markerUid: this._draggingMarker.uid });
-        try { 
+      // Save marker position if one was being dragged
+      if (hadDraggingMarker) {
+        try {
           if (this.map.markerManager) {
-            this.errorHandler && this.errorHandler.logDebug('Calling markerManager.saveToStorage', 'PointerHandler._onPointerUp.saveToStorage.start', { markerManager: !!this.map.markerManager });
             this.map.markerManager.saveToStorage();
-            this.errorHandler && this.errorHandler.logDebug('markerManager.saveToStorage completed', 'PointerHandler._onPointerUp.saveToStorage.completed', {});
-          } else {
-            NotificationUtils.showSaveError('MarkerManager not available');
           }
         } catch (e) {
-          NotificationUtils.showSaveError('Error saving custom marker position: ' + e.message);
+          this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._finalizeDrags.markerSave');
         }
-        this._draggingMarker = null;
-        this.map.pointerDownTime = 0;
       }
       
       const under = this._findMarkerAt ? this._findMarkerAt(localX, localY) : null;
@@ -516,28 +481,8 @@
       try {
         this.errorHandler && this.errorHandler.logDebug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
         
-        // Cancel any active marker drag - restore original position if possible
-        if (this._draggingMarker) {
-          this.errorHandler && this.errorHandler.logDebug(`Cancelling active marker drag for: ${this._draggingMarker.uid}`, 'PointerHandler._onPageUnload.cancelDrag', { markerUid: this._draggingMarker.uid });
-          
-          // If we have a backup position, restore it
-          if (this._draggingMarker._originalX !== undefined && this._draggingMarker._originalY !== undefined) {
-            this._draggingMarker.x = this._draggingMarker._originalX;
-            this._draggingMarker.y = this._draggingMarker._originalY;
-            this.errorHandler && this.errorHandler.logDebug('Restored marker to original position', 'PointerHandler._onPageUnload.restorePosition', { markerUid: this._draggingMarker.uid, originalX: this._draggingMarker._originalX, originalY: this._draggingMarker._originalY });
-          }
-          
-          // Clear drag state
-          this._draggingMarker = null;
-        }
-        
-        // Cancel any active route drag operations
-        this._cancelRouteDragOperations('Page unload');
-        
-        // Clear any marker drag candidates
-        if (this.map._draggingCandidate) {
-          this.map._draggingCandidate = null;
-        }
+        // Use DragState to cancel all drags (handles marker and route drag cleanup)
+        this.dragState.cancelAllDrags('Page unload');
         
         // Clear remaining transient states
         this.pointers.clear();
@@ -553,31 +498,7 @@
      * Cancel any active route drag operations and clean up pooled objects
      * @param {string} reason - Reason for cancellation
      */
-    _cancelRouteDragOperations(reason = 'Operation cancelled') {
-      try {
-        // Delegate to RouteEditHandler if available
-        if (this.map.routeEditHandler && typeof this.map.routeEditHandler.cancelOperations === 'function') {
-          this.map.routeEditHandler.cancelOperations(reason);
-        } else {
-          // Fallback: manually clean up route insert state
-          if (this.map._routeInsert) {
-            // Release pooled objects
-            if (this.map._routeInsert.tempMarker && typeof markerPool !== 'undefined') {
-              markerPool.release(this.map._routeInsert.tempMarker);
-            }
-            if (this.map._routeInsert.tempSource && typeof routeSourcePool !== 'undefined') {
-              routeSourcePool.release(this.map._routeInsert.tempSource);
-            }
-            this.map._routeInsert = null;
-          }
-          if (this.map._routeNodeCandidate) {
-            this.map._routeNodeCandidate = null;
-          }
-        }
-      } catch (e) {
-        this.errorHandler && this.errorHandler.logWarning(e, 'PointerHandler._cancelRouteDragOperations.failed', { reason });
-      }
-    }
+
   }
 
   global.PointerHandler = PointerHandler;

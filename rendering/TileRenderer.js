@@ -17,7 +17,7 @@
       this.imageState = imageState;
       this.config = config || (global.MP4Config || {});
       this._lowSpec = options.lowSpec || false;
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : (global.errorHandler || { logDebug: console.debug, logError: console.error });
+      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : global.errorHandler;
       // No direct map reference needed - all access through state managers and renderContext
     }
 
@@ -334,39 +334,39 @@
           try {
             if (window.fetch && window.createImageBitmap) {
               const controller = new AbortController();
-              try { this.imageState._imageControllers[i] = controller; } catch (e) { console.error('TileRenderer: Failed to set image controller for preload:', e); }
+              try { this.imageState._imageControllers[i] = controller; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to set image controller for preload:', 'function', e); }
               const resp = await fetch(href, { signal: controller.signal });
-              try { delete this.imageState._imageControllers[i]; } catch (e) { console.error('TileRenderer: Failed to delete image controller after fetch:', e); }
+              try { delete this.imageState._imageControllers[i]; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to delete image controller after fetch:', 'function', e); }
               if (!resp.ok) throw new Error('fetch-failed');
               const blob = await resp.blob();
               if (this.imageState._tilesetGeneration !== gen) return;
               let bmp = null;
               try { bmp = await this._runBitmapTask(() => createImageBitmap(blob)); } catch (e) { bmp = null; }
               if (bmp) {
-                try { bmp._tilesetFolder = folder; } catch (e) { console.error('TileRenderer: Failed to set tileset folder on preloaded bitmap:', e); }
-                try { this.imageState._imageBitmaps[i] = bmp; } catch (e) { console.error('TileRenderer: Failed to cache preloaded bitmap:', e); }
-                try { this.imageState.images[i] = bmp; } catch (e) { console.error('TileRenderer: Failed to cache preloaded image:', e); }
+                try { bmp._tilesetFolder = folder; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to set tileset folder on preloaded bitmap:', 'function', e); }
+                try { this.imageState._imageBitmaps[i] = bmp; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to cache preloaded bitmap:', 'function', e); }
+                try { this.imageState.images[i] = bmp; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to cache preloaded image:', 'function', e); }
                 return;
               }
             }
           } catch (err) {
-            try { delete this.imageState._imageControllers[i]; } catch (e) { console.error('TileRenderer: Failed to delete image controller on preload error:', e); }
+            try { delete this.imageState._imageControllers[i]; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to delete image controller on preload error:', 'function', e); }
           }
 
           // Fallback to <img>
           try {
             const img = new Image();
-            try { img._tilesetFolder = folder; } catch (e) { console.error('TileRenderer: Failed to set tileset folder on preloaded image:', e); }
-            try { this.imageState._imageElements[i] = img; } catch (e) { console.error('TileRenderer: Failed to cache preloaded image element:', e); }
+            try { img._tilesetFolder = folder; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to set tileset folder on preloaded image:', 'function', e); }
+            try { this.imageState._imageElements[i] = img; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to cache preloaded image element:', 'function', e); }
             img.onload = () => {
               try {
                 if (this.imageState._tilesetGeneration !== gen) { img.onload = null; img.onerror = null; img.src = ''; return; }
-                try { this.imageState.images[i] = img; } catch (e) { console.error('TileRenderer: Failed to cache preloaded image on load:', e); }
-              } catch (e) { console.error('TileRenderer: Failed to handle preloaded image load:', e); }
+                try { this.imageState.images[i] = img; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to cache preloaded image on load:', 'function', e); }
+              } catch (e) { this.errorHandler.logError('TileRenderer: Failed to handle preloaded image load:', 'function', e); }
             };
-            img.onerror = () => { try { img.onload = null; img.onerror = null; } catch (e) { console.error('TileRenderer: Failed to cleanup preloaded image handlers on error:', e); } };
+            img.onerror = () => { try { img.onload = null; img.onerror = null; } catch (e) { this.errorHandler.logError('TileRenderer: Failed to cleanup preloaded image handlers on error:', 'function', e); } };
             img.src = href;
-          } catch (e) { console.error('TileRenderer: Failed to preload tile image:', e); }
+          } catch (e) { this.errorHandler.logError('TileRenderer: Failed to preload tile image:', 'function', e); }
         })();
       } catch (e) { this.errorHandler.logDebug('TileRenderer.preloadResolution failed', 'TileRenderer.preloadResolution', { error: e }); }
     }

@@ -44,7 +44,7 @@
           this.offscreenCanvas.height = ph;
           this.offscreenCtx = this.offscreenCanvas.getContext('2d');
           // Keep pixel-clean drawing
-          try { this.offscreenCtx.imageSmoothingEnabled = true; this.offscreenCtx.imageSmoothingQuality = 'high'; } catch (e) { console.error('HeatmapRenderer._ensureBufferSize: Failed to set image smoothing:', e); }
+          try { this.offscreenCtx.imageSmoothingEnabled = true; this.offscreenCtx.imageSmoothingQuality = 'high'; } catch (e) { this.errorHandler.logError('HeatmapRenderer._ensureBufferSize: Failed to set image smoothing:', 'function', e); }
           this._lastCanvasSize = { w: cssWidth, h: cssHeight, dpr };
         }
       } catch (e) { /* ignore */ }
@@ -68,7 +68,7 @@
           renderContext.ctxHeatmap.clearRect(0, 0, cssWidth * dpr, cssHeight * dpr);
           return;
         }
-      } catch (e) { console.error('HeatmapRenderer.render: Failed to check heatmap visibility:', e); }
+      } catch (e) { this.errorHandler.logError('HeatmapRenderer.render: Failed to check heatmap visibility:', 'function', e); }
 
       // Perform the actual rendering work
       try { 
@@ -89,7 +89,7 @@
         const ph = Math.round(cssHeight * dpr);
 
         // Clear offscreen buffer
-        try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear offscreen canvas:', e); }
+        try { hmCtx.clearRect(0, 0, pw, ph); } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to clear offscreen canvas:', 'function', e); }
 
         // Clear heatmap canvas before rendering new content
         try {
@@ -97,7 +97,7 @@
           if (heatmapCtx && renderContext.canvasHeatmap) {
             heatmapCtx.clearRect(0, 0, renderContext.canvasHeatmap.width, renderContext.canvasHeatmap.height);
           }
-        } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to clear heatmap canvas:', e); }
+        } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to clear heatmap canvas:', 'function', e); }
 
         // Build buckets (coarse 8x8 grid) and draw into offscreen
         const cols = this.config.GRID.COLS, rows = this.config.GRID.ROWS;
@@ -169,10 +169,10 @@
           const heatmapCtx = renderContext.ctxHeatmap;
           if (!heatmapCtx) return; // Heatmap canvas not available
           heatmapCtx.save();
-          try { heatmapCtx.globalCompositeOperation = 'screen'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to set composite operation to screen:', e); }
+          try { heatmapCtx.globalCompositeOperation = 'screen'; } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to set composite operation to screen:', 'function', e); }
           // draw scaled (use DPR-aware drawImage)
-          try { heatmapCtx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', e); }
-          try { heatmapCtx.globalCompositeOperation = 'source-over'; } catch (e) { console.error('HeatmapRenderer._renderNow: Failed to reset composite operation:', e); }
+          try { heatmapCtx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', 'function', e); }
+          try { heatmapCtx.globalCompositeOperation = 'source-over'; } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to reset composite operation:', 'function', e); }
           heatmapCtx.restore();
         } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
 

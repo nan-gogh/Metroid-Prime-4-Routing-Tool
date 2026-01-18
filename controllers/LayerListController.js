@@ -573,7 +573,7 @@
      */
     _exitEditModeForLayer(layerKey) {
       try {
-        this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: layerKey });
+        this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: layerKey });
       } catch (e) {
         this._logError(e, 'LayerListController._exitEditModeForLayer');
       }

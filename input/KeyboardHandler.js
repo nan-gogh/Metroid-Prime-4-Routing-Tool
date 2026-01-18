@@ -54,9 +54,9 @@
                 try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
               }
             }
-            try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (err) { console.error('KeyboardHandler: Failed to update edit overlay on escape:', err); }
-          } catch (err) { console.error('KeyboardHandler: Failed to handle escape key:', err); }
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on escape:', err); }
+            try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to update edit overlay on escape:', 'function', err); }
+          } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle escape key:', 'function', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on escape:', 'function', err); }
           return;
         }
         
@@ -85,22 +85,22 @@
               }
             }
             ev.preventDefault();
-          } catch (err) { console.error('KeyboardHandler: Failed to toggle sidebar:', err); }
+          } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to toggle sidebar:', 'function', err); }
           return;
         }
 
         // Basic zoom shortcuts
         if (ev.key === '+' || ev.key === '=') {
           if (this.map && typeof this.map.zoomIn === 'function') this.map.zoomIn();
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on zoom in:', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on zoom in:', 'function', err); }
           return;
         } else if (ev.key === '-') {
           if (this.map && typeof this.map.zoomOut === 'function') this.map.zoomOut();
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on zoom out:', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on zoom out:', 'function', err); }
           return;
         } else if (ev.key === '0') {
           if (this.map && typeof this.map.resetView === 'function') this.map.resetView();
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on reset view:', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on reset view:', 'function', err); }
           return;
         }
 
@@ -122,8 +122,8 @@
                 try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitRoute'); }
               }
             }
-          } catch (err) { console.error('KeyboardHandler: Failed to handle Q key (route toggle):', err); }
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on Q key:', err); }
+          } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle Q key (route toggle):', 'function', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on Q key:', 'function', err); }
           return;
         } else if (ev.key === 'e' || ev.key === 'E') {
           try {
@@ -142,8 +142,8 @@
                 try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitMarkers'); }
               }
             }
-          } catch (err) { console.error('KeyboardHandler: Failed to handle E key (markers toggle):', err); }
-          try { ev.preventDefault(); } catch (err) { console.error('KeyboardHandler: Failed to prevent default on E key:', err); }
+          } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle E key (markers toggle):', 'function', err); }
+          try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to prevent default on E key:', 'function', err); }
           return;
         }
 
@@ -169,7 +169,11 @@
         if (ev.key === 'y' || ev.key === 'Y') {
           try {
             const btn = document.getElementById('clearRouteBtn');
-            if (btn) btn.click(); else if (this.map && this.map.clearRoute) this.map.clearRoute();
+            if (btn) btn.click(); else if (this.map && this.map.routeController && typeof this.map.routeController.clearRoute === 'function') {
+              this.map.routeController.clearRoute();
+            } else if (this.map && this.map.routeManager && typeof this.map.routeManager.clearRoute === 'function') {
+              this.map.routeManager.clearRoute();
+            }
           } catch (err) { this.errorHandler.logError('Failed to clear route via Y key', err); }
           try { ev.preventDefault(); } catch (err) { this.errorHandler.logError('Failed to prevent default on Y key', err); }
           return;

@@ -44,7 +44,7 @@
     }
 
     run() {
-      console.log('Running RouteState tests...\n');
+      this.errorHandler.logError('Running RouteState tests...\n', 'function');
 
       for (const test of this.tests) {
         try {

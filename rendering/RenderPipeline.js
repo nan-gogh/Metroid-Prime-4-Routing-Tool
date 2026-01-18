@@ -179,7 +179,7 @@
       if (validOrder.length === stageOrder.length) {
         this._stageOrder = validOrder;
       } else {
-        console.warn('RenderPipeline: Invalid stage order provided, some stages not found');
+        this.errorHandler.logError('RenderPipeline: Invalid stage order provided, some stages not found', 'function');
       }
       return this;
     }

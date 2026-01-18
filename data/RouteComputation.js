@@ -61,7 +61,13 @@ const RouteComputation = {
 
             // Set the computed route
             if (result.sources.length > 0) {
-                map.setRoute(result.indices, result.length, result.sources);
+                if (map.routeController && typeof map.routeController.setRoute === 'function') {
+                    map.routeController.setRoute(result.indices, result.length, result.sources);
+                } else if (map.routeManager && typeof map.routeManager.setRoute === 'function') {
+                    map.routeManager.setRoute(result.indices, result.length, result.sources);
+                } else {
+                    map.setRoute(result.indices, result.length, result.sources);
+                }
             }
         } catch (e) {
             NotificationUtils.showRouteComputationError('Route expansion failed: ' + e.message);

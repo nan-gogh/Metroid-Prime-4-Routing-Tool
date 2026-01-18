@@ -58,6 +58,17 @@
         } else {
           this.setLayerHighlight(layerKey);
         }
+        // Emit a toggled event for consumers who subscribe specifically to toggle actions
+        try {
+          const highlighted = this.highlightedLayers.has(layerKey);
+          this._emitChange(window.EventTypes.LAYER_HIGHLIGHT_TOGGLED, {
+            layerKey,
+            highlighted,
+            highlightedLayers: Array.from(this.highlightedLayers)
+          });
+        } catch (e) {
+          this.errorHandler.logDebug('HighlightState.emitToggleChange failed', 'HighlightState.toggleLayerHighlight', { error: e });
+        }
       } catch (e) {
         this.errorHandler.logDebug('HighlightState.toggleLayerHighlight failed', 'HighlightState.toggleLayerHighlight', { error: e });
       }

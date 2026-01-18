@@ -61,7 +61,7 @@
     }
 
     run() {
-      console.log('Running SelectionState refactored tests...\n');
+      this.errorHandler.logError('Running SelectionState refactored tests...\n', 'SelectionState');
 
       for (const test of this.tests) {
         try {

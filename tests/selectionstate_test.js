@@ -58,7 +58,7 @@
     }
 
     run() {
-      console.log('Running SelectionState tests...\n');
+      this.errorHandler.logError('Running SelectionState tests...\n', 'function');
 
       for (const test of this.tests) {
         try {

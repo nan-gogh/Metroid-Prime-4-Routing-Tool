@@ -60,9 +60,9 @@
       const cssHeight = canvasSize.height;
       
       // Cache layer keys to avoid repeated Object.entries calls
-      if (this._lastLayersRef !== this.layers) {
-        this._layerKeyCache = Object.entries(this.layers || {});
-        this._lastLayersRef = this.layers;
+      if (this._lastLayersRef !== LAYERS) {
+        this._layerKeyCache = Object.entries(LAYERS || {});
+        this._lastLayersRef = LAYERS;
       }
       
       const entries = this._layerKeyCache;
@@ -80,6 +80,7 @@
         }
         
         const color = layer.color || '#888';
+        // Removed verbose debug logging for custom markers rendering
         for (let i = 0; i < markersToRender.length; i++) {
           const marker = markersToRender[i];
           const screenX = marker.x * (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
@@ -203,7 +204,7 @@
             const last = this._markerSizeFrame[key];
             if (typeof last === 'number' && last > 0) return last + (this.config.TOUCH_PADDING || 0);
           }
-        } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to get cached size:', e); }
+        } catch (e) { this.errorHandler.logError('MarkerRenderer.getMarkerHitRadius: Failed to get cached size:', 'function', e); }
         const base = this.config.MARKER_SCALING ? this.config.MARKER_SCALING.baseSize : 6;
         const detailScale = 1; // Static detail scale - zoom scaling is handled in computeMarkerSize
         const markerShrinkFactor = 0.6; // Default, could be from config
@@ -217,7 +218,7 @@
             const cfg = (this.highlightState.highlightConfig && this.highlightState.highlightConfig[layerKey]) ? this.highlightState.highlightConfig[layerKey] : null;
             highlightScale = (cfg && typeof cfg.scale === 'number') ? cfg.scale : 2.0;
           }
-        } catch (e) { console.error('MarkerRenderer.getMarkerHitRadius: Failed to check highlight state:', e); }
+        } catch (e) { this.errorHandler.logError('MarkerRenderer.getMarkerHitRadius: Failed to check highlight state:', 'function', e); }
 
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;
         const size = this.computeMarkerSize({
@@ -251,7 +252,7 @@
           if (this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has(layerKey)) {
             isHighlighted = true;
           }
-        } catch (e) { console.error('MarkerRenderer.getMarkerRenderSize: Failed to check highlight state:', e); }
+        } catch (e) { this.errorHandler.logError('MarkerRenderer.getMarkerRenderSize: Failed to check highlight state:', 'function', e); }
         
         // Check selection state
         const isSelected = this.selectionState.selectedMarker && marker && this.selectionState.selectedMarker.uid === marker.uid && this.selectionState.selectedMarkerLayer === layerKey;

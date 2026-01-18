@@ -34,6 +34,7 @@
           panY: { get: () => this.mapState.panY },
           zoom: { get: () => this.mapState.zoom },
           editMarkersMode: { get: () => this.editModeState ? this.editModeState.editMarkersMode : false },
+          editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
           selectedMarker: {
             get: () => this.selectionState.selectedMarker,
             set: (v) => this.selectionState.selectedMarker = v
@@ -82,11 +83,10 @@
         // In edit mode: allow deletion (custom markers are editable regardless of flags)
         const isCustom = (layerKey === 'customMarkers');
         if (isDeletable || isCustom) {
-          if (this.markerManager) {
-            this.markerManager.removeMarker(hit.marker.uid);
-            // Refresh hover state after deletion
-            this._checkMarkerHover && this._checkMarkerHover(localX, localY);
-          }
+          // Emit event instead of direct call for decoupled architecture
+          this.eventBus.emit(this.eventTypes.MARKER_EDIT_REQUESTED, { action: 'remove', uid: hit.marker.uid });
+          // Refresh hover state after deletion
+          this._checkMarkerHover && this._checkMarkerHover(localX, localY);
           return true; // Handled
         }
       } else {
@@ -140,7 +140,7 @@
           return false;
         }
 
-        // Only place markers when edit mode is active
+        // Only place markers when in marker edit mode
         if (this.editMarkersMode) {
           // Check marker limit before adding
           const maxMarkers = this.layerConfig && this.layerConfig.customMarkers && this.layerConfig.customMarkers.maxMarkers || 50;
@@ -149,11 +149,10 @@
             return false; // Silently ignore - could show a message but click handler shouldn't alert
           }
 
-          if (this.markerManager) {
-            this.markerManager.addMarker(worldX, worldY);
-            // markerManager updates markers and triggers map updates; ensure hover state refresh
-            this._checkMarkerHover && this._checkMarkerHover(localX, localY);
-          }
+          // Emit event instead of direct call for decoupled architecture
+          this.eventBus.emit(this.eventTypes.MARKER_EDIT_REQUESTED, { action: 'add', x: worldX, y: worldY });
+          // markerManager updates markers and triggers map updates; ensure hover state refresh
+          this._checkMarkerHover && this._checkMarkerHover(localX, localY);
           return true; // Handled
         }
       }

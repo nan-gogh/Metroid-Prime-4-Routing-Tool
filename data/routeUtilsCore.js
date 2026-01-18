@@ -92,6 +92,38 @@ const RouteUtilsCore = {
         return closestSegment;
     },
 
+    // Find route waypoint at screen position
+    findRouteWaypointAt: (routeIndices, routeSources, screenX, screenY, viewState, mapSize, threshold = 30) => {
+        // Convert screen to world coordinates
+        const worldX = (screenX - viewState.panX) / (mapSize * viewState.zoom);
+        const worldY = (screenY - viewState.panY) / (mapSize * viewState.zoom);
+
+        // Find closest waypoint
+        let closestDist = Infinity;
+        let closestWaypoint = null;
+
+        for (let i = 0; i < routeIndices.length; i++) {
+            const source = routeSources[routeIndices[i]];
+            if (!source || !source.marker) continue;
+
+            // Check distance to waypoint
+            const dx = worldX - source.marker.x;
+            const dy = worldY - source.marker.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const thresholdWorld = threshold / (mapSize * viewState.zoom);
+
+            if (dist < closestDist && dist <= thresholdWorld) {
+                closestDist = dist;
+                closestWaypoint = {
+                    marker: source.marker,
+                    index: i
+                };
+            }
+        }
+
+        return closestWaypoint;
+    },
+
     // Helper: distance from point to line segment
     _pointToLineDistance: (px, py, x1, y1, x2, y2) => {
         const dx = x2 - x1;

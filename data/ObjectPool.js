@@ -1,12 +1,14 @@
 // Object Pool for performance optimization - reduces GC pressure during frequent object creation
 // Integrated with ErrorHandler for robust error handling
 
+// ErrorHandler is available globally as window.ErrorHandler
+
 class ObjectPool {
     constructor(factory, reset, initialSize = 10, errorHandler = null) {
         this._factory = factory;
         this._reset = reset;
         this._pool = [];
-        this._errorHandler = errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+        this._errorHandler = errorHandler || new window.ErrorHandler();
         this._stats = {
             created: 0,
             acquired: 0,
@@ -127,7 +129,8 @@ const markerPool = new ObjectPool(
         marker.x = 0;
         marker.y = 0;
     },
-    20 // Pre-allocate 20 markers for route editing
+    50, // Pre-allocate 50 markers (matches max custom markers limit)
+    typeof window !== 'undefined' ? window.errorHandler : null
 );
 
 // Route source pool for temporary route sources
@@ -138,14 +141,35 @@ const routeSourcePool = new ObjectPool(
         source.layerKey = '';
         source.layerIndex = -1;
     },
-    20 // Pre-allocate 20 sources for route editing
+    50, // Pre-allocate 50 sources (matches marker pool size for consistency)
+    typeof window !== 'undefined' ? window.errorHandler : null
+);
+
+// Waypoint pool for route waypoints (separate from markers)
+const waypointPool = new ObjectPool(
+    () => ({ x: 0, y: 0 }),
+    (waypoint) => {
+        waypoint.x = 0;
+        waypoint.y = 0;
+    },
+    200, // Pre-allocate 200 waypoints (can be as many as total markers in app)
+    typeof window !== 'undefined' ? window.errorHandler : null
 );
 
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {
-    console.log('=== Object Pool Statistics ===');
-    console.log('Marker Pool:', markerPool.getStats());
-    console.log('Route Source Pool:', routeSourcePool.getStats());
+    const eh = typeof window !== 'undefined' ? window.errorHandler : null;
+    if (eh) {
+        eh.logError('=== Object Pool Statistics ===', 'ObjectPool');
+        eh.logError('Marker Pool:', 'ObjectPool', markerPool.getStats());
+        eh.logError('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
+        eh.logError('Waypoint Pool:', 'ObjectPool', waypointPool.getStats());
+    } else {
+        console.error('=== Object Pool Statistics ===', 'ObjectPool');
+        console.error('Marker Pool:', 'ObjectPool', markerPool.getStats());
+        console.error('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
+        console.error('Waypoint Pool:', 'ObjectPool', waypointPool.getStats());
+    }
 }
 
 // Make debug function globally available
@@ -155,5 +179,5 @@ if (typeof window !== 'undefined') {
 
 // Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ObjectPool, markerPool, routeSourcePool };
+    module.exports = { ObjectPool, markerPool, routeSourcePool, waypointPool };
 }

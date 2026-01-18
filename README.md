@@ -10,7 +10,8 @@ Recent updates focus on making it easier to focus on the parts of the map that m
 - Rendering and layer ordering improvements ensure highlights, routes and markers stack and draw consistently — sidebar order and map rendering are synchronized for a more predictable experience.
 - Visual refresh: the UI uses a futuristic display font (Orbitron) for headings and controls, and small design refinements simplify controls like the highlight size slider.
 - Route rendering fixes: single-segment routes now correctly show the glow/highlight effect.
-- Miscellaneous: bug fixes and small usability polish across route editing, marker handling, and the sidebar.
+- ✅ Fixed sidebar opening bug: Root cause identified as queued Space key events triggering the sidebar toggle after browser confirm() dialogs. Fixed by changing the keyboard shortcut from Space to Ctrl+Space.
+- Miscellaneous: bug fixes and small usability polish across route editing and marker handling.
 
 
 ## Features
@@ -22,7 +23,7 @@ Recent updates focus on making it easier to focus on the parts of the map that m
   - `W`/`A`/`S`/`D` or Arrow Keys: Pan (hold Shift for larger steps)
   - `+`/`-` or Scroll: Zoom in/out
   - `0` or `⌂`: Reset view to center
-  - `Space`: Toggle sidebar
+  - `Ctrl`+`Space`: Toggle sidebar
   - `1`: Switch to Satellite tileset
   - `2`: Switch to Holographic tileset
   - `3`: Toggle Grayscale mode
@@ -207,7 +208,7 @@ The sidebar includes a **Links** section with quick access to the project's GitH
 - `Shift` + Arrow/WASD: Pan faster
 - `+` / `-`: Zoom in/out
 - `0` or `⌂`: Reset view
-- `Space`: Toggle sidebar
+- `Ctrl`+`Space`: Toggle sidebar
 - `1`: Switch to Satellite tileset
 - `2`: Switch to Holographic tileset  
 - `3`: Toggle Grayscale mode
@@ -431,7 +432,8 @@ This tool was developed with contributions from:
 - Improved layer highlighting: highlighted layers now increase marker sizes and emphasize routes so you can focus on the parts of the map that matter.
 - Rendering and layer ordering: improved render pipeline and layer ordering so highlights, routes and markers stack and draw consistently across the sidebar and map.
 - Visual refresh: introduced a futuristic display font (Orbitron) for headings and controls, and small UI design refinements for a cleaner look.
-- Bug fixes: a number of small bug fixes and stability improvements across route editing and marker handling.
+- ✅ Fixed sidebar opening bug caused by queued Space key events after browser confirm() dialogs; changed shortcut from Space to Ctrl+Space.
+- Bug fixes: Additional stability improvements across route editing and marker handling.
 
 ### v0.6.0 - Enhanced Routing & Edit Modes
 - **Edit Route Mode**: Interactive waypoint editing with drag-and-drop, segment insertion, and snap-to-marker functionality

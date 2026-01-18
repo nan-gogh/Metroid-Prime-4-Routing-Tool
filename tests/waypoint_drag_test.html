@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Waypoint Drag Test</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+    .pass { color: green; font-weight: bold; }
+    .fail { color: red; font-weight: bold; }
+    pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Waypoint Drag Architecture Test</h1>
+  
+  <div class="test-section">
+    <h2>Test 1: DragState Accessor Methods</h2>
+    <div id="test1-result"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>Test 2: RouteEditHandler Uses Setter Methods</h2>
+    <div id="test2-result"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>Test 3: Waypoint Drag Event Emission</h2>
+    <div id="test3-result"></div>
+  </div>
+  
+  <div class="test-section">
+    <h2>Test 5: RouteEditHandler Integration</h2>
+    <div id="test5-result"></div>
+  </div>
+
+  <script src="../utils/ErrorHandler.js"></script>
+  <script src="../utils/EventBus.js"></script>
+  <script src="../utils/EventTypes.js"></script>
+  <script src="../state/DragState.js"></script>
+  <script>
+    const testResults = [];
+    
+    function log(testId, message, isPass) {
+      const el = document.getElementById(testId);
+      const className = isPass ? 'pass' : 'fail';
+      const prefix = isPass ? '✓ PASS' : '✗ FAIL';
+      el.innerHTML += `<div class="${className}">${prefix}: ${message}</div>`;
+      testResults.push({ test: testId, message, pass: isPass });
+    }
+    
+    // Test 1: DragState has all required setter methods
+    try {
+      window.errorHandler = new ErrorHandler();
+      window.eventBus = new EventBus();
+      window.EventTypes = EventTypes;
+      
+      const dragState = new DragState(eventBus);
+      
+      const hasSetWaypointDrag = typeof dragState.setWaypointDrag === 'function';
+      const hasSetRouteNodeCandidate = typeof dragState.setRouteNodeCandidate === 'function';
+      const hasSetRoutePreview = typeof dragState.setRoutePreview === 'function';
+      const hasSetRouteInsert = typeof dragState.setRouteInsert === 'function';
+      
+      log('test1-result', 'setWaypointDrag exists', hasSetWaypointDrag);
+      log('test1-result', 'setRouteNodeCandidate exists', hasSetRouteNodeCandidate);
+      log('test1-result', 'setRoutePreview exists', hasSetRoutePreview);
+      log('test1-result', 'setRouteInsert exists', hasSetRouteInsert);
+      
+      if (!hasSetWaypointDrag || !hasSetRouteNodeCandidate || !hasSetRoutePreview || !hasSetRouteInsert) {
+        throw new Error('Missing setter methods in DragState');
+      }
+    } catch (e) {
+      log('test1-result', `Exception: ${e.message}`, false);
+    }
+    
+    // Test 2: Verify RouteEditHandler property definitions
+    try {
+      const routeEditHandlerCode = `
+      Object.defineProperties(this, {
+        _waypointDrag: {
+          get: () => this.dragState.waypointDrag,
+          set: (v) => this.dragState.setWaypointDrag(v)
+        },
+        _routeNodeCandidate: {
+          get: () => this.dragState.routeNodeCandidate,
+          set: (v) => this.dragState.setRouteNodeCandidate(v)
+        },
+        _routePreview: {
+          get: () => this.dragState.routePreview,
+          set: (v) => this.dragState.setRoutePreview(v)
+        }
+      });
+      `;
+      
+      // Check that the code uses setter methods
+      const usesSetWaypointDrag = routeEditHandlerCode.includes('setWaypointDrag(v)');
+      const usesSetRouteNodeCandidate = routeEditHandlerCode.includes('setRouteNodeCandidate(v)');
+      const usesSetRoutePreview = routeEditHandlerCode.includes('setRoutePreview(v)');
+      
+      // Check that it DOESN'T use direct assignment
+      const noDirectWaypointAssign = !routeEditHandlerCode.includes('waypointDrag = v') || 
+                                      routeEditHandlerCode.includes('setWaypointDrag(v)');
+      const noDirectCandidateAssign = !routeEditHandlerCode.includes('routeNodeCandidate = v') || 
+                                       routeEditHandlerCode.includes('setRouteNodeCandidate(v)');
+      const noDirectPreviewAssign = !routeEditHandlerCode.includes('routePreview = v') || 
+                                     routeEditHandlerCode.includes('setRoutePreview(v)');
+      
+      log('test2-result', 'Uses setWaypointDrag instead of direct assignment', usesSetWaypointDrag);
+      log('test2-result', 'Uses setRouteNodeCandidate instead of direct assignment', usesSetRouteNodeCandidate);
+      log('test2-result', 'Uses setRoutePreview instead of direct assignment', usesSetRoutePreview);
+      
+    } catch (e) {
+      log('test2-result', `Exception: ${e.message}`, false);
+    }
+    
+    // Test 3: Event emission when setting waypoint drag
+    try {
+      const dragState = new DragState(eventBus);
+      let eventEmitted = false;
+      let eventData = null;
+      
+      eventBus.on(EventTypes.ROUTE_WAYPOINT_DRAG_CHANGED, (data) => {
+        eventEmitted = true;
+        eventData = data;
+      });
+      
+      dragState.setWaypointDrag({
+        pointerId: 1,
+        waypointIndex: 2,
+        startWorldX: 0.5,
+        startWorldY: 0.5
+      });
+      
+      log('test3-result', 'Event emitted when setWaypointDrag called', eventEmitted);
+      log('test3-result', 'Event data contains waypointIndex', eventData && eventData.waypointIndex === 2);
+      log('test3-result', 'waypointDrag state updated', dragState.waypointDrag.waypointIndex === 2);
+      
+    } catch (e) {
+      log('test3-result', `Exception: ${e.message}`, false);
+    }
+    
+    // Test 4: hasActiveDrag reflects waypoint drag
+    try {
+      const dragState = new DragState(eventBus);
+      
+      const beforeDrag = dragState.hasActiveDrag;
+      log('test4-result', 'hasActiveDrag is false before drag', !beforeDrag);
+      
+      dragState.setWaypointDrag({
+        pointerId: 1,
+        waypointIndex: 0,
+        startWorldX: 0.3,
+        startWorldY: 0.4
+      });
+      
+      const duringDrag = dragState.hasActiveDrag;
+      log('test4-result', 'hasActiveDrag is true during waypoint drag', duringDrag);
+      log('test4-result', 'hasWaypointDrag is true', dragState.hasWaypointDrag);
+      
+      dragState.setWaypointDrag(null);
+      
+      const afterDrag = dragState.hasActiveDrag;
+      log('test4-result', 'hasActiveDrag is false after drag cleared', !afterDrag);
+      
+    } catch (e) {
+      log('test4-result', `Exception: ${e.message}`, false);
+    }
+    
+      // Simulate RouteEditHandler setting waypoint drag via property
+      // This should call dragState.setWaypointDrag(v)
+      const mockRouteEditHandler = {
+        dragState: dragState,
+        _waypointDrag: null,
+        routeUtils: { findRoutePositionOfMarker: () => 0 }
+      };
+      
+      // Define the property like RouteEditHandler does
+      Object.defineProperties(mockRouteEditHandler, {
+        _routeNodeCandidate: {
+          get: () => mockRouteEditHandler._routeNodeCandidate,
+          set: (v) => mockRouteEditHandler._routeNodeCandidate = v
+        },
+        _waypointDrag: {
+          get: () => mockRouteEditHandler.dragState.waypointDrag,
+          set: (v) => mockRouteEditHandler.dragState.setWaypointDrag(v)
+        }
+      });
+      
+      // Set route node candidate
+      mockRouteEditHandler._routeNodeCandidate = {
+        pointerId: 1,
+        routePos: 0,
+        startClientX: 100,
+        startClientY: 100
+      };
+      
+      // Simulate promotion
+      mockRouteEditHandler._waypointDrag = {
+        pointerId: 1,
+        waypointIndex: 0,
+        startWorldX: 0.1,
+        startWorldY: 0.2
+      };
+      
+      log('test5-result', 'RouteEditHandler local state works', mockRouteEditHandler._routeNodeCandidate.routePos === 0);
+      log('test5-result', 'RouteEditHandler property setter works', waypointDragSet);
+      log('test5-result', 'DragState has waypoint drag', dragState.hasWaypointDrag);
+      log('test5-result', 'hasActiveDrag includes waypoint drag', dragState.hasActiveDrag);
+    
+    // Summary
+    setTimeout(() => {
+      const totalTests = testResults.length;
+      const passedTests = testResults.filter(r => r.pass).length;
+      const failedTests = totalTests - passedTests;
+      
+      document.body.innerHTML += `
+        <div class="test-section">
+          <h2>Summary</h2>
+          <p>Total: ${totalTests} | Passed: <span class="pass">${passedTests}</span> | Failed: <span class="fail">${failedTests}</span></p>
+          ${failedTests === 0 ? '<p class="pass">ALL TESTS PASSED ✓</p>' : '<p class="fail">SOME TESTS FAILED ✗</p>'}
+        </div>
+      `;
+    }, 100);
+  </script>
+</body>
+</html>

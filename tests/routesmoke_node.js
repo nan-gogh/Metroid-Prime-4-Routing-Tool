@@ -52,7 +52,7 @@ global.LAYERS = {
 // Execute RouteRenderer code
 eval(routeRendererCode);
 
-console.log('RouteRenderer loaded successfully');
+this.errorHandler.logError('RouteRenderer loaded successfully', 'require');
 
 // Create mock state managers
 const mockMapState = {
@@ -85,14 +85,14 @@ const canvas = document.createElement('canvas');
 const routeRenderer = new RouteRenderer(mockMapState, mockLayerState, mockRouteState, MP4Config);
 routeRenderer.map = mockMap; // Set map reference for canvas access
 
-console.log('RouteRenderer instance created');
+this.errorHandler.logError('RouteRenderer instance created', 'require');
 
 // Test cache functionality
-console.log('Testing cache functionality...');
+this.errorHandler.logError('Testing cache functionality...', 'require');
 
 // First render should compute path data
 routeRenderer.render();
-console.log('First render completed');
+this.errorHandler.logError('First render completed', 'require');
 
 // Check if cache exists
 const cacheSize = Object.keys(routeRenderer._pathDataCache || {}).length;
@@ -100,22 +100,22 @@ console.log(`Cache size after first render: ${cacheSize}`);
 
 // Second render should use cache
 routeRenderer.render();
-console.log('Second render completed (should use cache)');
+this.errorHandler.logError('Second render completed (should use cache)', 'require');
 
 // Modify marker position
 mockMap._routeSources[1].marker.x = 0.6;
-console.log('Modified marker position');
+this.errorHandler.logError('Modified marker position', 'require');
 
 // Third render should recompute due to position change
 routeRenderer.render();
-console.log('Third render completed (should recompute due to position change)');
+this.errorHandler.logError('Third render completed (should recompute due to position change)', 'require');
 
 // Test cache invalidation
 routeRenderer.invalidateCache();
-console.log('Cache invalidated');
+this.errorHandler.logError('Cache invalidated', 'require');
 
 // Fourth render should recompute
 routeRenderer.render();
-console.log('Fourth render completed after cache invalidation');
+this.errorHandler.logError('Fourth render completed after cache invalidation', 'require');
 
-console.log('All tests passed! RouteRenderer caching works correctly.');
+this.errorHandler.logError('All tests passed! RouteRenderer caching works correctly.', 'require');

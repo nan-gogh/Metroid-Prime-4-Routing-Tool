@@ -82,11 +82,11 @@
         });
 
         // Apply new visibility (handled by event listener)
-        // Emit layer visibility changed event
+        // Emit layer visibility changed event with standard format (bulk operation)
         this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
-          layerVisibility: newVisibility,
-          triggeredBy: 'sidebar-toggle-all',
-          showAll: show
+          layerKey: null,
+          visible: null,
+          layerVisibility: newVisibility
         });
 
         // Exit edit modes when hiding layers
@@ -120,10 +120,10 @@
     _exitEditModesForHiddenLayers(newVisibility) {
       try {
         if (newVisibility && newVisibility.customMarkers === false) {
-          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' });
+          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' });
         }
         if (newVisibility && newVisibility.route === false) {
-          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'route' });
+          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' });
         }
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to exit edit modes');
@@ -188,12 +188,11 @@
           }
         }
 
-        // Emit layer visibility changed event
+        // Emit layer visibility changed event with standard format
         this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
-          layerVisibility: newVisibility,
-          triggeredBy: 'sidebar-checkbox',
           layerKey: layerKey,
-          visible: checked
+          visible: checked,
+          layerVisibility: newVisibility
         });
 
         // Save to storage

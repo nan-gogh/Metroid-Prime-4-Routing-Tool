@@ -32,7 +32,10 @@
       this._glowCache = null;
       this._glowCacheValid = false;
       this._colorCache = {}; // Cache for hex to rgba conversions
-      // No direct map reference needed - all access through state managers and renderContext
+      
+      // Map reference will be set externally (by map.js) to avoid circular dependencies
+      // Renderers depend on map for route manager and display properties
+      this.map = null;
     }
 
     /**
@@ -52,8 +55,12 @@
 
     // Edge-case handling: validate route data before rendering
     _validateRouteData() {
+      // Get route data from map (which delegates to routeManager - the source of truth)
+      // Do NOT read from routeState to avoid circular event emission
+      const currentRoute = this.map && this.map.currentRoute;
+      
       // Check for empty or invalid route
-      if (!this.routeState.currentRoute || !Array.isArray(this.routeState.currentRoute) || this.routeState.currentRoute.length === 0) {
+      if (!currentRoute || !Array.isArray(currentRoute) || currentRoute.length === 0) {
         return false;
       }
 
@@ -69,9 +76,9 @@
 
       // Validate route indices are within bounds
       const maxIndex = this.map._routeSources.length - 1;
-      for (const idx of this.routeState.currentRoute) {
+      for (const idx of currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
-          (this.errorHandler || global.errorHandler || console).warn('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
+          (this.errorHandler || global.errorHandler).logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
           return false;
         }
       }
@@ -81,13 +88,19 @@
 
     // Micro-optimization: Cache path computation when route hasn't changed
     _computePathData() {
+      // Get route from map (source of truth - routeManager)
+      const currentRoute = this.map && this.map.currentRoute;
+      if (!currentRoute || !Array.isArray(currentRoute)) {
+        return { points: [], valid: false };
+      }
+
       // Include marker positions in cache key to detect when waypoints are dragged
-      const markerPositions = this.routeState.currentRoute.map(idx => {
+      const markerPositions = currentRoute.map(idx => {
         const src = this.map._routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const routeKey = JSON.stringify(this.routeState.currentRoute) + '|' + this.routeState.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const routeKey = JSON.stringify(currentRoute) + '|' + this.map.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._cachedPath && this._pathCacheValid && this._cachedPath.key === routeKey) {
         return this._cachedPath.data;
@@ -98,14 +111,14 @@
         valid: true
       };
 
-      const n = this.routeState.currentRoute.length;
+      const n = currentRoute.length;
       for (let i = 0; i < n; i++) {
-        const idx = this.routeState.currentRoute[i];
+        const idx = currentRoute[i];
         const src = this.map._routeSources[idx];
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
-          (this.errorHandler || global.errorHandler || console).warn('RouteRenderer: Invalid marker at index', idx);
+          (this.errorHandler || global.errorHandler).logWarning('RouteRenderer: Invalid marker at index', idx);
           pathData.valid = false;
           continue;
         }
@@ -119,7 +132,8 @@
 
       // Handle route looping: close the route by connecting the last waypoint back to the first
       // Only when BOTH conditions are met: route looping is enabled AND route has at least 3 waypoints
-      if (this.routeState.routeLooping && pathData.points.length >= 3) {
+      const routeLooping = this.map && this.map.routeLooping;
+      if (routeLooping && pathData.points.length >= 3) {
         pathData.points.push({ ...pathData.points[0] });
       }
 
@@ -134,13 +148,19 @@
 
     // Micro-optimization: Cache glow path separately
     _computeGlowPathData() {
+      // Get route from map (source of truth - routeManager)
+      const currentRoute = this.map && this.map.currentRoute;
+      if (!currentRoute || !Array.isArray(currentRoute)) {
+        return { points: [], valid: false };
+      }
+
       // Include marker positions in cache key to detect when waypoints are dragged
-      const markerPositions = this.routeState.currentRoute.map(idx => {
+      const markerPositions = currentRoute.map(idx => {
         const src = this.map._routeSources[idx];
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const glowKey = JSON.stringify(this.routeState.currentRoute) + '|' + this.routeState.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const glowKey = JSON.stringify(currentRoute) + '|' + this.map.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
 
       if (this._glowCache && this._glowCacheValid && this._glowCache.key === glowKey) {
         return this._glowCache.data;
@@ -398,13 +418,17 @@
      */
     _renderRoutePreview(ctx) {
       try {
-        if (!this.routeState.routePreview) return;
+        // Get route preview from map (DragState)
+        // RouteRenderer receives dragState via map, reads current preview
+        const routePreview = this.map && this.map.dragState ? this.map.dragState.routePreview : null;
+        if (!routePreview) return;
 
-        const pos = RouteUtilsCore.getRoutePreviewScreenPosition(
-          this.routeState.routePreview,
-          {zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY},
-          this.config.MAP_SIZE || 8192
-        );
+        // Transform route preview coordinates to screen coordinates
+        const MAP_SIZE = (this.config && this.config.MAP_SIZE) ? this.config.MAP_SIZE : (typeof window !== 'undefined' && window.MAP_SIZE) ? window.MAP_SIZE : 8192;
+        const pos = {
+          x: routePreview.x * MAP_SIZE * this.mapState.zoom + this.mapState.panX,
+          y: routePreview.y * MAP_SIZE * this.mapState.zoom + this.mapState.panY
+        };
 
         if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
 

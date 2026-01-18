@@ -12,6 +12,8 @@ class RouteComputeController {
         this.routeEditState = options.routeEditState;
         this.pointerHandler = options.pointerHandler;
         this.eventBus = options.eventBus;
+        // Local reference to global event type constants for consistency
+        this.eventTypes = (typeof window !== 'undefined' && window.EventTypes) ? window.EventTypes : (typeof global !== 'undefined' ? global.EventTypes : {});
 
         // Optional dependencies
         this.config = options.config || MP4Config;
@@ -123,6 +125,8 @@ class RouteComputeController {
                         }
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.reverseRouteDirection'); }
+                // Emit route direction changed event for subscribers
+                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { this.errorHandler.logDebug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
                 // Emit render requested event instead of direct render
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-direction-toggle'

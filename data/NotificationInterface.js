@@ -7,7 +7,7 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showLoadError) {
             NotificationUtils.showLoadError(message);
         } else {
-            console.error('Notification error:', message);
+            this.errorHandler.logError('Notification error:', 'function', message);
             // Fallback: try to show alert for critical errors
             try {
                 alert('Error: ' + message);
@@ -28,7 +28,7 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showSuccess) {
             NotificationUtils.showSuccess(message);
         } else {
-            console.log('Notification success:', message);
+            this.errorHandler.logError('Notification success:', 'function', message);
             // Fallback: try to show temporary success message
             try {
                 const statusEl = document.getElementById('status') || document.getElementById('notification-area');
@@ -48,7 +48,7 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showUpgradeNotification) {
             NotificationUtils.showUpgradeNotification(message);
         } else {
-            console.log('Notification upgrade:', message);
+            this.errorHandler.logError('Notification upgrade:', 'function', message);
             // Fallback: try to show upgrade message
             try {
                 const statusEl = document.getElementById('status') || document.getElementById('notification-area');
@@ -68,7 +68,7 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showLoadError) {
             NotificationUtils.showLoadError(message);
         } else {
-            console.error('Load error:', message);
+            this.errorHandler.logError('Load error:', 'function', message);
             // Fallback: try to show alert for load errors
             try {
                 alert('Load Error: ' + message);

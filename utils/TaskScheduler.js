@@ -28,7 +28,7 @@ const TaskScheduler = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'TaskScheduler.deferToNextTask');
             } else {
-                console.error('TaskScheduler.deferToNextTask error:', e);
+                this.errorHandler.logError('TaskScheduler.deferToNextTask error:', 'yield', e);
             }
             throw e;
         }
@@ -77,7 +77,7 @@ const TaskScheduler = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'TaskScheduler.executeInChunks');
             } else {
-                console.error('TaskScheduler.executeInChunks error:', e);
+                this.errorHandler.logError('TaskScheduler.executeInChunks error:', 'yield', e);
             }
             throw e;
         }
@@ -118,7 +118,7 @@ const TaskScheduler = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'TaskScheduler.executeSequence');
             } else {
-                console.error('TaskScheduler.executeSequence error:', e);
+                this.errorHandler.logError('TaskScheduler.executeSequence error:', 'yield', e);
             }
             throw e;
         }

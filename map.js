@@ -39,6 +39,7 @@ class InteractiveMap {
         this.routeState = new RouteState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.routeEditState = new RouteEditState({ eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.dragState = new DragState(window.eventBus, this.errorHandler);
         this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
@@ -2355,6 +2356,16 @@ async function init() {
                 }
             });
 
+            eventBus.on(window.EventTypes.TOOLTIP_SHOW_REQUESTED, (data) => {
+                try {
+                    if (map && typeof map.showTooltip === 'function' && data && data.marker && typeof data.x === 'number' && typeof data.y === 'number') {
+                        map.showTooltip(data.marker, data.x, data.y, data.layerKey);
+                    }
+                } catch (e) {
+                    moduleErrorHandler.logError(e, 'EventBus:TOOLTIP_SHOW_REQUESTED handler');
+                }
+            });
+
             eventBus.on(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, (data) => {
                 try {
                     if (map && typeof map._enterEditMode === 'function' && data && data.mode) {
@@ -2529,6 +2540,30 @@ async function init() {
                     }
                 } catch (e) {
                     moduleErrorHandler.logError(e, 'EventBus:MARKER_EDITED handler');
+                }
+            });
+
+            eventBus.on(window.EventTypes.MARKER_POSITION_UPDATE_REQUESTED, (data) => {
+                try {
+                    // Handle marker position update during drag operations
+                    if (data && data.markerUid && typeof data.newX === 'number' && typeof data.newY === 'number') {
+                        if (map && map.markerManager) {
+                            // Update marker position through MarkerManager (handles storage and notifications)
+                            const success = map.markerManager.updateMarkerPosition(data.markerUid, data.newX, data.newY);
+                            
+                            if (success && LAYERS.customMarkers) {
+                                // Sync with LAYERS for rendering
+                                const allMarkers = map.markerManager.getAllMarkers();
+                                LAYERS.customMarkers.markers = allMarkers;
+                                // Mark for re-render
+                                if (typeof map.markRendererDirty === 'function') {
+                                    map.markRendererDirty('MarkerRenderer');
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    moduleErrorHandler.logError(e, 'EventBus:MARKER_POSITION_UPDATE_REQUESTED handler');
                 }
             });
 
@@ -2715,16 +2750,6 @@ async function init() {
 
 
         } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.init'); }
-    // Runtime metadata for the special `customMarkers` layer: deletable, not selectable
-    try {
-        if (typeof LAYERS !== 'undefined' && LAYERS.customMarkers) {
-            LAYERS.customMarkers.deletable = true;
-            LAYERS.customMarkers.selectable = true;
-            if (typeof LAYERS.customMarkers.maxMarkers !== 'number') {
-                LAYERS.customMarkers.maxMarkers = (map && map.layerConfig && map.layerConfig.customMarkers && map.layerConfig.customMarkers.maxMarkers) || 50;
-            }
-        }
-    } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.init.configureCustomMarkers'); }
 
     // Populate layer icons from LAYERS definitions
     let layerListController;

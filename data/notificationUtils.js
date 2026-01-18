@@ -14,7 +14,7 @@ const NotificationUtils = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show error notification');
             } else {
-                console.error('Failed to show error notification:', e);
+                errorHandler.logError('Failed to show error notification:', 'user', e);
             }
         }
     },
@@ -31,7 +31,7 @@ const NotificationUtils = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show success notification');
             } else {
-                console.error('Failed to show success notification:', e);
+                errorHandler.logError('Failed to show success notification:', 'user', e);
             }
         }
     },
@@ -48,7 +48,7 @@ const NotificationUtils = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show info notification');
             } else {
-                console.error('Failed to show info notification:', e);
+                errorHandler.logError('Failed to show info notification:', 'user', e);
             }
         }
     },
@@ -62,7 +62,7 @@ const NotificationUtils = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils: Failed to show confirmation dialog');
             } else {
-                console.error('Failed to show confirmation dialog:', e);
+                errorHandler.logError('Failed to show confirmation dialog:', 'user', e);
             }
             return false;
         }
@@ -162,7 +162,7 @@ const NotificationUtils = {
             if (typeof errorHandler !== 'undefined' && errorHandler) {
                 errorHandler.logError(e, 'NotificationUtils.confirmActionAsync');
             } else {
-                console.error('NotificationUtils.confirmActionAsync error:', e);
+                errorHandler.logError('NotificationUtils.confirmActionAsync error:', 'user', e);
             }
             return false;
         }

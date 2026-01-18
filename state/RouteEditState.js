@@ -6,16 +6,6 @@
     constructor(config) {
       this.eventBus = config.eventBus;
       this.errorHandler = config.errorHandler || new ErrorHandler();
-
-      // Route editing state
-      this.routeInsert = null; // { index, tempMarker, position }
-      this.routeNodeCandidate = null; // Candidate node for insertion
-
-      // Event types for this state
-      this.eventTypes = {
-        ROUTE_EDIT_STATE_CHANGED: 'route:edit-state-changed',
-        ROUTE_INSERT_CLEARED: 'route:insert-cleared'
-      };
     }
 
     /**
@@ -24,7 +14,7 @@
      */
     setRouteInsert(insertData) {
       this.routeInsert = insertData;
-      this._emitChange(this.eventTypes.ROUTE_EDIT_STATE_CHANGED, {
+      this._emitChange(window.EventTypes.ROUTE_INSERT_CHANGED, {
         type: 'insert-set',
         insertData: this.routeInsert
       });
@@ -37,7 +27,7 @@
       const hadInsert = this.routeInsert !== null;
       this.routeInsert = null;
       if (hadInsert) {
-        this._emitChange(this.eventTypes.ROUTE_INSERT_CLEARED, {});
+        this._emitChange(window.EventTypes.ROUTE_INSERT_CANCELLED, {});
       }
     }
 
@@ -47,7 +37,7 @@
      */
     setRouteNodeCandidate(candidate) {
       this.routeNodeCandidate = candidate;
-      this._emitChange(this.eventTypes.ROUTE_EDIT_STATE_CHANGED, {
+      this._emitChange(window.EventTypes.ROUTE_NODE_CANDIDATE_CHANGED, {
         type: 'candidate-set',
         candidate: this.routeNodeCandidate
       });
@@ -60,9 +50,7 @@
       const hadCandidate = this.routeNodeCandidate !== null;
       this.routeNodeCandidate = null;
       if (hadCandidate) {
-        this._emitChange(this.eventTypes.ROUTE_EDIT_STATE_CHANGED, {
-          type: 'candidate-cleared'
-        });
+        this._emitChange(window.EventTypes.ROUTE_NODE_CANDIDATE_CANCELLED, {});
       }
     }
 
@@ -74,8 +62,8 @@
       this.routeInsert = null;
       this.routeNodeCandidate = null;
       if (hadState) {
-        this._emitChange(this.eventTypes.ROUTE_EDIT_STATE_CHANGED, {
-          type: 'all-cleared'
+        this._emitChange(window.EventTypes.RENDER_REQUESTED, {
+          reason: 'route-edit-state-cleared'
         });
       }
     }

@@ -44,6 +44,8 @@
           } catch (e) {
             if (this._errorHandler) {
               this._errorHandler.logError(e, `EventBus.emit.${event}`);
+            } else if (typeof global !== 'undefined' && global.errorHandler) {
+              global.errorHandler.logError(e, `EventBus.emit.${event}`);
             } else {
               console.error(`EventBus handler error for ${event}:`, e);
             }

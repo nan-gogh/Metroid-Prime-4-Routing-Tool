@@ -15,12 +15,32 @@ class MarkerManager {
         this.markers = [];
         this.onCleanupRouteReferences = null;
 
+        // Set up event listeners for decoupled communication
+        this._setupEventListeners();
+
         // Note: loadFromStorage() is called explicitly after consent is obtained
     }
 
     // Set callback for route cleanup when markers are deleted
     setOnCleanupRouteReferences(callback) {
         this.onCleanupRouteReferences = callback;
+    }
+
+    // Set up event listeners for decoupled communication
+    _setupEventListeners() {
+        if (this.eventBus && window.EventTypes) {
+            this.eventBus.on(window.EventTypes.MARKER_EDIT_REQUESTED, (data) => {
+                try {
+                    if (data && data.action === 'add' && typeof data.x === 'number' && typeof data.y === 'number') {
+                        this.addMarker(data.x, data.y);
+                    } else if (data && data.action === 'remove' && data.uid) {
+                        this.removeMarker(data.uid);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                }
+            });
+        }
     }
 
     // Internal notification method
@@ -123,6 +143,29 @@ class MarkerManager {
 
         this.saveToStorage();
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_REMOVED : null, { uid, layerKey: this.config.layerPrefix });
+
+        return true;
+    }
+
+    // Update marker position (for drag operations)
+    updateMarkerPosition(uid, x, y) {
+        const index = this.findMarkerIndex(uid);
+        if (index === -1) return false;
+
+        // Update position
+        this.markers[index].x = Number(x);
+        this.markers[index].y = Number(y);
+
+        // Save to storage
+        this.saveToStorage();
+
+        // Notify that marker was moved
+        this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_EDITED : null, { 
+            uid, 
+            marker: this.markers[index], 
+            layerKey: this.config.layerPrefix,
+            action: 'moved'
+        });
 
         return true;
     }

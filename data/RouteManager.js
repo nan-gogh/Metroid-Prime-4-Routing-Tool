@@ -18,7 +18,94 @@ class RouteManager {
         this.routeLooping = false;
         this.onRouteChanged = null;
 
+        // Temporary drag state for waypoint repositioning
+        this.dragWaypointState = null; // { originalIndex, tempMarker, originalSources, originalIndices }
+
+        // Event listener cleanup
+        this._eventUnsubscribers = [];
+
+        // Listen for route edit requests (decoupled from direct method calls)
+        this._setupEventListeners();
+
         // Note: loadFromStorage() is called explicitly after consent is obtained
+    }
+
+    // Set up event listeners for decoupled communication
+    _setupEventListeners() {
+        if (this.eventBus && window.EventTypes) {
+            // Store unsubscribe handles for cleanup on destroy()
+            const unsub1 = this.eventBus.on(window.EventTypes.ROUTE_EDIT_REQUESTED, (data) => {
+                try {
+                    // Handle waypoint drag finalization via ROUTE_EDIT_REQUESTED
+                    // This is how RouteEditHandler signals drop target detection completion
+                    if (data && data.finalizeWaypointDrag) {
+                        this.finalizeWaypointDrag(data.snapToMarker, data.cancel);
+                        return;
+                    }
+                    
+                    // Normal route edit request
+                    if (data && typeof data.indices !== 'undefined') {
+                        this.setRoute(data.indices, data.lengthNormalized, data.sources);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager ROUTE_EDIT_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                }
+            });
+            if (typeof unsub1 === 'function') this._eventUnsubscribers.push(unsub1);
+
+            const unsub2 = this.eventBus.on(window.EventTypes.ROUTE_LOOPING_CHANGED, (data) => {
+                try {
+                    if (typeof data.looping === 'boolean') {
+                        this.setRouteLooping(data.looping);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager ROUTE_LOOPING_CHANGED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                }
+            });
+            if (typeof unsub2 === 'function') this._eventUnsubscribers.push(unsub2);
+
+            const unsub3 = this.eventBus.on(window.EventTypes.ROUTE_SEGMENT_INSERT_REQUESTED, (data) => {
+                try {
+                    if (data && typeof data.segmentIndex === 'number' && typeof data.t === 'number' && data.tempMarker) {
+                        this.insertWaypointAtSegment(data.segmentIndex, data.t, data.tempMarker);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager ROUTE_SEGMENT_INSERT_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                }
+            });
+            if (typeof unsub3 === 'function') this._eventUnsubscribers.push(unsub3);
+
+            const unsub4 = this.eventBus.on(window.EventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED, (data) => {
+                try {
+                    if (data && typeof data.waypointIndex === 'number' && typeof data.worldX === 'number' && typeof data.worldY === 'number') {
+                        this.updateWaypointPosition(data.waypointIndex, data.worldX, data.worldY);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager ROUTE_WAYPOINT_DRAG_REQUESTED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                }
+            });
+            if (typeof unsub4 === 'function') this._eventUnsubscribers.push(unsub4);
+
+            const unsub5 = this.eventBus.on(window.EventTypes.ROUTE_WAYPOINT_DRAG_STARTED, (data) => {
+                try {
+                    if (data && typeof data.waypointIndex === 'number') {
+                        this.startWaypointDrag(data.waypointIndex);
+                    }
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager ROUTE_WAYPOINT_DRAG_STARTED handler failed', 'RouteManager._setupEventListeners', { error: e });
+                }
+            });
+            if (typeof unsub5 === 'function') this._eventUnsubscribers.push(unsub5);
+
+            // NOTE: ROUTE_WAYPOINT_DRAG_FINALIZED is handled by RouteEditHandler, which
+            // detects the drop target and emits ROUTE_EDIT_REQUESTED with proper data.
+            // RouteManager handles finalization via ROUTE_EDIT_REQUESTED, not FINALIZED.
+
+            // NOTE: ROUTE_WAYPOINT_DRAG_CHANGED is also handled by RouteEditHandler.
+            // When drag transitions to null, RouteEditHandler processes the pending
+            // finalize and emits ROUTE_EDIT_REQUESTED. RouteManager should NOT auto-cancel
+            // here because RouteEditHandler is the authority on waypoint drag finalization.
+        }
     }
 
     // Set callback for when route changes
@@ -91,6 +178,18 @@ class RouteManager {
         this.routeSources = sources || [];
 
         this.saveToStorage();
+
+        // Emit ROUTE_CLEARED if route becomes empty, otherwise emit ROUTE_UPDATED
+        if (this.currentRoute.length === 0) {
+            if (this.eventBus && window.EventTypes) {
+                try {
+                    this.eventBus.emit(window.EventTypes.ROUTE_CLEARED);
+                } catch (e) {
+                    this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager.setRoute', { error: e });
+                }
+            }
+        }
+
         this._notifyRouteChanged();
     }
 
@@ -149,7 +248,166 @@ class RouteManager {
 
     // Find route segment at screen position
     findRouteSegmentAt(screenX, screenY, viewState, mapSize, threshold = 10) {
-        return RouteUtilsCore.findRouteSegmentAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+      return RouteUtilsCore.findRouteSegmentAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+    }
+
+    // Find route waypoint at screen position
+    findRouteWaypointAt(screenX, screenY, viewState, mapSize, threshold = 30) {
+      return RouteUtilsCore.findRouteWaypointAt(this.currentRoute, this.routeSources, screenX, screenY, viewState, mapSize, threshold);
+    }
+
+    // Insert waypoint at segment
+    insertWaypointAtSegment(segmentIndex, t, tempMarker) {
+        try {
+            const prevIndices = Array.isArray(this.currentRoute) ? this.currentRoute.slice() : [];
+            const prevSources = Array.isArray(this.routeSources) ? this.routeSources.slice() : [];
+
+            const ordered = RouteUtilsCore.createOrderedSources(prevIndices, prevSources);
+
+            // Calculate insertion position
+            const insertPosition = RouteUtilsCore.calculateSegmentInsertionPosition(segmentIndex, t, ordered, this.routeLooping);
+            if (!insertPosition) return;
+
+            // Use provided temp marker
+            tempMarker.x = insertPosition.x;
+            tempMarker.y = insertPosition.y;
+
+            // Insert into ordered sources
+            const newOrdered = RouteUtilsCore.insertWaypointIntoOrderedSources(ordered, insertPosition, tempMarker, 'temp');
+
+            const newSources = newOrdered;
+            const newIndices = newSources.map((_, i) => i);
+
+            // Set the route
+            this.setRoute(newIndices, RouteUtilsCore.computeRouteLengthNormalized(newSources, 8192), newSources); // Use default map size
+
+        } catch (e) {
+            this.errorHandler.logDebug('RouteManager.insertWaypointAtSegment failed', 'RouteManager.insertWaypointAtSegment', { error: e });
+        }
+    }
+
+    // Start waypoint drag - create temporary drag state
+    startWaypointDrag(waypointIndex) {
+        try {
+            if (!Array.isArray(this.currentRoute) || !Array.isArray(this.routeSources)) return;
+            if (waypointIndex < 0 || waypointIndex >= this.currentRoute.length) return;
+
+            // Store original state for restoration if drag is cancelled
+            this.dragWaypointState = {
+                originalIndex: waypointIndex,
+                originalSources: this.routeSources.slice(),
+                originalIndices: this.currentRoute.slice(),
+                originalLength: this.currentRouteLengthNormalized
+            };
+
+            this.errorHandler.logDebug('Started waypoint drag', 'RouteManager.startWaypointDrag', { waypointIndex });
+        } catch (e) {
+            this.errorHandler.logDebug('RouteManager.startWaypointDrag failed', 'RouteManager.startWaypointDrag', { error: e });
+        }
+    }
+
+    // Update waypoint position during drag - create temporary marker
+    updateWaypointPosition(waypointIndex, worldX, worldY) {
+        try {
+            if (!this.dragWaypointState || this.dragWaypointState.originalIndex !== waypointIndex) return;
+
+            // Create or update temporary marker for drag preview
+            if (!this.dragWaypointState.tempMarker) {
+                // Create a temporary marker for drag preview (not saved to markerManager)
+                this.dragWaypointState.tempMarker = {
+                    uid: `temp-drag-${Date.now()}`,
+                    x: worldX,
+                    y: worldY,
+                    temp: true // Mark as temporary
+                };
+            } else {
+                // Update existing temp marker position
+                this.dragWaypointState.tempMarker.x = worldX;
+                this.dragWaypointState.tempMarker.y = worldY;
+            }
+
+            // Create temporary route sources with the dragged waypoint replaced
+            const tempSources = this.dragWaypointState.originalSources.slice();
+            const tempIndices = this.dragWaypointState.originalIndices.slice();
+
+            // Replace the waypoint at the original index with our temp marker
+            const sourceIndex = tempIndices[waypointIndex];
+            tempSources[sourceIndex] = {
+                marker: this.dragWaypointState.tempMarker,
+                layerKey: 'temp',
+                layerIndex: sourceIndex
+            };
+
+            // Update current route temporarily for rendering
+            this.routeSources = tempSources;
+            this.currentRoute = tempIndices;
+            this.currentRouteLengthNormalized = RouteUtilsCore.computeRouteLengthNormalized(tempSources, 8192);
+
+            // Notify of change for rendering
+            this._notifyRouteChanged();
+
+        } catch (e) {
+            this.errorHandler.logDebug('RouteManager.updateWaypointPosition failed', 'RouteManager.updateWaypointPosition', { error: e });
+        }
+    }
+
+    // Finalize waypoint drag - either snap to marker or cancel
+    finalizeWaypointDrag(snapToMarker, cancel = false) {
+        try {
+            if (!this.dragWaypointState) return;
+
+            if (cancel || !snapToMarker) {
+                // Cancel: restore original route
+                this.routeSources = this.dragWaypointState.originalSources.slice();
+                this.currentRoute = this.dragWaypointState.originalIndices.slice();
+                this.currentRouteLengthNormalized = this.dragWaypointState.originalLength;
+                this.errorHandler.logDebug('Cancelled waypoint drag - restored original route', 'RouteManager.finalizeWaypointDrag');
+            } else {
+                // Snap to marker: replace the waypoint with the target marker
+                const waypointIndex = this.dragWaypointState.originalIndex;
+                const sourceIndex = this.dragWaypointState.originalIndices[waypointIndex];
+
+                // Find the marker in markerManager
+                const targetMarker = this.markerManager ? this.markerManager.getAllMarkers().find(m => m.uid === snapToMarker.uid) : null;
+                if (targetMarker) {
+                    // Replace the waypoint with the target marker
+                    this.routeSources[sourceIndex] = {
+                        marker: targetMarker,
+                        layerKey: snapToMarker.layerKey || 'customMarkers',
+                        layerIndex: sourceIndex
+                    };
+
+                    // Recalculate route length
+                    this.currentRouteLengthNormalized = RouteUtilsCore.computeRouteLengthNormalized(this.routeSources, 8192);
+
+                    this.errorHandler.logDebug('Snapped waypoint to marker', 'RouteManager.finalizeWaypointDrag', { markerUid: snapToMarker.uid });
+                } else {
+                    // Fallback: cancel if marker not found
+                    this.routeSources = this.dragWaypointState.originalSources.slice();
+                    this.currentRoute = this.dragWaypointState.originalIndices.slice();
+                    this.currentRouteLengthNormalized = this.dragWaypointState.originalLength;
+                    this.errorHandler.logDebug('Marker not found for snap - cancelled drag', 'RouteManager.finalizeWaypointDrag');
+                }
+            }
+
+            // Clean up drag state
+            this.dragWaypointState = null;
+
+            // Save to storage and notify
+            this.saveToStorage();
+            this._notifyRouteChanged();
+
+        } catch (e) {
+            this.errorHandler.logDebug('RouteManager.finalizeWaypointDrag failed', 'RouteManager.finalizeWaypointDrag', { error: e });
+            // Emergency cleanup
+            if (this.dragWaypointState) {
+                this.routeSources = this.dragWaypointState.originalSources.slice();
+                this.currentRoute = this.dragWaypointState.originalIndices.slice();
+                this.currentRouteLengthNormalized = this.dragWaypointState.originalLength;
+                this.dragWaypointState = null;
+                this._notifyRouteChanged();
+            }
+        }
     }
 
     // Export route to file
@@ -309,6 +567,26 @@ class RouteManager {
         if (changed) {
             this.saveToStorage();
             this._notifyRouteChanged();
+        }
+    }
+
+    /**
+     * Clean up event listeners to prevent memory leaks.
+     * Call this method when the RouteManager is being destroyed or recreated.
+     */
+    destroy() {
+        try {
+            // Unsubscribe all event listeners
+            if (Array.isArray(this._eventUnsubscribers)) {
+                for (const unsub of this._eventUnsubscribers) {
+                    if (typeof unsub === 'function') {
+                        unsub();
+                    }
+                }
+                this._eventUnsubscribers = [];
+            }
+        } catch (e) {
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.destroy failed', 'RouteManager.destroy', { error: e });
         }
     }
 }

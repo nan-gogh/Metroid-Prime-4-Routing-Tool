@@ -4,12 +4,13 @@
 
 (function (global) {
   class RouteEditHandler {
-    constructor(map, config, eventBus, editModeState) {
+    constructor(map, config, eventBus, editModeState, dragState) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || (global.errorHandler);
       this.eventBus = eventBus || window.eventBus;
       this.eventTypes = window.EventTypes || {};
+      this.dragState = dragState;
 
       // Get state managers from map
       this.mapState = map.mapState;
@@ -17,18 +18,20 @@
       this.selectionState = map.selectionState;
       this.editModeState = editModeState || (map && map.editModeState);
 
+      // Route utilities for calculations
+      this.routeUtils = window.RouteUtilsCore || {};
+
+      // Route finding functions
+      this._findRouteWaypointAt = (screenX, screenY) => {
+        if (this.map.routeController && typeof this.map.routeController.findRouteWaypointAt === 'function') {
+          return this.map.routeController.findRouteWaypointAt(screenX, screenY);
+        }
+        return null;
+      };
+      this._findRouteSegmentAt = this.map.routeController ? this.map.routeController.findRouteSegmentAt.bind(this.map.routeController) : null;
+
       // Performance optimization: Create fast property accessors
       this._createFastAccessors();
-
-      // Route-specific state
-      this._routeInsert = null;
-      this._routePreview = null;
-
-      // Bind methods for performance (removed _render binding - now using EventBus)
-      this._findRouteSegmentAt = this.map.findRouteSegmentAt.bind(this.map);
-      this._setRoute = this.map._setRoute ? this.map._setRoute.bind(this.map) : null;
-      this._computeRouteLengthNormalized = this.map._computeRouteLengthNormalized ?
-        this.map._computeRouteLengthNormalized.bind(this.map) : null;
     }
 
     // Performance optimization: Create fast property accessors
@@ -39,26 +42,127 @@
           panY: { get: () => this.mapState.panY },
           zoom: { get: () => this.mapState.zoom },
           canvas: { get: () => this.map.canvas },
-          currentRoute: { get: () => this.routeState.currentRoute },
-          _routeSources: { get: () => this.routeState._routeSources },
+          currentRoute: { get: () => this.map.routeManager ? this.map.routeManager.currentRoute : [] },
+          _routeSources: { get: () => this.map.routeManager ? this.map.routeManager.routeSources : [] },
           editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
           _routeInsert: {
-            get: () => this.__routeInsert,
-            set: (v) => {
-              this.__routeInsert = v;
-              this.routeState._routeInsert = v;
-            }
+            get: () => this.dragState.routeInsert,
+            set: (v) => this.dragState.setRouteInsert(v)
           },
           _routePreview: {
-            get: () => this.__routePreview,
-            set: (v) => {
-              this.__routePreview = v;
-              this.routeState._routePreview = v;
-            }
+            get: () => this.dragState.routePreview,
+            set: (v) => this.dragState.setRoutePreview(v)
+          },
+          _waypointDrag: {
+            get: () => this.dragState.waypointDrag,
+            set: (v) => this.dragState.setWaypointDrag(v)
+          },
+          _routeNodeCandidate: {
+            get: () => this.dragState.routeNodeCandidate,
+            set: (v) => this.dragState.setRouteNodeCandidate(v)
           }
         });
       } catch (e) {
         this.errorHandler.logDebug('RouteEditHandler fast accessors failed', 'RouteEditHandler.constructor.fastAccessors', { error: e });
+      }
+
+      // Pending waypoint finalization event (stores pointer event for drop target detection)
+      this._pendingWaypointFinalize = null;
+
+      // Event listener cleanup
+      this._eventUnsubscribers = [];
+
+      // Set up event listeners for drag finalization
+      this._setupDragFinalizeListeners();
+    }
+
+    // Set up listeners for waypoint drag finalization events
+    _setupDragFinalizeListeners() {
+      try {
+        if (!this.eventBus) return;
+
+        // Listen for DragState's finalization signal (contains pointer coordinates)
+        const unsub1 = this.eventBus.on(this.eventTypes.ROUTE_WAYPOINT_DRAG_FINALIZED, (data) => {
+          try {
+            // Store the finalize event with pointer coords for processing
+            // when ROUTE_WAYPOINT_DRAG_CHANGED fires with null drag
+            if (data && (data.clientX !== undefined || data.pointerId !== undefined)) {
+              this._pendingWaypointFinalize = data;
+            }
+          } catch (e) {
+            this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._setupDragFinalizeListeners.finalized');
+          }
+        });
+        if (typeof unsub1 === 'function') this._eventUnsubscribers.push(unsub1);
+
+        // Handle waypoint drag completion when DragState clears the drag
+        const unsub2 = this.eventBus.on(this.eventTypes.ROUTE_WAYPOINT_DRAG_CHANGED, (data) => {
+          try {
+            // When drag transitions to null, we need to finalize
+            if (!data.drag) {
+              if (this._pendingWaypointFinalize) {
+                // Normal finalization: process drop target
+                const ev = this._pendingWaypointFinalize;
+                this._pendingWaypointFinalize = null;
+
+                // Check if we dropped on a valid marker
+                let localX = 0, localY = 0;
+                try {
+                  const rect = this.canvas.getBoundingClientRect();
+                  localX = (ev.clientX || 0) - rect.left;
+                  localY = (ev.clientY || 0) - rect.top;
+                } catch (e) {
+                  this.errorHandler && this.errorHandler.logDebug('Failed to get local coords', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
+                }
+
+                const hit = this._findMarkerAt(localX, localY);
+
+                let snapToMarker = null;
+                let cancel = true;
+
+                if (hit && hit.marker && hit.marker.uid) {
+                  // Check if this marker is already in the route
+                  let alreadyInRoute = false;
+                  for (let i = 0; i < this.currentRoute.length; i++) {
+                    const src = this._routeSources[this.currentRoute[i]];
+                    if (src && src.marker && src.marker.uid === hit.marker.uid) {
+                      alreadyInRoute = true;
+                      break;
+                    }
+                  }
+
+                  if (!alreadyInRoute) {
+                    snapToMarker = {
+                      uid: hit.marker.uid,
+                      layerKey: hit.layerKey
+                    };
+                    cancel = false;
+                  }
+                }
+
+                // Emit finalize event to RouteManager with drop target information
+                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                  finalizeWaypointDrag: true,
+                  snapToMarker: snapToMarker,
+                  cancel: cancel
+                });
+              } else {
+                // External cancellation (escape, mouse leave, etc.)
+                // No pending finalize means drag was aborted, cancel it
+                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                  finalizeWaypointDrag: true,
+                  snapToMarker: null,
+                  cancel: true
+                });
+              }
+            }
+          } catch (e) {
+            this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._setupDragFinalizeListeners.changed');
+          }
+        });
+        if (typeof unsub2 === 'function') this._eventUnsubscribers.push(unsub2);
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._setupDragFinalizeListeners failed', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
       }
     }
 
@@ -66,13 +170,40 @@
 
     handlePointerDown(ev, localX, localY, downTime) {
       try {
-        // Route node drag start
+        // Route node drag start - check regular markers first
         const hit = this.map.checkMarkerHover ? this.map.checkMarkerHover(localX, localY) : null;
         if (hit && this.editRouteMode && hit.marker && hit.marker.uid) {
-          if (typeof this.map._handleRouteNodeDragStart === 'function') {
-            this.map._handleRouteNodeDragStart(ev, hit, localX, localY, downTime);
+          // Find route position and set local candidate state
+          const routePos = this.routeUtils.findRoutePositionOfMarker ?
+            this.routeUtils.findRoutePositionOfMarker(hit.marker.uid, this.currentRoute, this._routeSources) : -1;
+          if (routePos !== -1) {
+            this._routeNodeCandidate = {
+              pointerId: ev.pointerId,
+              routePos: routePos,
+              startClientX: ev.clientX,
+              startClientY: ev.clientY
+            };
+            return true; // Handled
           }
-          return true; // Handled
+        }
+
+        // Route waypoint drag start - check route waypoints if no regular marker hit
+        if (this.editRouteMode) {
+          const waypointHit = this._findRouteWaypointAt ? this._findRouteWaypointAt(localX, localY) : null;
+          if (waypointHit && waypointHit.marker) {
+            // Find route position and set local candidate state
+            const routePos = this.routeUtils.findRoutePositionOfMarker ?
+              this.routeUtils.findRoutePositionOfMarker(waypointHit.marker.uid, this.currentRoute, this._routeSources) : -1;
+            if (routePos !== -1) {
+              this._routeNodeCandidate = {
+                pointerId: ev.pointerId,
+                routePos: routePos,
+                startClientX: ev.clientX,
+                startClientY: ev.clientY
+              };
+              return true; // Handled
+            }
+          }
         }
 
         // Route segment insertion
@@ -80,15 +211,15 @@
           const seg = this._findRouteSegmentAt ?
             this._findRouteSegmentAt(localX, localY, this.config.ROUTE.SEGMENT_DETECTION_THRESHOLD) : null;
           if (seg && typeof seg.index === 'number') {
-            if (typeof this.map._handleRouteInsertStart === 'function') {
-              this.map._handleRouteInsertStart(ev, seg, localX, localY, downTime);
-            }
+            // Initialize route segment insertion directly (event-driven architecture)
+            this._startRouteSegmentInsertion(ev, seg, localX, localY, downTime);
             return true; // Handled
           }
         }
 
         return false; // Not handled
       } catch (e) {
+        this.errorHandler.logError('RouteEditHandler.handlePointerDown failed:', 'interactions', e);
         this.errorHandler.logDebug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
         return false;
       }
@@ -98,6 +229,12 @@
       try {
         // Handle route node drag promotion
         this._handleRouteNodePromotion(ev, localX, localY);
+
+        // Handle active waypoint drag
+        if (this.dragState.waypointDrag && ev.pointerId === this.dragState.waypointDrag.pointerId) {
+          this._handleWaypointDrag(ev, localX, localY);
+          return true; // Handled
+        }
 
         // Handle active route insertion drag
         if (this._routeInsert && ev.pointerId === this._routeInsert.pointerId) {
@@ -110,6 +247,7 @@
 
         return false; // Not handled
       } catch (e) {
+        this.errorHandler.logError('RouteEditHandler.handlePointerMove failed:', 'interactions', e);
         this.errorHandler.logDebug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
         return false;
       }
@@ -117,6 +255,15 @@
 
     handlePointerUp(ev, localX, localY) {
       try {
+        // Clear route node candidate if active
+        if (this._routeNodeCandidate && ev.pointerId === this._routeNodeCandidate.pointerId) {
+          this._routeNodeCandidate = null;
+        }
+
+        // Waypoint drag finalization is handled by DragState.finalizeAllDrags()
+        // in PointerHandler._finalizeDrags(). RouteEditHandler does not finalize
+        // to maintain centralized DragState architecture and event-driven design.
+
         this._finalizeRouteInsert(ev);
         return false; // Continue with other handlers
       } catch (e) {
@@ -157,9 +304,14 @@
           this._cancelRouteInsert('Mouse left canvas');
         }
 
+        // If a waypoint drag was in progress, cancel it (use DragState setter)
+        if (this._waypointDrag) {
+          this.dragState.setWaypointDrag(null);
+        }
+
         // Clear any unpromoted route-node candidate
-        if (this.map._routeNodeCandidate) {
-          this.map._routeNodeCandidate = null;
+        if (this._routeNodeCandidate) {
+          this._routeNodeCandidate = null;
         }
 
         return false; // Continue with other handlers
@@ -172,12 +324,45 @@
     // ===== ROUTE-SPECIFIC METHODS =====
 
     _handleRouteNodePromotion(ev, localX, localY) {
-      if (this.map._routeNodeCandidate && ev.pointerId === this.map._routeNodeCandidate.pointerId) {
-        const dxn = ev.clientX - this.map._routeNodeCandidate.startClientX;
-        const dyn = ev.clientY - this.map._routeNodeCandidate.startClientY;
-        if (Math.hypot(dxn, dyn) > (this.config.ROUTE?.MOVE_THRESHOLD || 5)) {
+      if (this._routeNodeCandidate && ev.pointerId === this._routeNodeCandidate.pointerId) {
+        const dxn = ev.clientX - this._routeNodeCandidate.startClientX;
+        const dyn = ev.clientY - this._routeNodeCandidate.startClientY;
+        const dist = Math.hypot(dxn, dyn);
+        if (dist > (this.config.ROUTE?.MOVE_THRESHOLD || 5)) {
           this._promoteRouteNodeDrag(ev, localX, localY);
         }
+      }
+    }
+
+    _handleWaypointDrag(ev, localX, localY) {
+      try {
+        if (!this.dragState.waypointDrag) return; // Safety check
+        
+        const worldX = (localX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
+        const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
+
+        // Emit waypoint drag update
+        if (this.eventBus && this.eventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED) {
+          this.eventBus.emit(this.eventTypes.ROUTE_WAYPOINT_DRAG_REQUESTED, {
+            waypointIndex: this.dragState.waypointDrag.waypointIndex,
+            worldX: Math.max(0, Math.min(1, Number(worldX))),
+            worldY: Math.max(0, Math.min(1, Number(worldY)))
+          });
+        }
+
+        // Invalidate route renderer cache
+        try {
+          if (this.map.routeRenderer && typeof this.map.routeRenderer.invalidateCache === 'function') {
+            this.map.routeRenderer.invalidateCache();
+          }
+        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._handleWaypointDrag.invalidateCache'); }
+
+        // Trigger render
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+
+      } catch (e) {
+        this.errorHandler.logError('Error in _handleWaypointDrag:', 'interactions', e);
+        this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._handleWaypointDrag');
       }
     }
 
@@ -232,7 +417,7 @@
             }
           }
 
-          this.map.routeManager.currentRouteLengthNormalized = newLengthNormalized;
+          // Route length is updated by RouteManager.updateWaypointPosition via the event
 
           // Update UI display
           try {
@@ -259,7 +444,7 @@
     _handleRoutePreview(localX, localY) {
       try {
         const canPreview = !this.map.isDragging && !this.map._draggingMarker && !this.map._draggingCandidate &&
-                          !this._routeInsert && !this.map._routeNodeCandidate && this.editRouteMode;
+                          !this._routeInsert && !this._routeNodeCandidate && this.editRouteMode;
         if (canPreview) {
           const seg = this._findRouteSegmentAt ?
             this._findRouteSegmentAt(localX, localY, this.config.ROUTE?.SEGMENT_DETECTION_THRESHOLD || 20) : null;
@@ -298,61 +483,71 @@
 
     _promoteRouteNodeDrag(ev, localX, localY) {
       try {
-        const routePos = Number(this.map._routeNodeCandidate.routePos) || 0;
-        const prevSources = Array.isArray(this._routeSources) ? this._routeSources.slice() : [];
-        const prevIndices = Array.isArray(this.currentRoute) ? this.currentRoute.slice() : [];
+        const routePos = Number(this._routeNodeCandidate.routePos) || 0;
 
-        const ordered = [];
-        for (let ri = 0; ri < prevIndices.length; ri++) {
-          const srcIdx = prevIndices[ri];
-          const src = prevSources[srcIdx];
-          if (!src) continue;
-          ordered.push({ marker: src.marker, layerKey: src.layerKey, layerIndex: ordered.length });
+        // Get the current marker position
+        const sourceIndex = this.currentRoute[routePos];
+        const source = this._routeSources[sourceIndex];
+        if (!source || !source.marker) {
+          return;
         }
 
-        const worldX = (localX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
-        const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
-        
-        // Use pooled objects for performance
-        const tempMarker = global.markerPool ? global.markerPool.acquire() : { uid: '', x: 0, y: 0 };
-        tempMarker.x = Number(worldX);
-        tempMarker.y = Number(worldY);
-        
-        const tempSource = global.routeSourcePool ? global.routeSourcePool.acquire() : { marker: null, layerKey: '', layerIndex: -1 };
-        tempSource.marker = tempMarker;
-        tempSource.layerKey = 'temp';
-        tempSource.layerIndex = -1;
-        
-        ordered[routePos] = tempSource;
+        // CRITICAL: Emit drag start event to RouteManager FIRST
+        // This ensures RouteManager.dragWaypointState is set BEFORE
+        // DragState.setWaypointDrag() emits ROUTE_WAYPOINT_DRAG_CHANGED
+        // which RouteManager also listens to. Without this order,
+        // RouteManager sees the CHANGED event with no dragWaypointState.
+        this.eventBus.emit(this.eventTypes.ROUTE_WAYPOINT_DRAG_STARTED, {
+          waypointIndex: routePos
+        });
 
-        const newSources = ordered;
-        const newIndices = newSources.map((_, i) => i);
-        if (this._setRoute) {
-          this._setRoute(newIndices, this._computeRouteLengthNormalized ?
-            this._computeRouteLengthNormalized(newSources) : 0, newSources);
-        }
-
-        this._routeInsert = {
+        // THEN set up waypoint drag state using centralized DragState
+        // This emits ROUTE_WAYPOINT_DRAG_CHANGED which RouteManager
+        // also listens to, but now dragWaypointState will be set
+        this.dragState.setWaypointDrag({
           pointerId: ev.pointerId,
-          tempIndex: routePos,
-          tempSource, // Store reference for cleanup
-          prevSources,
-          prevIndices,
-          prevRouteLooping: !!this.map.routeLooping,
-          originalMarker: prevSources[prevIndices[routePos]] ?
-            prevSources[prevIndices[routePos]].marker : null,
-          hoverMarker: null,
-          hoverOccupied: false,
-          initialDragLocalX: localX,
-          initialDragLocalY: localY,
-          initialPanX: this.panX,
-          initialPanY: this.panY
-        };
-        this.map._routeNodeCandidate = null;
+          waypointIndex: routePos,
+          startWorldX: source.marker.x,
+          startWorldY: source.marker.y
+        });
+
+        // Clear local candidate state
+        this._routeNodeCandidate = null;
         this.map.pointerDownTime = 0;
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._promoteRouteNodeDrag.setCursor'); }
       } catch (err) {
-        this.map._routeNodeCandidate = null;
+        this.errorHandler.logError('Error in _promoteRouteNodeDrag:', 'interactions', err);
+        this._routeNodeCandidate = null;
+        this.dragState.setWaypointDrag(null);
+      }
+    }
+
+    _startRouteSegmentInsertion(ev, seg, localX, localY, downTime) {
+      try {
+        if (!seg || typeof seg.index !== 'number') return;
+
+        // Emit route segment insert request event (decoupled architecture)
+        this.eventBus.emit(this.eventTypes.ROUTE_SEGMENT_INSERT_REQUESTED, {
+          segmentIndex: seg.index,
+          t: seg.t,
+          tempMarker: { x: 0, y: 0, uid: '' } // Temporary marker will be positioned by RouteManager
+        });
+
+        // Initialize route insert state for drag handling
+        this.dragState.setRouteInsert({
+          pointerId: ev.pointerId,
+          tempIndex: seg.index + 1, // Index where temp marker was inserted
+          hoverMarker: null,
+          hoverOccupied: false
+        });
+
+        // Clear pointer down time to prevent click handling
+        if (this.map) this.map.pointerDownTime = 0;
+
+        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._startRouteSegmentInsertion.setCursor'); }
+
+      } catch (err) {
+        this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._startRouteSegmentInsertion');
       }
     }
 
@@ -366,8 +561,14 @@
             const len = this._computeRouteLengthNormalized ?
               this._computeRouteLengthNormalized(this._routeSources) : 0;
             const indices = this._routeSources.map((_, i) => i);
-            if (this._setRoute) {
-              this._setRoute(indices, len, this._routeSources);
+            
+            // Emit route edit request instead of direct call (decoupled architecture)
+            if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
+              this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                indices: indices,
+                lengthNormalized: len,
+                sources: this._routeSources
+              });
             }
           } else if (this._routeInsert.hoverMarker && this._routeInsert.hoverOccupied) {
             // Handle occupied marker replacement
@@ -393,8 +594,14 @@
               const len = this._computeRouteLengthNormalized ?
                 this._computeRouteLengthNormalized(newSources) : 0;
               const indices = newSources.map((_, i) => i);
-              if (this._setRoute) {
-                this._setRoute(indices, len, newSources);
+              
+              // Emit route edit request instead of direct call (decoupled architecture)
+              if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
+                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                  indices: indices,
+                  lengthNormalized: len,
+                  sources: newSources
+                });
               }
             }
           } else {
@@ -405,10 +612,22 @@
                              this._routeInsert.prevIndices : (prev.map((_,i)=>i));
               const len = this._computeRouteLengthNormalized ?
                 this._computeRouteLengthNormalized(prev) : 0;
-              if (this._setRoute) {
-                this._setRoute(prevIdx, len, prev);
+              
+              // Emit route edit request instead of direct call (decoupled architecture)
+              if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
+                this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                  indices: prevIdx,
+                  lengthNormalized: len,
+                  sources: prev
+                });
               }
-              try { this.map.routeLooping = !!this._routeInsert.prevRouteLooping; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._finalizeRouteInsert.restoreRouteLooping'); }
+              
+              // Emit route looping change instead of direct assignment (decoupled architecture)
+              if (this.eventBus && this.eventTypes.ROUTE_LOOPING_CHANGED) {
+                this.eventBus.emit(this.eventTypes.ROUTE_LOOPING_CHANGED, {
+                  looping: !!this._routeInsert.prevRouteLooping
+                });
+              }
             } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._finalizeRouteInsert.restoreRoute'); }
           }
           this._routeInsert = null;
@@ -421,6 +640,10 @@
       try {
         const uid = marker.uid;
         if (!uid) return;
+
+        // Clear any drag candidates before processing the click
+        this._routeNodeCandidate = null;
+        this.dragState.setWaypointDrag(null);
 
         // Build ordered list of existing route marker UIDs
         const existing = [];
@@ -471,12 +694,14 @@
         }
         const lengthNormalized = lengthPx / (this.config.MAP_SIZE || 8192);
 
-        // Apply the new route
-        if (this._setRoute) {
-          this._setRoute(newIndices, lengthNormalized, newSources);
-        }
-        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
+        // Emit route edit request event (decoupled from map)
+        this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+          indices: newIndices,
+          lengthNormalized: lengthNormalized,
+          sources: newSources
+        });
       } catch (err) {
+        this.errorHandler.logError('RouteEditHandler: _handleRouteEditClick failed', 'interactions', err);
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showRouteError) {
           NotificationUtils.showRouteError('Route edit tap failed: ' + err.message);
         }
@@ -497,12 +722,21 @@
                            this._routeInsert.prevIndices : (prev.map((_,i)=>i));
             const len = this.map.routeManager ?
               this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
-            if (this._setRoute) {
-              this._setRoute(prevIdx, len, prev);
+            
+            // Emit route edit request instead of direct call (decoupled architecture)
+            if (this.eventBus && this.eventTypes.ROUTE_EDIT_REQUESTED) {
+              this.eventBus.emit(this.eventTypes.ROUTE_EDIT_REQUESTED, {
+                indices: prevIdx,
+                lengthNormalized: len,
+                sources: prev
+              });
             }
 
-            if (this._routeInsert.prevRouteLooping !== undefined) {
-              this.map.routeLooping = !!this._routeInsert.prevRouteLooping;
+            // Emit route looping change instead of direct assignment (decoupled architecture)
+            if (this.eventBus && this.eventTypes.ROUTE_LOOPING_CHANGED && this._routeInsert.prevRouteLooping !== undefined) {
+              this.eventBus.emit(this.eventTypes.ROUTE_LOOPING_CHANGED, {
+                looping: !!this._routeInsert.prevRouteLooping
+              });
             }
           }
           this._routeInsert = null;
@@ -521,11 +755,37 @@
 
     // ===== CLEANUP =====
 
+    /**
+     * Clean up event listeners to prevent memory leaks.
+     * Call this method when the RouteEditHandler is being destroyed or recreated.
+     */
+    destroy() {
+      try {
+        // Unsubscribe all event listeners
+        if (Array.isArray(this._eventUnsubscribers)) {
+          for (const unsub of this._eventUnsubscribers) {
+            if (typeof unsub === 'function') {
+              unsub();
+            }
+          }
+          this._eventUnsubscribers = [];
+        }
+        
+        // Cancel any pending operations
+        this.cancelOperations('Destroyed');
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.destroy failed', 'RouteEditHandler.destroy', { error: e });
+      }
+    }
+
     cancelOperations(reason = 'Operation cancelled') {
       try {
         this._cancelRouteInsert(reason);
-        if (this.map._routeNodeCandidate) {
-          this.map._routeNodeCandidate = null;
+        if (this._routeNodeCandidate) {
+          this._routeNodeCandidate = null;
+        }
+        if (this._waypointDrag) {
+          this.dragState.setWaypointDrag(null);
         }
         this._routePreview = null;
       } catch (e) {
