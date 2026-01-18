@@ -17,7 +17,9 @@
       this.config = options.config || global.MP4Config || {};
       this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
       this.eventTypes = window.EventTypes || {};
-
+      
+      // Optional map reference for operations that previously called map methods
+      this.map = options.map || null;
       // Event listener cleanup
       this._eventUnsubscribers = [];
     }
@@ -182,8 +184,109 @@
      */
     _bindHighlightControls() {
       try {
-        // Highlight scaling sliders are handled in the main init() function
-        // as they involve complex UI positioning and value handling
+        // Marker size slider
+        const markerSlider = document.getElementById('markerSizeSlider');
+        const markerLabel = document.getElementById('markerSizeValue');
+        if (markerSlider && markerLabel) {
+          let initial = (this.config && this.config.MARKER_SCALING) ? this.config.MARKER_SCALING.userScaleMultiplier : 1.0;
+          markerSlider.value = initial;
+          markerLabel.textContent = `${(initial * 100).toFixed(0)}%`;
+
+          const updateMarkerScale = (v, evTarget) => {
+            let val = parseFloat(v) || 1.0;
+            val = Math.max(0.5, Math.min(1.5, val));
+            if (evTarget) evTarget.value = val;
+            markerLabel.textContent = `${(val * 100).toFixed(0)}%`;
+            // Update stored config via map helper if available, otherwise update MP4Config directly
+            try {
+              if (this.map && typeof this.map.updateMarkerUserScaleMultiplier === 'function') {
+                this.map.updateMarkerUserScaleMultiplier(val);
+              } else if (this.config && this.config.MARKER_SCALING) {
+                this.config.MARKER_SCALING.userScaleMultiplier = val;
+                // Request a render so marker renderer picks up new scale
+                try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
+              }
+            } catch (e) {
+              this.errorHandler.logDebug('SettingsController: Failed to update marker scale', 'SettingsController._bindHighlightControls.markerScale', { error: e });
+            }
+          };
+
+          markerSlider.addEventListener('input', (ev) => updateMarkerScale(ev.target.value, ev.target));
+
+          markerSlider.addEventListener('change', (ev) => {
+            try { updateMarkerScale(ev.target.value, ev.target); } catch (e) { this.errorHandler.logDebug('SettingsController: markerSize change failed', 'SettingsController._bindHighlightControls.markerChange', { error: e }); }
+            try {
+              // Trigger hover update for UX parity
+              if (this.map && typeof this.map.checkMarkerHover === 'function') {
+                if (typeof this.map.lastMouseX === 'number' && typeof this.map.lastMouseY === 'number') {
+                  this.map.checkMarkerHover(this.map.lastMouseX, this.map.lastMouseY);
+                } else {
+                  const rect = this.map && this.map.canvas && this.map.canvas.getBoundingClientRect ? this.map.canvas.getBoundingClientRect() : null;
+                  if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
+                }
+              }
+            } catch (e) { this.errorHandler.logDebug('SettingsController: markerSize change hover update failed', 'SettingsController._bindHighlightControls.markerChangeHover', { error: e }); }
+          });
+        }
+
+        // Highlight scale slider (affects both HighlightState and marker highlight multiplier where applicable)
+        const highlightSlider = document.getElementById('highlightScaleSlider');
+        const highlightLabel = document.getElementById('highlightScaleValue');
+        if (highlightSlider && highlightLabel) {
+          // Prefer highlightState value if available, otherwise fall back to marker scaling config
+          let initial = (this.highlightState && typeof this.highlightState.highlightScaleMultiplier === 'number') ? this.highlightState.highlightScaleMultiplier : (this.config && this.config.MARKER_SCALING ? this.config.MARKER_SCALING.highlightMultiplier : 2.0);
+          highlightSlider.value = initial;
+          // Display a user-facing mapped value (legacy UI expectation)
+          const displayInitial = Number(initial) + 0.6;
+          highlightLabel.textContent = `${Math.round(displayInitial * 100)}%`;
+
+          const updateHighlight = (v, evTarget) => {
+            let val = parseFloat(v) || 1.0;
+            val = Math.max(1.5, Math.min(2.5, val));
+            if (evTarget) evTarget.value = val;
+
+            // Update UI label (legacy mapping)
+            const display = Number(val) + 0.6;
+            highlightLabel.textContent = `${Math.round(display * 100)}%`;
+
+            try {
+              if (this.highlightState && typeof this.highlightState.setHighlightScaleMultiplier === 'function') {
+                this.highlightState.setHighlightScaleMultiplier(val);
+              }
+              // Also update MP4Config/marker scaling via map helper if present so MarkerRenderer picks up new highlight multiplier
+              if (this.map && typeof this.map.updateMarkerHighlightMultiplier === 'function') {
+                this.map.updateMarkerHighlightMultiplier(val);
+              } else if (this.config && this.config.MARKER_SCALING) {
+                this.config.MARKER_SCALING.highlightMultiplier = val;
+              }
+
+              // Request persistence via EventBus where map listens
+              try { this.eventBus.emit(this.eventTypes.HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED, { multiplier: val }); } catch (e) {}
+
+              // Request render so renderers pick up new settings
+              try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
+            } catch (e) {
+              this.errorHandler.logDebug('SettingsController: Failed to update highlight scale', 'SettingsController._bindHighlightControls.highlightScale', { error: e });
+            }
+          };
+
+          highlightSlider.addEventListener('input', (ev) => updateHighlight(ev.target.value, ev.target));
+
+          highlightSlider.addEventListener('change', (ev) => {
+            try { updateHighlight(ev.target.value, ev.target); } catch (e) { this.errorHandler.logDebug('SettingsController: highlight change failed', 'SettingsController._bindHighlightControls.highlightChange', { error: e }); }
+            try {
+              // Trigger hover update for UX parity
+              if (this.map && typeof this.map.checkMarkerHover === 'function') {
+                if (typeof this.map.lastMouseX === 'number' && typeof this.map.lastMouseY === 'number') {
+                  this.map.checkMarkerHover(this.map.lastMouseX, this.map.lastMouseY);
+                } else {
+                  const rect = this.map && this.map.canvas && this.map.canvas.getBoundingClientRect ? this.map.canvas.getBoundingClientRect() : null;
+                  if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
+                }
+              }
+            } catch (e) { this.errorHandler.logDebug('SettingsController: highlight change hover update failed', 'SettingsController._bindHighlightControls.highlightChangeHover', { error: e }); }
+          });
+        }
 
       } catch (e) {
         this.errorHandler.logDebug('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });

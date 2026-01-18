@@ -2891,6 +2891,7 @@ async function init() {
                 tilesetState: map.tilesetState,
                 markerManager: map.markerManager,
                 mapState: map.mapState,
+                map: map,
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler
@@ -3224,141 +3225,7 @@ async function init() {
     // Tileset controls (Satellite / Holographic)
     // NOTE: Tileset and display controls are now handled by SettingsController
 
-    // Settings: highlight size multiplier slider wiring
-    try {
-        const slider = document.getElementById('highlightScaleSlider');
-        const label = document.getElementById('highlightScaleValue');
-        if (slider && label) {
-            // Get initial value from highlightState instead of map property
-            let initial = (map && map.highlightState && typeof map.highlightState.highlightScaleMultiplier === 'number') ? map.highlightState.highlightScaleMultiplier : 1.0;
-            slider.value = initial;
-            // Display a mapped user-facing value while keeping internal numbers unchanged.
-            // Users expect the displayed slider to start near 1.2x, so show (internal + 0.6).
-            const displayInitial = Number(initial) + 0.6;
-            const pctInitial = Math.round(displayInitial * 100);
-            label.textContent = `${pctInitial}%`;
-            
-            slider.addEventListener('input', (ev) => {
-                const v = parseFloat(ev.target.value) || 1.0;
-                // Map displayed value to (internal + 0.6) so UI range appears to start around 1.2x
-                const display = Number(v) + 0.6;
-                const pct = Math.round(display * 100);
-                label.textContent = `${pct}%`;
-                // Update highlightScaleMultiplier via HighlightState
-                if (map && map.highlightState && typeof map.highlightState.setHighlightScaleMultiplier === 'function') {
-                    map.highlightState.setHighlightScaleMultiplier(v);
-                }
-            });
-            
-            slider.addEventListener('change', (ev) => {
-                try {
-                    if (map) {
-                        map.render();
-                        if (typeof map.checkMarkerHover === 'function') {
-                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') {
-                                map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
-                            } else {
-                                const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null;
-                                if (rect) map.checkMarkerHover(rect.width / 2, rect.height / 2);
-                            }
-                        }
-                    }
-                } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.handleHighlightSizeSliderChange'); }
-            });
-        }
-    } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.setupHighlightSizeSlider'); }
-    
-    // Settings: marker size slider wiring
-    try {
-        const slider = document.getElementById('markerSizeSlider');
-        const label = document.getElementById('markerSizeValue');
-        if (slider && label) {
-            let initial = MP4Config.MARKER_SCALING.userScaleMultiplier;
-            slider.value = initial;
-            label.textContent = `${(initial * 100).toFixed(0)}%`;
-            // Calculate thumb offset for precise fill alignment
-            const thumbOffsetPercent = (7 / slider.offsetWidth) * 100; // Half thumb width (7px) as percentage
-            const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
-            slider.style.setProperty('--slider-fill', fillPercent + '%');
-            
-            slider.addEventListener('input', (ev) => {
-                let v = parseFloat(ev.target.value) || 1.0;
-                // Clamp to the intended range (50% to 150%)
-                v = Math.max(0.5, Math.min(1.5, v));
-                ev.target.value = v; // Update the slider position
-                label.textContent = `${(v * 100).toFixed(0)}%`;
-                // Update slider fill visualization
-                const thumbOffsetPercent = (7 / ev.target.offsetWidth) * 100; // Half thumb width (7px) as percentage
-                const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((v - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
-                ev.target.style.setProperty('--slider-fill', fillPercent + '%');
-                if (map && typeof map.updateMarkerUserScaleMultiplier === 'function') {
-                    map.updateMarkerUserScaleMultiplier(v);
-                }
-            });
-            
-            slider.addEventListener('change', (ev) => {
-                try {
-                    if (map) {
-                        map.render();
-                        if (typeof map.checkMarkerHover === 'function') {
-                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') {
-                                map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
-                            } else {
-                                const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null;
-                                if (rect) map.checkMarkerHover(rect.width / 2, rect.height / 2);
-                            }
-                        }
-                    }
-                } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.handleMarkerSizeSliderChange'); }
-            });
-        }
-    } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.setupMarkerSizeSlider'); }
-    
-    // Settings: highlight scale slider wiring
-    try {
-        const slider = document.getElementById('highlightScaleSlider');
-        const label = document.getElementById('highlightScaleValue');
-        if (slider && label) {
-            let initial = MP4Config.MARKER_SCALING.highlightMultiplier;
-            slider.value = initial;
-            label.textContent = `x${initial.toFixed(1)}`;
-            // Calculate thumb offset for precise fill alignment
-            const thumbOffsetPercent = (7 / slider.offsetWidth) * 100; // Half thumb width (7px) as percentage
-            const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
-            slider.style.setProperty('--slider-fill', fillPercent + '%');
-            
-            slider.addEventListener('input', (ev) => {
-                let v = parseFloat(ev.target.value) || 1.2;
-                // Clamp to the intended range (1.5x to 2.5x)
-                v = Math.max(1.5, Math.min(2.5, v));
-                ev.target.value = v; // Update the slider position
-                label.textContent = `x${v.toFixed(1)}`;
-                // Update slider fill visualization
-                const thumbOffsetPercent = (7 / ev.target.offsetWidth) * 100; // Half thumb width (7px) as percentage
-                const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((v - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
-                ev.target.style.setProperty('--slider-fill', fillPercent + '%');
-                if (map && typeof map.updateMarkerHighlightMultiplier === 'function') {
-                    map.updateMarkerHighlightMultiplier(v);
-                }
-            });
-            
-            slider.addEventListener('change', (ev) => {
-                try {
-                    if (map) {
-                        map.render();
-                        if (typeof map.checkMarkerHover === 'function') {
-                            if (typeof map.lastMouseX === 'number' && typeof map.lastMouseY === 'number') {
-                                map.checkMarkerHover(map.lastMouseX, map.lastMouseY);
-                            } else {
-                                const rect = map.canvas && map.canvas.getBoundingClientRect ? map.canvas.getBoundingClientRect() : null;
-                                if (rect) map.checkMarkerHover(rect.width / 2, rect.height / 2);
-                            }
-                        }
-                    }
-                } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.handleHighlightScaleSliderChange'); }
-            });
-        }
-    } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.setupHighlightScaleSlider'); }
+    // Settings sliders (marker/highlight) are handled by `SettingsController`.
     
     document.getElementById('importCustom').addEventListener('click', () => {
         document.getElementById('importFile').click();
