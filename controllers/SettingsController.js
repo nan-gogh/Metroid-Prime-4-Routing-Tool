@@ -251,8 +251,11 @@
         const highlightSlider = document.getElementById('highlightScaleSlider');
         const highlightLabel = document.getElementById('highlightScaleValue');
         if (highlightSlider && highlightLabel) {
-          // Prefer highlightState value if available, otherwise fall back to marker scaling config
-          let initial = (this.highlightState && typeof this.highlightState.highlightScaleMultiplier === 'number') ? this.highlightState.highlightScaleMultiplier : (this.config && this.config.MARKER_SCALING ? this.config.MARKER_SCALING.highlightMultiplier : 2.0);
+          // Prefer configured marker scaling (MP4Config) so slider defaults match app defaults;
+          // fall back to HighlightState if config not available.
+          let initial = (this.config && this.config.MARKER_SCALING && typeof this.config.MARKER_SCALING.highlightMultiplier === 'number') ?
+            this.config.MARKER_SCALING.highlightMultiplier :
+            ((this.highlightState && typeof this.highlightState.highlightScaleMultiplier === 'number') ? this.highlightState.highlightScaleMultiplier : 2.0);
           highlightSlider.value = initial;
           // Display a user-facing mapped value (legacy UI expectation)
           // Map internal highlight multiplier (1.5-2.5) to a user percent starting near 110%
