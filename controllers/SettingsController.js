@@ -191,12 +191,30 @@
           let initial = (this.config && this.config.MARKER_SCALING) ? this.config.MARKER_SCALING.userScaleMultiplier : 1.0;
           markerSlider.value = initial;
           markerLabel.textContent = `${(initial * 100).toFixed(0)}%`;
+          // Initial slider fill calculation
+          try {
+            if (markerSlider.offsetWidth && markerSlider.offsetWidth > 0) {
+              const thumbOffsetPercent = (7 / markerSlider.offsetWidth) * 100;
+              const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+              markerSlider.style.setProperty('--slider-fill', fillPercent + '%');
+            }
+          } catch (e) {}
 
           const updateMarkerScale = (v, evTarget) => {
             let val = parseFloat(v) || 1.0;
             val = Math.max(0.5, Math.min(1.5, val));
             if (evTarget) evTarget.value = val;
             markerLabel.textContent = `${(val * 100).toFixed(0)}%`;
+            // Update slider fill visualization
+            try {
+              const width = evTarget && evTarget.offsetWidth ? evTarget.offsetWidth : markerSlider.offsetWidth;
+              if (width && width > 0) {
+                const thumbOffsetPercent = (7 / width) * 100;
+                const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((val - 0.5) / (1.5 - 0.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+                if (evTarget) evTarget.style.setProperty('--slider-fill', fillPercent + '%');
+                else markerSlider.style.setProperty('--slider-fill', fillPercent + '%');
+              }
+            } catch (e) {}
             // Update stored config via map helper if available, otherwise update MP4Config directly
             try {
               if (this.map && typeof this.map.updateMarkerUserScaleMultiplier === 'function') {
@@ -240,6 +258,15 @@
           const displayInitial = Number(initial) + 0.6;
           highlightLabel.textContent = `${Math.round(displayInitial * 100)}%`;
 
+          // Initial slider fill calculation
+          try {
+            if (highlightSlider.offsetWidth && highlightSlider.offsetWidth > 0) {
+              const thumbOffsetPercent = (7 / highlightSlider.offsetWidth) * 100;
+              const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((initial - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+              highlightSlider.style.setProperty('--slider-fill', fillPercent + '%');
+            }
+          } catch (e) {}
+
           const updateHighlight = (v, evTarget) => {
             let val = parseFloat(v) || 1.0;
             val = Math.max(1.5, Math.min(2.5, val));
@@ -259,6 +286,17 @@
               } else if (this.config && this.config.MARKER_SCALING) {
                 this.config.MARKER_SCALING.highlightMultiplier = val;
               }
+
+              // Update slider fill visualization
+              try {
+                const width = evTarget && evTarget.offsetWidth ? evTarget.offsetWidth : highlightSlider.offsetWidth;
+                if (width && width > 0) {
+                  const thumbOffsetPercent = (7 / width) * 100;
+                  const fillPercent = Math.max(thumbOffsetPercent, Math.min(100 - thumbOffsetPercent, ((val - 1.5) / (2.5 - 1.5)) * (100 - 2 * thumbOffsetPercent) + thumbOffsetPercent));
+                  if (evTarget) evTarget.style.setProperty('--slider-fill', fillPercent + '%');
+                  else highlightSlider.style.setProperty('--slider-fill', fillPercent + '%');
+                }
+              } catch (e) {}
 
               // Request persistence via EventBus where map listens
               try { this.eventBus.emit(this.eventTypes.HIGHLIGHT_MULTIPLIER_SAVE_REQUESTED, { multiplier: val }); } catch (e) {}
