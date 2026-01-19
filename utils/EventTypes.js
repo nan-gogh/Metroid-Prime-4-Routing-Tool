@@ -5,8 +5,14 @@ const EventTypes = {
     // Render Events
     RENDER_REQUESTED: 'render:requested',
     /**
-     * Scaffolding: emitted when a render cycle has fully completed.
-     * Not currently used by core, preserved for future pipeline hooks.
+     * Optional: emitted when a full render cycle has completed.
+     * Useful for telemetry, end-to-end tests, or plugins that need a
+     * deterministic "render finished" notification.
+     * @event RENDER_COMPLETED
+     * @param {Object} data
+     * @param {number} [data.frameId] - Optional frame identifier (RAF id)
+     * @param {Array<string>} [data.renderers] - List of renderer names that ran
+     * @param {number} [data.durationMs] - Optional total render duration in ms
      */
     RENDER_COMPLETED: 'render:completed',
     RENDER_PIPELINE_DIRTY: 'render:pipeline-dirty',
@@ -14,13 +20,33 @@ const EventTypes = {
 
     // Renderer-specific Events
     /**
-     * Scaffolding: renderer:* events indicate incremental updates from
-     * individual renderers (tiles, markers, route, overlay). Preserve
-     * these as lightweight hooks for future optimizations and observers.
+     * Optional per-renderer incremental hooks.
+     * These events are emitted by individual renderers to signal
+     * incremental progress or small updates. Keep as observer hooks
+     * for metrics, debugging, or incremental UIs.
+     * @typedef {Object} RendererEventData
+     * @property {string} renderer - Name of the renderer (e.g. 'TileRenderer')
+     * @property {Array<Object>} [items] - Renderer-specific items (tiles, markers, route segments)
+     * @property {Object} [meta] - Optional metadata (bounding box, affected tile keys, etc.)
+     *
+     * @event RENDERER_TILES_UPDATED
+     * @param {RendererEventData} data
      */
     RENDERER_TILES_UPDATED: 'renderer:tiles-updated',
+    /**
+     * @event RENDERER_MARKERS_UPDATED
+     * @param {RendererEventData} data
+     */
     RENDERER_MARKERS_UPDATED: 'renderer:markers-updated',
+    /**
+     * @event RENDERER_ROUTE_UPDATED
+     * @param {RendererEventData} data
+     */
     RENDERER_ROUTE_UPDATED: 'renderer:route-updated',
+    /**
+     * @event RENDERER_OVERLAY_UPDATED
+     * @param {RendererEventData} data
+     */
     RENDERER_OVERLAY_UPDATED: 'renderer:overlay-updated',
 
     // Layer Events
@@ -129,6 +155,17 @@ const EventTypes = {
      * @param {string} [data.triggeredBy] - What triggered the change ('pan', 'zoomIn', 'zoomOut', etc.)
      */
     MAP_VIEW_CHANGED: 'map:view-changed',
+    /**
+     * Emitted when the map's chosen image/tile resolution changes.
+     * Emitted by `ImageState` or the rendering pipeline when the
+     * resolution multiplier or selected tile resolution is updated.
+     * @event MAP_RESOLUTION_CHANGED
+     * @param {Object} data
+     * @param {number} data.multiplier - Effective resolution multiplier (e.g. 1.0, 2.0)
+     * @param {number} data.selectedIndex - Index into the configured tile resolutions
+     * @param {number} [data.tileSize] - Pixel size of tiles at the selected resolution
+     * @param {string} [data.triggeredBy] - Source of the change ('viewport', 'dpr', 'manual')
+     */
     MAP_RESOLUTION_CHANGED: 'map:resolution-changed',
     /**
      * Scaffolding: indicates a change of display mode (e.g. sat/holo/custom).
@@ -184,6 +221,16 @@ const EventTypes = {
     HIGHLIGHTED_LAYERS_SAVE_REQUESTED: 'storage:highlighted-layers-save',
 
     // Tileset Events (enhanced)
+    /**
+     * Emitted to report tileset loader/selection state changes. Useful
+     * for UI feedback when switching imagery (sat/holo) or handling
+     * loader errors.
+     * @event TILESET_STATE_CHANGED
+     * @param {Object} data
+     * @param {string} data.tilesetKey - Identifier for the tileset
+     * @param {'loading'|'ready'|'error'} data.state - Current tileset state
+     * @param {Object} [data.details] - Additional details (error info, stats)
+     */
     TILESET_STATE_CHANGED: 'tileset:state-changed',
 
     // Route Computation Events
