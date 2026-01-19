@@ -33,9 +33,7 @@
         const a = (typeof alpha === 'number') ? (alpha * alphaFromHex) : alphaFromHex;
         return `rgba(${r}, ${g}, ${b}, ${a})`;
       } catch (e) {
-        if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.console.debug('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha });
-        }
+        try { console.debug('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha }); } catch (__) { }
         return null;
       }
     },
@@ -55,9 +53,7 @@
           ctx.stroke();
         }
       } catch (e) {
-        if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.console.debug('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e });
-        }
+        try { console.debug('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e }); } catch (__) { }
       }
     },
 
@@ -82,9 +78,7 @@
           ctx.stroke();
         }
       } catch (e) {
-        if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.console.debug('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e });
-        }
+        try { console.debug('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e }); } catch (__) { }
       }
     },
 
@@ -97,9 +91,7 @@
         const y = worldY * MAP_SIZE * (mapState.zoom || 1) + (mapState.panY || 0);
         return { x, y };
       } catch (e) {
-        if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.console.debug('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e });
-        }
+        try { console.debug('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e }); } catch (__) { }
         return null;
       }
     }

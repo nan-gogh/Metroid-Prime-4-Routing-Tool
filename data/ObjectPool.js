@@ -8,7 +8,7 @@ class ObjectPool {
         this._factory = factory;
         this._reset = reset;
         this._pool = [];
-        this._errorHandler = errorHandler || new window.ErrorHandler();
+        this._errorHandler = errorHandler || (typeof window !== 'undefined' && window.errorHandler) || null;
         this._stats = {
             created: 0,
             acquired: 0,
@@ -147,12 +147,9 @@ const routeSourcePool = new ObjectPool(
 
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {
-    const eh = typeof window !== 'undefined' ? window.errorHandler : null;
-    const globalEh = (typeof window !== 'undefined' && window.errorHandler) || (typeof global !== 'undefined' && global.errorHandler) || null;
-    if (globalEh && typeof globalEh.logDebug === 'function') {
-        try { console.debug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-    }
-    }
+    try {
+        console.debug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() });
+    } catch (e) { /* best-effort */ }
 }
 
 // Make debug function globally available
