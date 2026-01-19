@@ -2,14 +2,14 @@
 // Handles all marker operations without global state dependencies
 
 class MarkerManager {
-    constructor(config, storage, notifications, eventBus) {
+        constructor(config, storage, notifications, eventBus, options = {}) {
         this.config = config || { maxMarkers: 50, layerPrefix: 'cm' };
         this.storage = storage;
         this.notifications = notifications;
         this.eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
         
-        // Error handling
-        this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+                // Error handling (constructor-injected)
+                this.errorHandler = options.errorHandler || new ErrorHandler();
 
         // Internal state
         this.markers = [];

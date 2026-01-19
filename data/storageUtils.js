@@ -55,12 +55,10 @@
     try {
       for (const k of KNOWN_KEYS) {
         try { localStorage.removeItem(k); } catch (e) {
-          if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'storageUtils: Failed to remove item from localStorage');
+          // best-effort removal; no central error handler available here
         }
       }
-      if (removeConsent) try { localStorage.removeItem('mp4_storage_consent'); } catch (e) {
-        if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'storageUtils: Failed to remove storage consent from localStorage');
-      }
+      if (removeConsent) try { localStorage.removeItem('mp4_storage_consent'); } catch (e) { /* ignore */ }
       return true;
     } catch (e) { return false; }
   }

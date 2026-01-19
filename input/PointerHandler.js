@@ -7,7 +7,7 @@
       this.map = map;
         this.markerManager = map.markerManager;
       this.config = config || (global.MP4Config || {});
-      this.errorHandler = map.errorHandler || (global.errorHandler);
+      this.errorHandler = map.errorHandler || null;
       this.eventBus = eventBus || window.eventBus;
       this.eventTypes = window.EventTypes || {};
       this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler

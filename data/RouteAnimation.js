@@ -2,7 +2,8 @@
 // Extracted from map.js to improve modularity and testability
 
 const RouteAnimation = {
-    errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
+    _errorHandler: null,
+    setErrorHandler(handler) { this._errorHandler = handler; },
     
     // Configuration constants for route animation
     get CONFIG() {

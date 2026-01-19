@@ -7,7 +7,7 @@
     constructor(map, config, eventBus, editModeState, dragState) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
-      this.errorHandler = map.errorHandler || (global.errorHandler);
+      this.errorHandler = map.errorHandler || null;
       this.eventBus = eventBus || window.eventBus;
       this.dragState = dragState;
 

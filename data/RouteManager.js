@@ -2,14 +2,14 @@
 // Handles all route operations without global state dependencies
 
 class RouteManager {
-    constructor(markerManager, storage, notifications, eventBus) {
+    constructor(markerManager, storage, notifications, eventBus, options = {}) {
         this.markerManager = markerManager;
         this.storage = storage;
         this.notifications = notifications;
         this.eventBus = eventBus;
         
-        // Error handling
-        this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+        // Error handling (constructor-injected)
+        this.errorHandler = options.errorHandler || new ErrorHandler();
 
         // Internal state
         this.currentRoute = [];

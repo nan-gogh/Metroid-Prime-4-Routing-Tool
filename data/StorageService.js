@@ -4,7 +4,7 @@
 class StorageService {
     constructor(consentChecker, errorHandler = null) {
         this._consentChecker = consentChecker;
-        this._errorHandler = errorHandler || (typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler());
+        this._errorHandler = errorHandler || new ErrorHandler();
         this._cache = new Map();
     }
 

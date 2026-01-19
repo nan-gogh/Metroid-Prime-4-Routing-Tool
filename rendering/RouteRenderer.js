@@ -19,7 +19,7 @@
      * @param {Object} config - Configuration object from MP4Config
      * @param {string} routeColor - Route color (defaults to LAYERS.route.color)
      */
-    constructor(mapState, layerState, routeAnimationState, routeManager, dragState, highlightState, config, routeColor) {
+    constructor(mapState, layerState, routeAnimationState, routeManager, dragState, highlightState, config, routeColor, options = {}) {
       this.mapState = mapState;
       this.layerState = layerState;
       this.routeAnimationState = routeAnimationState;
@@ -28,7 +28,7 @@
       this.highlightState = highlightState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = options && options.errorHandler ? options.errorHandler : null;
       this._lastRenderTime = 0;
       this._renderCount = 0;
       this._cachedPath = null;
@@ -114,7 +114,11 @@
       const maxIndex = this.routeManager.routeSources.length - 1;
       for (const idx of currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
-          (this.errorHandler || global.errorHandler).logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
+          if (this.errorHandler && typeof this.errorHandler.logWarning === 'function') {
+            this.errorHandler.logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
+          } else if (typeof console !== 'undefined' && console.debug) {
+            console.debug('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
+          }
           return false;
         }
       }
@@ -154,7 +158,11 @@
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
-          (this.errorHandler || global.errorHandler).logWarning('RouteRenderer: Invalid marker at index', idx);
+          if (this.errorHandler && typeof this.errorHandler.logWarning === 'function') {
+            this.errorHandler.logWarning('RouteRenderer: Invalid marker at index', idx);
+          } else if (typeof console !== 'undefined' && console.debug) {
+            console.debug('RouteRenderer: Invalid marker at index', idx);
+          }
           pathData.valid = false;
           continue;
         }

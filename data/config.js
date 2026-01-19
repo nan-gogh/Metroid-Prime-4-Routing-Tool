@@ -4,13 +4,6 @@
 const MP4Config = {
     MAP_SIZE: 8192,
     TILE_RESOLUTIONS: [256, 512, 1024, 2048, 4096, 8192],
-    // Gamma to bias resolution selection toward smaller tiles (0 < gamma <= 1)
-    // Lower values bias more strongly toward the smallest resolution (256).
-    TILE_RESOLUTION_GAMMA: 0.6,
-    // Image resolution tuning for viewport-aware tile selection
-    IMAGE_RESOLUTION_BASE_MULTIPLIER: 3.5,
-    IMAGE_RESOLUTION_MAX_MULTIPLIER: 6,
-    IMAGE_RESOLUTION_WIDTH_REF: 1200,
 
     ZOOM: {
         DEFAULT_MIN: 0.05,

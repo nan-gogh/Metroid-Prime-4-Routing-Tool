@@ -45,8 +45,8 @@
       
       this.devicePixelRatio = options.devicePixelRatio || 1;
 
-      // Error handler for context operations
-      this.errorHandler = options.errorHandler || global.errorHandler;
+      // Error handler for context operations (prefer injected handler)
+      this.errorHandler = options.errorHandler || null;
     }
 
     /**

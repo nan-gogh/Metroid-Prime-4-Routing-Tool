@@ -3,6 +3,13 @@
 // and yield to browser for rendering/input handling between chunks
 
 const TaskScheduler = {
+    _errorHandler: null,
+
+    // Inject error handler after initialization
+    setErrorHandler(handler) {
+        this._errorHandler = handler;
+    },
+
     // Yield to browser with guaranteed paint opportunity
     // Uses scheduler.yield() if available (Chrome 94+), falls back to setTimeout
     async yield() {
@@ -25,10 +32,8 @@ const TaskScheduler = {
             await this.yield();
             return await fn();
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'TaskScheduler.deferToNextTask');
-            } else {
-                this.errorHandler.logError('TaskScheduler.deferToNextTask error:', 'yield', e);
+            if (TaskScheduler._errorHandler) {
+                TaskScheduler._errorHandler.logError(e, 'TaskScheduler.deferToNextTask');
             }
             throw e;
         }
@@ -61,8 +66,8 @@ const TaskScheduler = {
                     try {
                         onProgress(chunkIndex, result);
                     } catch (e) {
-                        if (typeof errorHandler !== 'undefined' && errorHandler) {
-                            errorHandler.logError(e, 'TaskScheduler.executeInChunks.onProgress');
+                        if (TaskScheduler._errorHandler) {
+                            TaskScheduler._errorHandler.logError(e, 'TaskScheduler.executeInChunks.onProgress');
                         }
                     }
                 }
@@ -74,10 +79,8 @@ const TaskScheduler = {
 
             return result;
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'TaskScheduler.executeInChunks');
-            } else {
-                this.errorHandler.logError('TaskScheduler.executeInChunks error:', 'yield', e);
+            if (TaskScheduler._errorHandler) {
+                TaskScheduler._errorHandler.logError(e, 'TaskScheduler.executeInChunks');
             }
             throw e;
         }
@@ -101,8 +104,8 @@ const TaskScheduler = {
                     try {
                         onProgress(completed, operations.length, result);
                     } catch (e) {
-                        if (typeof errorHandler !== 'undefined' && errorHandler) {
-                            errorHandler.logError(e, 'TaskScheduler.executeSequence.onProgress');
+                        if (TaskScheduler._errorHandler) {
+                            TaskScheduler._errorHandler.logError(e, 'TaskScheduler.executeSequence.onProgress');
                         }
                     }
                 }
@@ -115,10 +118,8 @@ const TaskScheduler = {
 
             return completed;
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'TaskScheduler.executeSequence');
-            } else {
-                this.errorHandler.logError('TaskScheduler.executeSequence error:', 'yield', e);
+            if (TaskScheduler._errorHandler) {
+                TaskScheduler._errorHandler.logError(e, 'TaskScheduler.executeSequence');
             }
             throw e;
         }

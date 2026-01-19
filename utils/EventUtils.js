@@ -2,20 +2,8 @@
 // Utilities for standardized event handling patterns across the application
 
 (function (global) {
-  // Ensure a global errorHandler stub exists early to avoid constructing
-  // temporary ErrorHandler instances in each module. The real ErrorHandler
-  // (from utils/ErrorHandler.js) will replace this stub when loaded.
-  try {
-    if (!global.errorHandler) {
-      if (typeof ErrorHandler !== 'undefined') {
-        try { global.errorHandler = new ErrorHandler(); } catch (e) { global.errorHandler = { logError: () => {}, logWarning: () => {}, logDebug: () => {} }; }
-      } else {
-        global.errorHandler = { logError: () => {}, logWarning: () => {}, logDebug: () => {} };
-      }
-    }
-  } catch (e) {
-    global.errorHandler = global.errorHandler || { logError: () => {}, logWarning: () => {}, logDebug: () => {} };
-  }
+  // EventUtils relies on an injected ErrorHandler passed to its methods.
+  // It no longer creates or uses a global `errorHandler` fallback.
   class EventUtils {
     /**
      * Creates a standardized event handler with built-in error handling
@@ -26,7 +14,7 @@
      * @returns {Function} Wrapped event handler with error handling
      */
     static createEventHandler(handler, context = null, eventName = '', errorHandler = null) {
-      const eh = errorHandler || (global && global.errorHandler) || (typeof window !== 'undefined' ? window.errorHandler : null) || null;
+      const eh = errorHandler || null;
 
       return function(data) {
         try {
@@ -60,9 +48,11 @@
 
       listeners.forEach(config => {
         if (!config.event || typeof config.handler !== 'function') {
-          const eh = errorHandler || (global && global.errorHandler) || (typeof window !== 'undefined' ? window.errorHandler : null) || null;
+          const eh = errorHandler || null;
           if (eh && typeof eh.logWarning === 'function') {
             try { eh.logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (e) { /* best-effort */ }
+          } else if (typeof console !== 'undefined' && console.debug) {
+            try { console.debug('EventUtils.setupEventListeners - invalid listener config', config); } catch (e) { /* best-effort */ }
           }
           return;
         }
@@ -93,17 +83,15 @@
         return;
       }
 
-      const eh = (global && global.errorHandler) || (typeof window !== 'undefined' ? window.errorHandler : null);
-
       unsubscribers.forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           try {
             unsubscribe();
           } catch (e) {
-            if (eh && typeof eh.logWarning === 'function') {
-              try { eh.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
-            } else if (typeof ErrorHandler !== 'undefined') {
-              try { new ErrorHandler().logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
+            if (errorHandler && typeof errorHandler.logWarning === 'function') {
+              try { errorHandler.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
+            } else if (typeof console !== 'undefined' && console.debug) {
+              try { console.debug('Error during event listener cleanup', e); } catch (logErr) { /* best-effort */ }
             }
           }
         }

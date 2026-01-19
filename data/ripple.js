@@ -85,7 +85,7 @@
         try {
             _pointerState.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moved: false });
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) errorHandler.logError(e, 'ripple: Failed to handle pointer down');
+            // Best-effort: ripple errors do not block interaction, no logging needed
         }
     }
 

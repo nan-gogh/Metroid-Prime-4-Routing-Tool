@@ -120,16 +120,12 @@ class ErrorHandler {
     }
 }
 
-// Global error handler instance
-const errorHandler = new ErrorHandler();
-
-// Export for use in modules
+// Export for use in CommonJS environments
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ErrorHandler, errorHandler };
+    module.exports = { ErrorHandler };
 }
 
-// Make globally available in browser environment
+// Make ErrorHandler class available in browser environment (no instance)
 if (typeof window !== 'undefined') {
     window.ErrorHandler = ErrorHandler;
-    window.errorHandler = errorHandler;
 }

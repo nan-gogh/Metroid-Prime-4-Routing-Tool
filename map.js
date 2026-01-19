@@ -1,5 +1,34 @@
 // Pure Canvas-based Interactive Map
 
+// Single shared ErrorHandler instance for the whole app
+const appErrorHandler = typeof ErrorHandler !== 'undefined' ? new ErrorHandler() : null;
+
+// Inject appErrorHandler into utility modules that need it
+function initializeErrorHandlerInjection() {
+    if (!appErrorHandler) return;
+    
+    // Inject into utilities
+    if (typeof NotificationUtils !== 'undefined' && typeof NotificationUtils.setErrorHandler === 'function') {
+        NotificationUtils.setErrorHandler(appErrorHandler);
+    }
+    if (typeof TaskScheduler !== 'undefined' && typeof TaskScheduler.setErrorHandler === 'function') {
+        TaskScheduler.setErrorHandler(appErrorHandler);
+    }
+    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setErrorHandler === 'function') {
+        MarkerUtils.setErrorHandler(appErrorHandler);
+    }
+    if (typeof StorageInterface !== 'undefined' && typeof StorageInterface.setErrorHandler === 'function') {
+        StorageInterface.setErrorHandler(appErrorHandler);
+    }
+    if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.setErrorHandler === 'function') {
+        RouteAnimation.setErrorHandler(appErrorHandler);
+    }
+    // If ObjectPool helper is available, set default error handler for pre-allocated pools
+    if (typeof setObjectPoolDefaultErrorHandler !== 'undefined' && typeof setObjectPoolDefaultErrorHandler === 'function') {
+        try { setObjectPoolDefaultErrorHandler(appErrorHandler); } catch (e) { console.debug('Failed to set ObjectPool default error handler', { error: e }); }
+    }
+}
+
 class InteractiveMap {
     constructor(canvasId) {
         // Overlay canvas (interactive) — keep `this.canvas`/`this.ctx` for
@@ -28,7 +57,7 @@ class InteractiveMap {
         this.ctxOverlay = this.canvasOverlay ? this.canvasOverlay.getContext('2d') : null;
 
         // Initialize error handler FIRST (before state managers that need it)
-        this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+        this.errorHandler = appErrorHandler || new ErrorHandler();
 
         // Set error handler on global eventBus
         if (window.eventBus) {
@@ -46,7 +75,7 @@ class InteractiveMap {
         this.dragState = new DragState(window.eventBus, this.errorHandler);
         this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
+        this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
 
         // State managers initialized
 
@@ -845,7 +874,7 @@ class InteractiveMap {
                     if (map.routeManager && typeof map.routeManager.exportRoute === 'function') {
                         map.routeManager.exportRoute({ zoom: map.zoom, panX: map.panX, panY: map.panY }, MP4Config.MAP_SIZE);
                     } else {
-                        NotificationUtils.showRouteError('Route manager not available.');
+                        moduleErrorHandler.logWarning('Route manager not available', 'InteractiveMap.bindEvents.exportRoute');
                     }
                 } catch (err) {
                     NotificationUtils.showRouteError('Failed to export route: ' + (err.message || String(err)));
@@ -1980,7 +2009,7 @@ class InteractiveMap {
 }
 
 // Module-level error handler for utility functions
-const moduleErrorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+const moduleErrorHandler = appErrorHandler || new ErrorHandler();
 
 // Initialize
 let map;
@@ -2881,6 +2910,9 @@ async function init() {
 
 
         } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.init'); }
+
+    // Inject appErrorHandler into utility modules
+    initializeErrorHandlerInjection();
 
     // Populate layer icons from LAYERS definitions
     let layerListController;

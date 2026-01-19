@@ -13,8 +13,6 @@
       this.animationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
       this.lineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
       this.animationDirection = 1; // 1 for forward, -1 for reverse
-
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
     }
 
     // Animation offset management

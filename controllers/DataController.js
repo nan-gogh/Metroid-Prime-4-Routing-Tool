@@ -59,14 +59,15 @@
      */
     async _createManagers() {
       // Create MarkerManager
-      if (!this.markerManager && typeof MarkerManager !== 'undefined' &&
+        if (!this.markerManager && typeof MarkerManager !== 'undefined' &&
           this.storageUtils.StorageInterface && this.storageUtils.NotificationInterface) {
 
         this._markerManager = new MarkerManager(
           { maxMarkers: 50, layerPrefix: 'cm' },
           this.storageUtils.StorageInterface,
           this.storageUtils.NotificationInterface,
-          this.eventBus
+          this.eventBus,
+          { errorHandler: this.errorHandler }
         );
       } else {
         this._markerManager = this.markerManager;
@@ -79,7 +80,8 @@
             this._markerManager,
             this.storageUtils.StorageInterface,
             this.storageUtils.NotificationInterface,
-            this.eventBus
+            this.eventBus,
+            { errorHandler: this.errorHandler }
           );
         } catch (e) {
           this.errorHandler.logError(e, 'DataController: RouteManager creation failed');

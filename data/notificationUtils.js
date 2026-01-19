@@ -2,6 +2,10 @@
 // Extracted from map.js to improve modularity and testability
 
 const NotificationUtils = {
+    // Error handler will be injected after initialization
+    setErrorHandler(handler) {
+        this._errorHandler = handler;
+    },
     // Show error message to user (now internally async for performance)
     showError(message, title = 'Error') {
         try {
@@ -11,10 +15,8 @@ const NotificationUtils = {
                 alert(`${title}: ${message}`);
             });
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'NotificationUtils: Failed to show error notification');
-            } else {
-                errorHandler.logError('Failed to show error notification:', 'user', e);
+            if (NotificationUtils._errorHandler) {
+                NotificationUtils._errorHandler.logError(e, 'NotificationUtils.showError');
             }
         }
     },
@@ -28,10 +30,8 @@ const NotificationUtils = {
                 alert(`${title}: ${message}`);
             });
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'NotificationUtils: Failed to show success notification');
-            } else {
-                errorHandler.logError('Failed to show success notification:', 'user', e);
+            if (NotificationUtils._errorHandler) {
+                NotificationUtils._errorHandler.logError(e, 'NotificationUtils.showSuccess');
             }
         }
     },
@@ -45,10 +45,8 @@ const NotificationUtils = {
                 alert(`${title}: ${message}`);
             });
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'NotificationUtils: Failed to show info notification');
-            } else {
-                errorHandler.logError('Failed to show info notification:', 'user', e);
+            if (NotificationUtils._errorHandler) {
+                NotificationUtils._errorHandler.logError(e, 'NotificationUtils.showInfo');
             }
         }
     },
@@ -59,10 +57,8 @@ const NotificationUtils = {
             if (typeof message !== 'string') message = String(message);
             return confirm(`${title}: ${message}`);
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'NotificationUtils: Failed to show confirmation dialog');
-            } else {
-                errorHandler.logError('Failed to show confirmation dialog:', 'user', e);
+            if (NotificationUtils._errorHandler) {
+                NotificationUtils._errorHandler.logError(e, 'NotificationUtils.confirmAction');
             }
             return false;
         }
@@ -159,10 +155,8 @@ const NotificationUtils = {
                 return confirm(`${title}: ${message}`);
             });
         } catch (e) {
-            if (typeof errorHandler !== 'undefined' && errorHandler) {
-                errorHandler.logError(e, 'NotificationUtils.confirmActionAsync');
-            } else {
-                errorHandler.logError('NotificationUtils.confirmActionAsync error:', 'user', e);
+            if (NotificationUtils._errorHandler) {
+                NotificationUtils._errorHandler.logError(e, 'NotificationUtils.confirmActionAsync');
             }
             return false;
         }

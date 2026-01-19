@@ -3,16 +3,23 @@
 
 const MarkerUtils = {
     _manager: null,
-    errorHandler: typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler(),
+    _errorHandler: null,
+
+    // Inject error handler after initialization
+    setErrorHandler(handler) {
+        this._errorHandler = handler;
+    },
 
     // Factory method to create manager with dependencies
     createManager(config, storage, notifications, eventBus) {
         if (this._manager) {
-            this.errorHandler.logWarning('MarkerManager already exists, returning existing instance', 'MarkerUtils.createManager.duplicate', {});
+            if (this._errorHandler) {
+                this._errorHandler.logWarning('MarkerManager already exists, returning existing instance', 'MarkerUtils.createManager.duplicate', {});
+            }
             return this._manager;
         }
 
-        this._manager = new MarkerManager(config, storage, notifications, eventBus);
+        this._manager = new MarkerManager(config, storage, notifications, eventBus, { errorHandler: this._errorHandler });
 
         // Set up route cleanup callback compatibility
         this._manager.onCleanupRouteReferences = (uid) => {
@@ -34,7 +41,7 @@ const MarkerUtils = {
             // Try to create manager if dependencies are available
             if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
                 try {
-                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface, window.eventBus);
+                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface, window.eventBus, { errorHandler: this._errorHandler });
                     
                     // Set up route cleanup callback
                     this._manager.onCleanupRouteReferences = (uid) => {
@@ -49,7 +56,7 @@ const MarkerUtils = {
                     
                     console.debug('On-demand MarkerManager creation succeeded', 'MarkerUtils.getManager.creationSuccess', {});
                 } catch (e) {
-                    this.errorHandler.logError(e, 'MarkerUtils.getManager.creationFailed', {});
+                    if (this._errorHandler) this._errorHandler.logError(e, 'MarkerUtils.getManager.creationFailed', {});
                     throw new Error('MarkerManager creation failed: ' + e.message);
                 }
             } else {

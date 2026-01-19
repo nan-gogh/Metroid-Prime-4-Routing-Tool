@@ -15,7 +15,7 @@
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
-      this.errorHandler = options.errorHandler || (typeof global.errorHandler !== 'undefined' ? global.errorHandler : null);
+      this.errorHandler = options.errorHandler || null;
       this.eventTypes = window.EventTypes || {};
       
       // Optional map reference for operations that previously called map methods

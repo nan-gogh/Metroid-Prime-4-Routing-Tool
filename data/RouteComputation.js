@@ -2,6 +2,8 @@
 // Extracted from map.js to improve modularity and testability
 
 const RouteComputation = {
+    _errorHandler: null,
+    setErrorHandler(handler) { this._errorHandler = handler; },
     // Configuration constants for route computation
     get CONFIG() {
         return {
@@ -70,8 +72,8 @@ const RouteComputation = {
                 }
             }
         } catch (e) {
-            if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError(e, 'RouteComputation.expandRouteNearby');
+            if (RouteComputation._errorHandler) {
+                RouteComputation._errorHandler.logError(e, 'RouteComputation.expandRouteNearby');
             } else if (typeof console !== 'undefined' && console.debug) {
                 console.debug('RouteComputation.expandRouteNearby error', e);
             }

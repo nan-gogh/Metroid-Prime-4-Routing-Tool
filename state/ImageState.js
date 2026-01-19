@@ -65,11 +65,31 @@
           normalized = Math.max(0, Math.min(1, normalized));
         }
 
-        const sorted = [...resolutions].sort((a, b) => a - b);
-        const maxIndex = sorted.length - 1;
-        const idx = Math.max(0, Math.min(maxIndex, Math.round(normalized * maxIndex)));
+        // Prefer resolution selection based on displayed map pixel size so
+        // the tile resolution aligns with how many physical pixels the map
+        // occupies in the canvas. This avoids mapping across the full zoom
+        // range (which can make fit-to-view zooms land at very low indices).
+        try {
+          const sorted = [...resolutions].sort((a, b) => a - b);
+          const dpr = (this.mapState && this.mapState.devicePixelRatio) ? this.mapState.devicePixelRatio : (global.devicePixelRatio || 1);
+          const mapSize = (this.mapState && typeof this.mapState.mapSize === 'number') ? this.mapState.mapSize : (this.config.MAP_SIZE || 8192);
+          const displayedMapPx = mapSize * zoom * dpr;
 
-        return idx;
+          // Choose the resolution whose value is nearest to displayedMapPx.
+          let bestIdx = 0;
+          let bestDelta = Infinity;
+          for (let i = 0; i < sorted.length; i++) {
+            const delta = Math.abs(sorted[i] - displayedMapPx);
+            if (delta < bestDelta) { bestDelta = delta; bestIdx = i; }
+          }
+
+          // No debug logging in production: remove verbose console output
+
+          return Math.max(0, Math.min(sorted.length - 1, bestIdx));
+        } catch (e) {
+          // Fallback: if anything fails, return conservative lowest index
+          return 0;
+        }
       } catch (e) {
         this.errorHandler.logError(e, 'ImageState.getNeededResolution failed');
         return 0;

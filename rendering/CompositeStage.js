@@ -10,7 +10,7 @@
      */
     constructor(config) {
       this.config = config || {};
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = null;
     }
 
     /**

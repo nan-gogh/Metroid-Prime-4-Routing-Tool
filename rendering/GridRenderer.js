@@ -13,7 +13,7 @@
      * @param {Array} greenCrystalLayers - Array of green crystal layer keys (defaults to GREEN_CRYSTAL_LAYERS)
      * @param {boolean} showGridHeatmap - Whether to show grid heatmap overlay
      */
-    constructor(mapState, layerState, highlightState, config, layers, greenCrystalLayers, showGridHeatmap = false) {
+    constructor(mapState, layerState, highlightState, config, layers, greenCrystalLayers, showGridHeatmap = false, options = {}) {
       this.mapState = mapState;
       this.layerState = layerState;
       this.highlightState = highlightState;
@@ -21,7 +21,7 @@
       this.layers = layers || (global.LAYERS || {});
       this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
       this.showGridHeatmap = showGridHeatmap;
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = options && options.errorHandler ? options.errorHandler : null;
     }
 
     /**

@@ -3,12 +3,12 @@
 
 (function (global) {
   class OverlayRenderer {
-    constructor(mapState, selectionState, config, routeColor, eventBus) {
+    constructor(mapState, selectionState, config, routeColor, eventBus, options = {}) {
       this.mapState = mapState;
       this.selectionState = selectionState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = options && options.errorHandler ? options.errorHandler : null;
       this.eventBus = eventBus || (global.eventBus || null);
       // No direct map reference needed - all access through state managers and renderContext
     }
@@ -50,7 +50,11 @@
                     layerKey: layerKey
                   });
                 } catch (e) {
-                  if (this.errorHandler) console.debug('OverlayRenderer: Failed to emit tooltip event', 'OverlayRenderer.render.tooltipEvent', { error: e });
+                  if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') {
+                    this.errorHandler.logDebug('OverlayRenderer: Failed to emit tooltip event', 'OverlayRenderer.render.tooltipEvent', { error: e });
+                  } else if (typeof console !== 'undefined' && console.debug) {
+                    console.debug('OverlayRenderer: Failed to emit tooltip event', 'OverlayRenderer.render.tooltipEvent', { error: e });
+                  }
                 }
               }
             }
@@ -60,12 +64,20 @@
               try {
                 this.eventBus.emit(window.EventTypes.TOOLTIP_HIDE_REQUESTED, {});
               } catch (e) {
-                if (this.errorHandler) console.debug('OverlayRenderer: Failed to emit hide tooltip event', 'OverlayRenderer.render.hideTooltipEvent', { error: e });
+                if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') {
+                  this.errorHandler.logDebug('OverlayRenderer: Failed to emit hide tooltip event', 'OverlayRenderer.render.hideTooltipEvent', { error: e });
+                } else if (typeof console !== 'undefined' && console.debug) {
+                  console.debug('OverlayRenderer: Failed to emit hide tooltip event', 'OverlayRenderer.render.hideTooltipEvent', { error: e });
+                }
               }
             }
           }
         } catch (e) {
-          if (this.errorHandler) console.debug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
+          if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') {
+            this.errorHandler.logDebug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
+          } else if (typeof console !== 'undefined' && console.debug) {
+            console.debug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
+          }
         }
       } catch (e) { console.debug('OverlayRenderer.render failed', 'OverlayRenderer.render', { error: e }); }
     }

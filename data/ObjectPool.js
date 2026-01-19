@@ -1,14 +1,16 @@
 // Object Pool for performance optimization - reduces GC pressure during frequent object creation
 // Integrated with ErrorHandler for robust error handling
 
-// ErrorHandler is available globally as window.ErrorHandler
+// Note: `ErrorHandler` class is exported by `utils/ErrorHandler.js` and attached to
+// `window.ErrorHandler` for convenience. Pools do not assume a global instance;
+// set a default handler for pre-allocated pools via `setObjectPoolDefaultErrorHandler(handler)`.
 
 class ObjectPool {
     constructor(factory, reset, initialSize = 10, errorHandler = null) {
         this._factory = factory;
         this._reset = reset;
         this._pool = [];
-        this._errorHandler = errorHandler || (typeof window !== 'undefined' && window.errorHandler) || null;
+        this._errorHandler = errorHandler || null;
         this._stats = {
             created: 0,
             acquired: 0,
@@ -24,7 +26,7 @@ class ObjectPool {
             }
             this._stats.peakSize = Math.max(this._stats.peakSize, this._pool.length);
         } catch (e) {
-            this._errorHandler.logError(e, 'ObjectPool.constructor.prePopulate', { initialSize });
+            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.constructor.prePopulate', { initialSize });
         }
     }
 
@@ -45,7 +47,7 @@ class ObjectPool {
             this._stats.peakSize = Math.max(this._stats.peakSize, this._pool.length + 1);
             return obj;
         } catch (e) {
-            this._errorHandler.logError(e, 'ObjectPool.acquire');
+            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.acquire');
             // Fallback: return a fresh object
             return this._factory();
         }
@@ -57,7 +59,7 @@ class ObjectPool {
      */
     release(obj) {
         if (!obj) {
-            this._errorHandler.logWarning('Attempted to release null/undefined object', 'ObjectPool.release');
+            if (this._errorHandler) this._errorHandler.logWarning('Attempted to release null/undefined object', 'ObjectPool.release');
             return;
         }
 
@@ -66,7 +68,7 @@ class ObjectPool {
             this._pool.push(obj);
             this._stats.released++;
         } catch (e) {
-            this._errorHandler.logError(e, 'ObjectPool.release', { error: e, obj });
+            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.release', { error: e, obj });
             // Don't add corrupted object back to pool
         }
     }
@@ -114,7 +116,7 @@ class ObjectPool {
                 this._pool.length = newSize;
             }
         } catch (e) {
-            this._errorHandler.logError(e, 'ObjectPool.resize', { newSize });
+            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.resize', { newSize });
         }
     }
 }
@@ -130,7 +132,7 @@ const markerPool = new ObjectPool(
         marker.y = 0;
     },
     50, // Pre-allocate 50 markers (matches max custom markers limit)
-    typeof window !== 'undefined' ? window.errorHandler : null
+    null
 );
 
 // Route source pool for temporary route sources
@@ -142,8 +144,14 @@ const routeSourcePool = new ObjectPool(
         source.layerIndex = -1;
     },
     50, // Pre-allocate 50 sources 
-    typeof window !== 'undefined' ? window.errorHandler : null
+    null
 );
+
+// Allow injection of default error handler for existing pools
+function setObjectPoolDefaultErrorHandler(handler) {
+    markerPool._errorHandler = handler;
+    routeSourcePool._errorHandler = handler;
+}
 
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {

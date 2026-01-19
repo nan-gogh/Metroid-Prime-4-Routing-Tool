@@ -90,7 +90,7 @@
           this.tilesetState,
           this.imageState,
           this.config,
-          { lowSpec: false } // TODO: detect low spec
+          { lowSpec: false, errorHandler: this.errorHandler } // TODO: detect low spec
         );
         try {
           await this.tileRenderer.init();
@@ -136,7 +136,8 @@
           this.config,
           layerConfig,
           GREEN_CRYSTAL_LAYERS,
-          this.layerState ? this.layerState.isHeatmapVisible() : false
+          this.layerState ? this.layerState.isHeatmapVisible() : false,
+          { errorHandler: this.errorHandler }
         );
         try {
           await this.gridRenderer.init(this.containerNode);
@@ -183,7 +184,8 @@
           this.dragState,
           this.highlightState,
           this.config,
-          routeColor
+          routeColor,
+          { errorHandler: this.errorHandler }
         );
         try {
           await this.routeRenderer.init();
@@ -200,7 +202,8 @@
           this.selectionState,
           this.config,
           routeColor,
-          this.eventBus
+          this.eventBus,
+          { errorHandler: this.errorHandler }
         );
         try {
           await this.overlayRenderer.init();

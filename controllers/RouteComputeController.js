@@ -323,10 +323,8 @@ class RouteComputeController {
         } else {
             if (this.errorHandler) {
                 this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
-            } else if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
-            } else {
-                console.error('RouteComputation module not available');
+            } else if (typeof console !== 'undefined' && console.debug) {
+                console.debug('RouteComputation module not available');
             }
         }
     }
