@@ -693,10 +693,8 @@
       } catch (err) {
         if (this.errorHandler) {
           this.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
-        } else if (typeof window !== 'undefined' && window.errorHandler) {
-          window.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
-        } else {
-          console.error('RouteEditHandler._handleRouteEditClick error', err);
+        } else if (typeof console !== 'undefined' && console.debug) {
+          console.debug('RouteEditHandler._handleRouteEditClick error', err);
         }
       }
     }

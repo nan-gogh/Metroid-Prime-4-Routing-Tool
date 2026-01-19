@@ -72,8 +72,8 @@ const RouteComputation = {
         } catch (e) {
             if (typeof window !== 'undefined' && window.errorHandler) {
                 window.errorHandler.logError(e, 'RouteComputation.expandRouteNearby');
-            } else {
-                console.error('RouteComputation.expandRouteNearby error', e);
+            } else if (typeof console !== 'undefined' && console.debug) {
+                console.debug('RouteComputation.expandRouteNearby error', e);
             }
         } finally {
             endRouteCompute();

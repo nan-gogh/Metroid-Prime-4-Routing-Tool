@@ -197,10 +197,8 @@ class RouteComputeController {
         if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSPAdvanced !== 'function') {
             if (this.errorHandler) {
                 this.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
-            } else if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
-            } else {
-                console.error('Advanced TSP solver not available.');
+            } else if (typeof console !== 'undefined' && console.debug) {
+                console.debug('Advanced TSP solver not available.');
             }
             return;
         }
@@ -298,19 +296,15 @@ class RouteComputeController {
                     } else {
                         if (this.errorHandler) {
                             this.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
-                        } else if (typeof window !== 'undefined' && window.errorHandler) {
-                            window.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
-                        } else {
-                            console.error('Advanced solver returned no route.');
+                        } else if (typeof console !== 'undefined' && console.debug) {
+                            console.debug('Advanced solver returned no route.');
                         }
                     }
                 } catch (err) {
                     if (this.errorHandler) {
                         this.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
-                    } else if (typeof window !== 'undefined' && window.errorHandler) {
-                        window.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
-                    } else {
-                        console.error('RouteComputeController.computeImprovedRoute error', err);
+                    } else if (typeof console !== 'undefined' && console.debug) {
+                        console.debug('RouteComputeController.computeImprovedRoute error', err);
                     }
                 } finally {
                     if (computeImprovedBtn) {

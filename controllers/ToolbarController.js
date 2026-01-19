@@ -227,9 +227,11 @@
                 this.markerManager.exportMarkers();
               } else {
                 // Marker manager missing is an internal condition — log it, don't show a user notification
-                if (this.errorHandler) this.errorHandler.logError('Marker manager not available', 'ToolbarController.exportMarkers');
-                else if (typeof window !== 'undefined' && window.errorHandler) window.errorHandler.logError('Marker manager not available', 'ToolbarController.exportMarkers');
-                else console.error('Marker manager not available');
+                if (this.errorHandler) {
+                  this.errorHandler.logError('Marker manager not available', 'ToolbarController.exportMarkers');
+                } else if (typeof console !== 'undefined' && console.debug) {
+                  console.debug('Marker manager not available');
+                }
               }
             } catch (err) {
               if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {

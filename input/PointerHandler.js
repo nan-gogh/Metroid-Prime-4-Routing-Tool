@@ -416,10 +416,8 @@
       } catch (err) {
         if (this.errorHandler) {
           this.errorHandler.logError(err, 'PointerHandler._handleMarkerDrag');
-        } else if (typeof window !== 'undefined' && window.errorHandler) {
-          window.errorHandler.logError(err, 'PointerHandler._handleMarkerDrag');
-        } else {
-          console.error('PointerHandler._handleMarkerDrag error', err);
+        } else if (typeof console !== 'undefined' && console.debug) {
+          console.debug('PointerHandler._handleMarkerDrag error', err);
         }
       }
     }
