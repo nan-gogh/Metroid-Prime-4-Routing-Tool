@@ -68,7 +68,7 @@
           const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
           return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         } catch (e) {
-          (this.errorHandler || global.errorHandler).logDebug && (this.errorHandler || global.errorHandler).logDebug('RouteRenderer._hexToRgba fallback failed', 'RouteRenderer._hexToRgba', { error: e });
+          console.debug('RouteRenderer._hexToRgba fallback failed', 'RouteRenderer._hexToRgba', { error: e });
           return null;
         }
       };
