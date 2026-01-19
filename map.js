@@ -1168,7 +1168,7 @@ class InteractiveMap {
         
 
         if (typeof needed !== 'number') {
-            try { console.warn('InteractiveMap.updateResolution: needed is not a number', needed); } catch (e) {}
+            try { moduleErrorHandler.logWarn('InteractiveMap.updateResolution: needed is not a number', { needed }); } catch (e) { /* best-effort logging */ }
         }
 
         if (needed !== current && loading !== needed) {
@@ -2221,7 +2221,7 @@ async function init() {
             }
         }
     } catch (e) {
-        console.error('❌ Failed to load controller modules:', e);
+        try { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadControllerModules'); } catch (logErr) { /* best-effort logging */ }
         // Continue anyway - some controllers might still work
     }
 
