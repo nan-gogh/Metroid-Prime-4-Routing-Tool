@@ -195,7 +195,13 @@ class RouteComputeController {
         }
 
         if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSPAdvanced !== 'function') {
-            NotificationUtils.showRouteComputationError('Advanced TSP solver not available.');
+            if (this.errorHandler) {
+                this.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
+            } else if (typeof window !== 'undefined' && window.errorHandler) {
+                window.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
+            } else {
+                console.error('Advanced TSP solver not available.');
+            }
             return;
         }
 
@@ -290,11 +296,22 @@ class RouteComputeController {
                         } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditModeAfterComputation'); }
                         // log removed
                     } else {
-                        NotificationUtils.showRouteComputationError('Advanced solver returned no route.');
+                        if (this.errorHandler) {
+                            this.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
+                        } else if (typeof window !== 'undefined' && window.errorHandler) {
+                            window.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
+                        } else {
+                            console.error('Advanced solver returned no route.');
+                        }
                     }
                 } catch (err) {
-                    // error logging removed
-                    NotificationUtils.showRouteComputationError('Error computing improved route: ' + err.message);
+                    if (this.errorHandler) {
+                        this.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
+                    } else if (typeof window !== 'undefined' && window.errorHandler) {
+                        window.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
+                    } else {
+                        console.error('RouteComputeController.computeImprovedRoute error', err);
+                    }
                 } finally {
                     if (computeImprovedBtn) {
                         computeImprovedBtn.disabled = false;
@@ -310,7 +327,13 @@ class RouteComputeController {
         if (typeof RouteComputation !== 'undefined') {
             RouteComputation.expandRouteNearby(this.map, beginRouteCompute, endRouteCompute, LAYERS, this.config.MAP_SIZE);
         } else {
-            NotificationUtils.showModuleError('RouteComputation module not available');
+            if (this.errorHandler) {
+                this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
+            } else if (typeof window !== 'undefined' && window.errorHandler) {
+                window.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
+            } else {
+                console.error('RouteComputation module not available');
+            }
         }
     }
 

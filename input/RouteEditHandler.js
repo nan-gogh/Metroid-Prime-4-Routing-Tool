@@ -691,9 +691,12 @@
           sources: newSources
         });
       } catch (err) {
-        this.errorHandler.logError('RouteEditHandler: _handleRouteEditClick failed', 'interactions', err);
-        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showRouteError) {
-          NotificationUtils.showRouteError('Route edit tap failed: ' + err.message);
+        if (this.errorHandler) {
+          this.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
+        } else if (typeof window !== 'undefined' && window.errorHandler) {
+          window.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
+        } else {
+          console.error('RouteEditHandler._handleRouteEditClick error', err);
         }
       }
     }

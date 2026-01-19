@@ -6,13 +6,8 @@
  */
 
 class ErrorHandler {
-    constructor(config = {}) {
-        this.config = {
-            enableDebugLogging: config.enableDebugLogging !== false,
-            enableConsoleErrors: config.enableConsoleErrors !== false,
-            logLevel: config.logLevel || 'debug', // 'debug', 'info', 'warn', 'error'
-            ...config
-        };
+    constructor() {
+        // Minimal constructor: ErrorHandler always logs errors and warnings.
     }
 
     /**
@@ -36,10 +31,8 @@ class ErrorHandler {
         // Console logging (through internal safe writer)
         this._writeConsole('error', `[${context}] ${errorMessage}`, logData);
 
-        // Debug logging for development
-        if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
-            this._writeConsole('debug', 'Error details:', logData);
-        }
+        // Always include error details for diagnostics
+        this._writeConsole('debug', 'Error details:', logData);
 
         // No user notifications from ErrorHandler; it only logs and formats errors
     }
@@ -52,18 +45,15 @@ class ErrorHandler {
      * @param {Object} additionalData - Additional context data
      */
     logWarning(message, context = '', additionalData = {}) {
-        if (this.config.enableDebugLogging) {
-            this._writeConsole('warn', `[${context}] ${message}`, {
-                timestamp: new Date().toISOString(),
-                context,
-                ...additionalData
-            });
-        }
+        this._writeConsole('warn', `[${context}] ${message}`, {
+            timestamp: new Date().toISOString(),
+            context,
+            ...additionalData
+        });
     }
     
     _writeConsole(level, ...args) {
         try {
-            if (!this.config.enableConsoleErrors) return;
             if (typeof console === 'undefined') return;
             const fn = console[level] || console.log;
             fn.apply(console, args);
@@ -131,12 +121,7 @@ class ErrorHandler {
 }
 
 // Global error handler instance
-const errorHandler = new ErrorHandler({
-    enableDebugLogging: true,
-    enableConsoleErrors: true,
-    enableNotifications: false, // Disable notifications by default to avoid spam
-    logLevel: 'debug'
-});
+const errorHandler = new ErrorHandler();
 
 // Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
