@@ -2541,19 +2541,25 @@ async function init() {
                 {
                     event: window.EventTypes.ROUTE_UPDATED,
                     handler: (data) => {
-                        // Update route state
-                        if (data && map && map.routeManager) {
-                            if (data.route) {
-                                map.routeManager.setRoute(data.route);
+                        // RouteManager is the canonical source of truth for route data.
+                        // Accept legacy payloads for backward compatibility, but
+                        // otherwise rely on map.routeManager's state.
+                        if (map && map.routeManager) {
+                            try {
+                                if (data && Array.isArray(data.route)) {
+                                    // Legacy emitter: provide full route payload
+                                    map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []);
+                                }
+                            } catch (e) { /* best-effort, continue */ }
+
+                            if (data && typeof data.looping === 'boolean') {
+                                try { map.routeManager.setRouteLooping(data.looping); } catch (e) { /* best-effort */ }
                             }
-                            if (typeof data.looping === 'boolean') {
-                                map.routeManager.setRouteLooping(data.looping);
-                            }
-                            // Update layer counts for route length display
+
+                            // Update layer counts and trigger render using manager state
                             if (map && typeof map.updateLayerCounts === 'function') {
                                 map.updateLayerCounts();
                             }
-                            // Trigger render for route changes
                             if (map && typeof map.render === 'function') {
                                 map.render();
                             }

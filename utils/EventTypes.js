@@ -9,8 +9,9 @@ const EventTypes = {
      * the request.
      * @event RENDER_REQUESTED
      * @param {Object} [data]
-     * @param {string} [data.triggeredBy] - Identifier for the triggering action (e.g. 'route-clear')
-     * @param {Event} [data.event] - Optional original DOM/pointer event that caused the render
+    * @param {string} [data.triggeredBy] - Identifier for the triggering action (e.g. 'route-clear')
+    * @param {string} [data.reason] - Optional reason string (alias for `triggeredBy` used by some emitters)
+    * @param {Event} [data.event] - Optional original DOM/pointer event that caused the render
      */
     RENDER_REQUESTED: 'render:requested',
     /**
@@ -99,8 +100,9 @@ const EventTypes = {
      * `RouteManager`, which provides the RouteManager-format fields below.
      * @event ROUTE_UPDATED
      * @param {Object} data
-     * @param {number} data.routeLength - Route length in pixels
-     * @param {number} data.pointCount - Number of points in route
+    * @param {number} data.routeLength - Route length in pixels
+    * @param {number} data.pointCount - Number of points in route
+    * @param {boolean} [data.looping] - Optional whether the route is looping
      */
     ROUTE_UPDATED: 'route:updated',
     ROUTE_CLEARED: 'route:cleared',
