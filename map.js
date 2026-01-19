@@ -1838,7 +1838,7 @@ class InteractiveMap {
         // Stop animated route when cleared
         this.stopRouteAnimation();
         // If we were in route edit mode, exit via canonical helper so visuals cleanly update
-        try { if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'route' }); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.exitEditModeForLayer'); }
+        try { if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' }); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.exitEditModeForLayer'); }
         // Remove persisted route when cleared
         try {
             this.routeManager.clearRoute();
@@ -3317,7 +3317,7 @@ async function init() {
                     }
                     // Layer counts will be updated via MARKER_REMOVED event
                     // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
-                    if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { layer: 'customMarkers' });
+                    if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' });
                     map._draggingCandidate = null;
                     map._draggingMarker = null;
                     map.canvas.style.cursor = 'grab';

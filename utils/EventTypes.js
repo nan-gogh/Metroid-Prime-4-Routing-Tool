@@ -3,6 +3,15 @@
 
 const EventTypes = {
     // Render Events
+    /**
+     * Request a render cycle. Payload is optional; when provided it may
+     * include contextual fields to help callers identify the source of
+     * the request.
+     * @event RENDER_REQUESTED
+     * @param {Object} [data]
+     * @param {string} [data.triggeredBy] - Identifier for the triggering action (e.g. 'route-clear')
+     * @param {Event} [data.event] - Optional original DOM/pointer event that caused the render
+     */
     RENDER_REQUESTED: 'render:requested',
     /**
      * Optional: emitted when a full render cycle has completed.
@@ -52,14 +61,25 @@ const EventTypes = {
     // Layer Events
     /**
      * Emitted when layer visibility changes.
+     * Emitters must provide the complete `layerVisibility` object; when
+     * performing a bulk update the `layerKey` and `visible` fields MAY be
+     * set to `null` to indicate multiple-layer changes.
      * @event LAYER_VISIBILITY_CHANGED
      * @param {Object} data
-     * @param {string} data.layerKey - The layer identifier
-     * @param {boolean} data.visible - Whether the layer is visible
-     * @param {Object} [data.layerVisibility] - Complete layer visibility state (emitted by LayerState)
-     * @param {string} [data.source] - Source of the change (emitted by controllers)
+     * @param {string|null} data.layerKey - The layer identifier, or null for bulk updates
+     * @param {boolean|null} data.visible - Whether the layer is visible, or null for bulk updates
+     * @param {Object} data.layerVisibility - Complete layer visibility state (always provided)
+     * @param {string} [data.source] - Optional source of the change (emitted by controllers)
      */
     LAYER_VISIBILITY_CHANGED: 'layer:visibility-changed',
+    /**
+     * Emitted when layer counts (number of markers per layer) change.
+     * Payload is optional; when provided it may include a `triggeredBy`
+     * field to indicate the source of the update.
+     * @event LAYER_COUNTS_CHANGED
+     * @param {Object} [data]
+     * @param {string} [data.triggeredBy]
+     */
     LAYER_COUNTS_CHANGED: 'layer:counts-changed',
     LAYER_HIGHLIGHT_CHANGED: 'layer:highlight-changed',
     LAYER_HIGHLIGHT_MULTIPLIER_CHANGED: 'layer:highlight-multiplier-changed',
@@ -75,15 +95,12 @@ const EventTypes = {
     ROUTE_COMPUTATION_FAILED: 'route:computation-failed',
     ROUTE_EDIT_REQUESTED: 'route:edit-requested',
     /**
-     * Emitted when route data changes.
+     * Emitted when route data changes. Currently the canonical emitter is
+     * `RouteManager`, which provides the RouteManager-format fields below.
      * @event ROUTE_UPDATED
      * @param {Object} data
-     * @param {Array<number>} [data.route] - Array of route indices (RouteState format)
-     * @param {number} [data.lengthNormalized] - Normalized route length 0-1 (RouteState format)
-     * @param {Array} [data.sources] - Route source objects (RouteState format)
-     * @param {boolean} [data.looping] - Whether route loops (RouteState format)
-     * @param {number} [data.routeLength] - Route length in pixels (RouteManager format)
-     * @param {number} [data.pointCount] - Number of points in route (RouteManager format)
+     * @param {number} data.routeLength - Route length in pixels
+     * @param {number} data.pointCount - Number of points in route
      */
     ROUTE_UPDATED: 'route:updated',
     ROUTE_CLEARED: 'route:cleared',
@@ -237,7 +254,20 @@ const EventTypes = {
     ROUTE_COMPUTATION_REQUESTED: 'route:computation-requested',
 
     // Edit Mode Events (UI transitions)
+    /**
+     * Request entering an edit mode.
+     * @event EDIT_MODE_ENTER_REQUESTED
+     * @param {Object} data
+     * @param {string} data.mode - Mode to enter (e.g. 'route', 'customMarkers')
+     * @param {number} [data.scale] - Optional scale/zoom hint for the UI
+     */
     EDIT_MODE_ENTER_REQUESTED: 'edit:mode-enter-requested',
+    /**
+     * Request exiting an edit mode.
+     * @event EDIT_MODE_EXIT_REQUESTED
+     * @param {Object} data
+     * @param {string} data.mode - Mode to exit (e.g. 'route', 'customMarkers')
+     */
     EDIT_MODE_EXIT_REQUESTED: 'edit:mode-exit-requested',
     EDIT_OVERLAY_UPDATE_REQUESTED: 'edit:overlay-update-requested',
 
