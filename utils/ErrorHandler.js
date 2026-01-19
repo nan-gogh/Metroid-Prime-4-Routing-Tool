@@ -10,12 +10,9 @@ class ErrorHandler {
         this.config = {
             enableDebugLogging: config.enableDebugLogging !== false,
             enableConsoleErrors: config.enableConsoleErrors !== false,
-            enableNotifications: config.enableNotifications !== false,
             logLevel: config.logLevel || 'debug', // 'debug', 'info', 'warn', 'error'
             ...config
         };
-        // Optional external services (injected via app bootstrap)
-        this._storageService = null;
     }
 
     /**
@@ -44,52 +41,9 @@ class ErrorHandler {
             this._writeConsole('debug', 'Error details:', logData);
         }
 
-        // User notification (if available)
-        if (this.config.enableNotifications) {
-            try {
-                this._notifyError(errorMessage, context);
-            } catch (notifyError) {
-                this._writeConsole('warn', 'Failed to show error notification:', notifyError);
-            }
-        }
+        // No user notifications from ErrorHandler; it only logs and formats errors
     }
-
-    /**
-     * Inject a storage service reference. ErrorHandler remains storage-agnostic;
-     * this allows external code to wire storage preferences into the handler.
-     * @param {Object} storageService
-     */
-    setStorageService(storageService) {
-        this._storageService = storageService || null;
-    }
-
-    /**
-     * Enable or disable user-visible notifications at runtime.
-     * @param {boolean} enabled
-     */
-    setNotificationsEnabled(enabled) {
-        this.config.enableNotifications = !!enabled;
-    }
-
-    /**
-     * Internal: attempt to surface an error to the user via NotificationUtils (if present).
-     * Falls back to console warnings if notifications are not available.
-     * @param {string} message
-     * @param {string} context
-     */
-    _notifyError(message, context = '') {
-        try {
-            if (typeof NotificationUtils !== 'undefined' && typeof NotificationUtils.showError === 'function') {
-                NotificationUtils.showError(`Error in ${context}: ${message}`);
-                return;
-            }
-        } catch (e) {
-            this._writeConsole('warn', 'NotificationUtils.showError failed', e);
-            return;
-        }
-        // Fallback: print a visible console warning
-        try { this._writeConsole('warn', `[${context}] ${message}`); } catch (e) { /* best-effort */ }
-    }
+    // Notification/storage wiring removed: ErrorHandler only logs to console
 
     /**
      * Log a warning with context
