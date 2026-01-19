@@ -157,10 +157,6 @@ function checkPoolStats() {
             try { TmpEH.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
         } else if (typeof ErrorHandler !== 'undefined') {
             try { new ErrorHandler().logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-        } else if (typeof console !== 'undefined' && console.error) {
-            console.error('=== Object Pool Statistics ===', 'ObjectPool');
-            console.error('Marker Pool:', 'ObjectPool', markerPool.getStats());
-            console.error('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
         }
     }
 }
