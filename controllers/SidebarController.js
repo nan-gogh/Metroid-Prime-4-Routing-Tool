@@ -86,7 +86,8 @@
         this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
           layerKey: null,
           visible: null,
-          layerVisibility: newVisibility
+          layerVisibility: newVisibility,
+          triggeredBy: 'show-hide-all'
         });
 
         // Exit edit modes when hiding layers
@@ -192,7 +193,8 @@
         this.eventBus.emit(this.eventTypes.LAYER_VISIBILITY_CHANGED, {
           layerKey: layerKey,
           visible: checked,
-          layerVisibility: newVisibility
+          layerVisibility: newVisibility,
+          triggeredBy: 'sidebar-toggle'
         });
 
         // Save to storage

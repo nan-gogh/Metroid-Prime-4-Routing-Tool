@@ -87,7 +87,8 @@
           this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
             layerKey,
             visible: !!visible,
-            layerVisibility: { ...this.layerVisibility }
+            layerVisibility: { ...this.layerVisibility },
+            triggeredBy: 'state-setter'
           });
         }
       } catch (e) {
@@ -103,7 +104,8 @@
           this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
             layerKey,
             visible: !current,
-            layerVisibility: { ...this.layerVisibility }
+            layerVisibility: { ...this.layerVisibility },
+            triggeredBy: 'state-toggle'
           });
         }
       } catch (e) {
