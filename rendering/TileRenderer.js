@@ -388,40 +388,35 @@
      */
     determineBestResolution() {
       try {
-        const displayedCss = this.config.MAP_SIZE * (this.mapState.zoom || 0);
-        const dpr = window.devicePixelRatio || 1;
-        const displayedPx = displayedCss * dpr;
+        // Prefer mapping from zoom range to resolution index so the distribution
+        // is linear across zoom min..max and can be gamma-adjusted.
+        const zoom = (this.mapState && typeof this.mapState.zoom === 'number') ? this.mapState.zoom : 1;
 
-        // Get available resolutions sorted in ascending order
-        const resolutions = [...this.config.TILE_RESOLUTIONS].sort((a, b) => a - b);
-        const minRes = resolutions[0];
-        const maxRes = resolutions[resolutions.length - 1];
+        const zoomMin = (this.config && this.config.ZOOM && typeof this.config.ZOOM.DEFAULT_MIN === 'number') ? this.config.ZOOM.DEFAULT_MIN : 0.05;
+        const zoomMax = (this.config && this.config.ZOOM && typeof this.config.ZOOM.MAX === 'number') ? this.config.ZOOM.MAX : 4;
 
-        // Normalize displayedPx to [0, 1] range
-        // 0 = minRes, 1 = maxRes
-        const normalized = Math.max(0, Math.min(1, (displayedPx - minRes) / (maxRes - minRes)));
-
-        // Apply gamma correction to squash toward 256 (smaller resolutions)
-        const gamma = this.config.TILE_RESOLUTION_GAMMA || 0.6;
-        const gammaAdjusted = Math.pow(normalized, gamma);
-
-        // Map back to resolution index
-        // resolutionIndex 0 = highest quality (smallest file), increases as we zoom out
-        const maxIndex = resolutions.length - 1;
-        const targetIndex = gammaAdjusted * maxIndex;
-
-        // Find closest resolution index
-        let bestIndex = 0;
-        let bestDist = Math.abs(resolutions[0] - displayedPx);
-        for (let i = 0; i < resolutions.length; i++) {
-          const dist = Math.abs(resolutions[i] - displayedPx);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestIndex = i;
-          }
+        // Normalize zoom to [0,1]
+        let normalized = 0;
+        if (zoomMax > zoomMin) {
+          normalized = (zoom - zoomMin) / (zoomMax - zoomMin);
+          normalized = Math.max(0, Math.min(1, normalized));
         }
 
-        return bestIndex;
+        // Apply gamma correction. We interpret the configured gamma so that
+        // values < 1 bias the mapping toward lower resolutions (smaller tiles).
+        // To achieve that, use exponent = 1 / gamma. For gamma < 1 this exponent
+        // will be > 1, which compresses values toward 0 (lower indexes).
+        const cfgGamma = (this.config && typeof this.config.TILE_RESOLUTION_GAMMA === 'number') ? this.config.TILE_RESOLUTION_GAMMA : 0.6;
+        const exponent = cfgGamma > 0 ? (1 / cfgGamma) : 1;
+        const gammaAdjusted = Math.pow(normalized, exponent);
+
+        // Map adjusted normalized value to an index in the sorted resolutions array
+        const resolutions = [...(this.config && this.config.TILE_RESOLUTIONS ? this.config.TILE_RESOLUTIONS : [256, 512, 1024, 2048, 4096, 8192])].sort((a, b) => a - b);
+        const maxIndex = resolutions.length - 1;
+        const targetIndexFloat = gammaAdjusted * maxIndex;
+        const targetIndex = Math.max(0, Math.min(maxIndex, Math.round(targetIndexFloat)));
+
+        return targetIndex;
       } catch (e) { return 0; }
     }
 
