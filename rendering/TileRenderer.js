@@ -393,21 +393,17 @@
           return Number(this.imageState.getNeededResolution());
         }
 
-        // Fallback: estimate based on displayed pixels and TILE_RESOLUTION_GAMMA
-        const displayedCss = (this.config && this.config.MAP_SIZE ? this.config.MAP_SIZE : 8192) * (this.mapState.zoom || 0);
-        const dpr = window.devicePixelRatio || 1;
-        const displayedPx = displayedCss * dpr;
-
+        // Fallback: plain linear mapping from zoomMin..zoomMax to resolution index
+        const zoom = (this.mapState && typeof this.mapState.zoom === 'number') ? this.mapState.zoom : 1;
+        const zoomMin = (this.config && this.config.ZOOM && typeof this.config.ZOOM.DEFAULT_MIN === 'number') ? this.config.ZOOM.DEFAULT_MIN : 0.05;
+        const zoomMax = (this.config && this.config.ZOOM && typeof this.config.ZOOM.MAX === 'number') ? this.config.ZOOM.MAX : 4;
+        let normalized = 0;
+        if (zoomMax > zoomMin) {
+          normalized = (zoom - zoomMin) / (zoomMax - zoomMin);
+          normalized = Math.max(0, Math.min(1, normalized));
+        }
         const resolutions = (this.config && this.config.TILE_RESOLUTIONS) ? [...this.config.TILE_RESOLUTIONS].sort((a,b)=>a-b) : [256,512,1024,2048,4096,8192];
-        const minRes = resolutions[0];
-        const maxRes = resolutions[resolutions.length-1];
-
-        // Normalize displayedPx and apply gamma bias (mapped to index)
-        const normalized = Math.max(0, Math.min(1, (displayedPx - minRes) / (maxRes - minRes)));
-        const cfgGamma = (this.config && typeof this.config.TILE_RESOLUTION_GAMMA === 'number') ? this.config.TILE_RESOLUTION_GAMMA : 0.6;
-        const exponent = cfgGamma > 0 ? (1 / cfgGamma) : 1;
-        const adj = Math.pow(normalized, exponent);
-        const idx = Math.max(0, Math.min(resolutions.length - 1, Math.round(adj * (resolutions.length - 1))));
+        const idx = Math.max(0, Math.min(resolutions.length - 1, Math.round(normalized * (resolutions.length - 1))));
         return idx;
       } catch (e) { return 0; }
     }
