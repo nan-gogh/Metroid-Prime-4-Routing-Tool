@@ -148,16 +148,10 @@ const routeSourcePool = new ObjectPool(
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {
     const eh = typeof window !== 'undefined' ? window.errorHandler : null;
-    const globalEh = eh || (typeof window !== 'undefined' && window.errorHandler) || null;
+    const globalEh = (typeof window !== 'undefined' && window.errorHandler) || (typeof global !== 'undefined' && global.errorHandler) || null;
     if (globalEh && typeof globalEh.logDebug === 'function') {
         try { globalEh.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-    } else {
-        const TmpEH = (typeof window !== 'undefined' && window.errorHandler) || (typeof global !== 'undefined' && global.errorHandler) || null;
-        if (TmpEH && typeof TmpEH.logDebug === 'function') {
-            try { TmpEH.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-        } else if (typeof ErrorHandler !== 'undefined') {
-            try { new ErrorHandler().logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-        }
+    }
     }
 }
 

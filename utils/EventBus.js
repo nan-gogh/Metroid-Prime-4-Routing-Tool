@@ -2,6 +2,21 @@
 // Centralized event bus for cross-module communication
 
 (function (global) {
+  // Ensure a global errorHandler exists early so modules can safely log without
+  // constructing multiple ErrorHandler instances. If the real `ErrorHandler`
+  // is not yet defined, create a lightweight stub that will be replaced later.
+  try {
+    if (!global.errorHandler) {
+      if (typeof ErrorHandler !== 'undefined') {
+        try { global.errorHandler = new ErrorHandler(); } catch (e) { /* best-effort */ global.errorHandler = { logError: () => {}, logWarning: () => {}, logDebug: () => {} }; }
+      } else {
+        global.errorHandler = { logError: () => {}, logWarning: () => {}, logDebug: () => {} };
+      }
+    }
+  } catch (e) {
+    // swallow - best-effort
+    global.errorHandler = global.errorHandler || { logError: () => {}, logWarning: () => {}, logDebug: () => {} };
+  }
   class EventBus {
     constructor() {
       this._listeners = new Map();
@@ -45,10 +60,7 @@
             const eh = this._errorHandler || (typeof window !== 'undefined' ? window.errorHandler : null) || (global && global.errorHandler) || null;
             if (eh && typeof eh.logError === 'function') {
               try { eh.logError(e, `EventBus.emit.${event}`); } catch (logErr) { /* best-effort */ }
-            } else if (typeof ErrorHandler !== 'undefined') {
-              try { new ErrorHandler().logError(e, `EventBus.emit.${event}`); } catch (tmpErr) { /* best-effort */ }
             }
-          }
           }
         });
       }
