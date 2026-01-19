@@ -388,35 +388,27 @@
      */
     determineBestResolution() {
       try {
-        // Prefer mapping from zoom range to resolution index so the distribution
-        // is linear across zoom min..max and can be gamma-adjusted.
-        const zoom = (this.mapState && typeof this.mapState.zoom === 'number') ? this.mapState.zoom : 1;
-
-        const zoomMin = (this.config && this.config.ZOOM && typeof this.config.ZOOM.DEFAULT_MIN === 'number') ? this.config.ZOOM.DEFAULT_MIN : 0.05;
-        const zoomMax = (this.config && this.config.ZOOM && typeof this.config.ZOOM.MAX === 'number') ? this.config.ZOOM.MAX : 4;
-
-        // Normalize zoom to [0,1]
-        let normalized = 0;
-        if (zoomMax > zoomMin) {
-          normalized = (zoom - zoomMin) / (zoomMax - zoomMin);
-          normalized = Math.max(0, Math.min(1, normalized));
+        // Prefer ImageState's decision (combines zoom+gamma baseline with pixels-needed refinement).
+        if (this.imageState && typeof this.imageState.getNeededResolution === 'function') {
+          return Number(this.imageState.getNeededResolution());
         }
 
-        // Apply gamma correction. We interpret the configured gamma so that
-        // values < 1 bias the mapping toward lower resolutions (smaller tiles).
-        // To achieve that, use exponent = 1 / gamma. For gamma < 1 this exponent
-        // will be > 1, which compresses values toward 0 (lower indexes).
+        // Fallback: estimate based on displayed pixels and TILE_RESOLUTION_GAMMA
+        const displayedCss = (this.config && this.config.MAP_SIZE ? this.config.MAP_SIZE : 8192) * (this.mapState.zoom || 0);
+        const dpr = window.devicePixelRatio || 1;
+        const displayedPx = displayedCss * dpr;
+
+        const resolutions = (this.config && this.config.TILE_RESOLUTIONS) ? [...this.config.TILE_RESOLUTIONS].sort((a,b)=>a-b) : [256,512,1024,2048,4096,8192];
+        const minRes = resolutions[0];
+        const maxRes = resolutions[resolutions.length-1];
+
+        // Normalize displayedPx and apply gamma bias (mapped to index)
+        const normalized = Math.max(0, Math.min(1, (displayedPx - minRes) / (maxRes - minRes)));
         const cfgGamma = (this.config && typeof this.config.TILE_RESOLUTION_GAMMA === 'number') ? this.config.TILE_RESOLUTION_GAMMA : 0.6;
         const exponent = cfgGamma > 0 ? (1 / cfgGamma) : 1;
-        const gammaAdjusted = Math.pow(normalized, exponent);
-
-        // Map adjusted normalized value to an index in the sorted resolutions array
-        const resolutions = [...(this.config && this.config.TILE_RESOLUTIONS ? this.config.TILE_RESOLUTIONS : [256, 512, 1024, 2048, 4096, 8192])].sort((a, b) => a - b);
-        const maxIndex = resolutions.length - 1;
-        const targetIndexFloat = gammaAdjusted * maxIndex;
-        const targetIndex = Math.max(0, Math.min(maxIndex, Math.round(targetIndexFloat)));
-
-        return targetIndex;
+        const adj = Math.pow(normalized, exponent);
+        const idx = Math.max(0, Math.min(resolutions.length - 1, Math.round(adj * (resolutions.length - 1))));
+        return idx;
       } catch (e) { return 0; }
     }
 
