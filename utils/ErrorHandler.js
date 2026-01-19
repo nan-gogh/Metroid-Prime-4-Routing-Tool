@@ -34,14 +34,12 @@ class ErrorHandler {
             ...additionalData
         };
 
-        // Console logging
-        if (this.config.enableConsoleErrors) {
-            console.error(`[${context}] ${errorMessage}`, logData);
-        }
+        // Console logging (through internal safe writer)
+        this._writeConsole('error', `[${context}] ${errorMessage}`, logData);
 
         // Debug logging for development
         if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
-            console.debug('Error details:', logData);
+            this._writeConsole('debug', 'Error details:', logData);
         }
 
         // User notification (if available)
@@ -49,7 +47,7 @@ class ErrorHandler {
             try {
                 NotificationUtils.showError(`Error in ${context}: ${errorMessage}`);
             } catch (notifyError) {
-                console.warn('Failed to show error notification:', notifyError);
+                this._writeConsole('warn', 'Failed to show error notification:', notifyError);
             }
         }
     }
@@ -62,7 +60,7 @@ class ErrorHandler {
      */
     logWarning(message, context = '', additionalData = {}) {
         if (this.config.enableDebugLogging) {
-            console.warn(`[${context}] ${message}`, {
+            this._writeConsole('warn', `[${context}] ${message}`, {
                 timestamp: new Date().toISOString(),
                 context,
                 ...additionalData
@@ -78,11 +76,22 @@ class ErrorHandler {
      */
     logDebug(message, context = '', additionalData = {}) {
         if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
-            console.debug(`[${context}] ${message}`, {
+            this._writeConsole('debug', `[${context}] ${message}`, {
                 timestamp: new Date().toISOString(),
                 context,
                 ...additionalData
             });
+        }
+    }
+
+    _writeConsole(level, ...args) {
+        try {
+            if (!this.config.enableConsoleErrors) return;
+            if (typeof console === 'undefined') return;
+            const fn = console[level] || console.log;
+            fn.apply(console, args);
+        } catch (e) {
+            // swallow - best-effort logging only
         }
     }
 

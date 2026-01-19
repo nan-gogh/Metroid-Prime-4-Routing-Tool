@@ -42,10 +42,10 @@
           try {
             listener(data);
           } catch (e) {
-            if (this._errorHandler) {
-              this._errorHandler.logError(e, `EventBus.emit.${event}`);
-            } else {
-              // Fallback if no error handler set
+            const eh = this._errorHandler || (typeof window !== 'undefined' && window.errorHandler) || null;
+            if (eh && typeof eh.logError === 'function') {
+              eh.logError(e, `EventBus.emit.${event}`);
+            } else if (typeof console !== 'undefined' && console.error) {
               console.error(`EventBus handler error for ${event}:`, e);
             }
           }

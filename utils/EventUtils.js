@@ -48,7 +48,12 @@
 
       listeners.forEach(config => {
         if (!config.event || typeof config.handler !== 'function') {
-          console.warn('Invalid listener configuration:', config);
+          const eh = errorHandler || (global && global.errorHandler) || null;
+          if (eh && typeof eh.logWarning === 'function') {
+            try { eh.logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (e) { /* best-effort */ }
+          } else if (typeof console !== 'undefined' && console.warn) {
+            console.warn('Invalid listener configuration:', config);
+          }
           return;
         }
 
@@ -78,12 +83,18 @@
         return;
       }
 
+      const eh = global && global.errorHandler ? global.errorHandler : (typeof window !== 'undefined' ? window.errorHandler : null);
+
       unsubscribers.forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           try {
             unsubscribe();
           } catch (e) {
-            console.warn('Error during event listener cleanup:', e);
+            if (eh && typeof eh.logWarning === 'function') {
+              try { eh.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
+            } else if (typeof console !== 'undefined' && console.warn) {
+              console.warn('Error during event listener cleanup:', e);
+            }
           }
         }
       });
