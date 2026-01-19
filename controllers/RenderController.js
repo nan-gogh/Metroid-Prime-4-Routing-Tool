@@ -236,7 +236,7 @@
           this.routeRenderer,
           this.overlayRenderer,
           compositeStage
-        ].filter(Boolean), renderContext);
+        ].filter(Boolean), renderContext, this.mapState);
       }
     }
 

@@ -7,7 +7,7 @@ const MP4Config = {
 
     ZOOM: {
         DEFAULT_MIN: 0.05,
-        MAX: 4
+        MAX: 2
     },
 
     HEATMAP: {

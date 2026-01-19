@@ -78,25 +78,29 @@
      * Renders the grid overlay when the grid layer is enabled.
      * Includes quadrant grid lines, detail grid, axis labels, and updates DOM quadrant labels.
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {ViewportContext} [viewportContext] - Optional viewport context; falls back to this.mapState
      */
-    render(renderContext) {
+    render(renderContext, viewportContext) {
       try {
         // Sub-canvas architecture: GridRenderer renders to its own canvas (gridCanvas)
         // This allows selective rendering without forcing other overlay renderers to redraw
         const gridCtx = renderContext.ctxGrid;
         if (!gridCtx || !renderContext.canvasGrid) return;
 
+        // Use viewportContext if available, otherwise fall back to this.mapState
+        const viewport = viewportContext || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+
         // Clear grid canvas at the start
         const canvasSize = renderContext.getCanvasSize();
         gridCtx.clearRect(0, 0, canvasSize.width, canvasSize.height);
 
         // Always update DOM labels to ensure they reflect current grid visibility state
-        try { this.updateQuadLabels(renderContext); } catch (e) { console.debug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
+        try { this.updateQuadLabels(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
 
         // Only render the grid when the runtime grid layer is enabled
         if (!this.layerState.isLayerVisible('grid')) return;
-        try { this.renderQuadrantGrid(renderContext); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
-        try { this.renderDetailGrid(renderContext); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
+        try { this.renderQuadrantGrid(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
+        try { this.renderDetailGrid(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
       } catch (e) { console.debug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
     }
 
@@ -104,30 +108,34 @@
      * Draws the quadrant grid that separates the map into 4 equal sections.
      * Renders cyan crosshairs at the map center with zoom-scaled opacity.
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {ViewportContext} [viewport] - Optional viewport context; falls back to this.mapState
      */
-    renderQuadrantGrid(renderContext) {
+    renderQuadrantGrid(renderContext, viewport = null) {
       try {
+        // Use viewport if available, otherwise fall back to this.mapState
+        const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+
         // Use grid sub-canvas instead of main overlay canvas
         const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.mapState.zoom + this.mapState.panX;
-        const mapScreenTop = 0 * this.mapState.zoom + this.mapState.panY;
-        const mapScreenRight = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
-        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
+        const mapScreenLeft = 0 * vp.zoom + vp.panX;
+        const mapScreenTop = 0 * vp.zoom + vp.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panY;
 
         // Map center is at (MAP_SIZE/2, MAP_SIZE/2) in normalized coords
         // Calculate screen position of center
-        const mapCenterX = ((this.config.MAP_SIZE || 8192) / 2) * this.mapState.zoom + this.mapState.panX;
-        const mapCenterY = ((this.config.MAP_SIZE || 8192) / 2) * this.mapState.zoom + this.mapState.panY;
+        const mapCenterX = ((this.config.MAP_SIZE || 8192) / 2) * vp.zoom + vp.panX;
+        const mapCenterY = ((this.config.MAP_SIZE || 8192) / 2) * vp.zoom + vp.panY;
 
         // Only draw grid lines if they're visible on screen
         if (mapCenterX > mapScreenLeft && mapCenterX < mapScreenRight &&
             mapCenterY > mapScreenTop && mapCenterY < mapScreenBottom) {
             ctx.save();
             // Scale opacity with zoom for visibility at all levels
-            const opacity = Math.min(0.6, 0.15 + this.mapState.zoom * 0.5);
+            const opacity = Math.min(0.6, 0.15 + vp.zoom * 0.5);
             // Cyan gridlines for both satellite and holo views
             ctx.strokeStyle = 'rgba(34, 211, 238, ' + opacity + ')';
             ctx.lineWidth = 2;
@@ -154,24 +162,28 @@
      * Renders cyan grid lines and optionally a green crystal heatmap overlay.
      * The heatmap shows marker density using radial gradients on a dedicated canvas layer.
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {ViewportContext} [viewport] - Optional viewport context; falls back to this.mapState
      */
-    renderDetailGrid(renderContext) {
+    renderDetailGrid(renderContext, viewport = null) {
       try {
+        // Use viewport if available, otherwise fall back to this.mapState
+        const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+
         const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.mapState.zoom + this.mapState.panX;
-        const mapScreenTop = 0 * this.mapState.zoom + this.mapState.panY;
-        const mapScreenRight = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
-        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
+        const mapScreenLeft = 0 * vp.zoom + vp.panX;
+        const mapScreenTop = 0 * vp.zoom + vp.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panY;
 
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
         const gridSpacing = (this.config.MAP_SIZE || 8192) / 8;
 
         ctx.save();
         // Scale opacity with zoom for visibility at all levels
-        const opacity = Math.min(0.4, 0.05 + this.mapState.zoom * 0.3);
+        const opacity = Math.min(0.4, 0.05 + vp.zoom * 0.3);
 
         // Heatmap rendering is now handled exclusively by HeatmapRenderer
         // GridRenderer only handles the 8x8 grid itself
@@ -183,7 +195,7 @@
         // Draw vertical grid lines
         for (let i = 1; i < 8; i++) {
             const mapX = gridSpacing * i;
-            const screenX = mapX * this.mapState.zoom + this.mapState.panX;
+            const screenX = mapX * vp.zoom + vp.panX;
             
             // Only draw if visible on screen and within map area
             if (screenX > mapScreenLeft && screenX < mapScreenRight) {
@@ -197,7 +209,7 @@
         // Draw horizontal grid lines
         for (let i = 1; i < 8; i++) {
             const mapY = gridSpacing * i;
-            const screenY = mapY * this.mapState.zoom + this.mapState.panY;
+            const screenY = mapY * vp.zoom + vp.panY;
             
             // Only draw if visible on screen and within map area
             if (screenY > mapScreenTop && screenY < mapScreenBottom) {
@@ -208,7 +220,7 @@
             }
         }
         
-        this.renderAxisLabels(renderContext);
+        this.renderAxisLabels(renderContext, viewport);
         ctx.restore();
       } catch (e) { console.debug('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
     }
@@ -218,17 +230,19 @@
      * Labels are positioned outside the map boundaries and scale with zoom level.
      * Uses Orbitron font to match the DOM quadrant labels styling.
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {Object} viewport - Optional viewport context with zoom/pan values
      */
-    renderAxisLabels(renderContext) {
+    renderAxisLabels(renderContext, viewport = null) {
       try {
+        const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
         const ctx = renderContext.ctxGrid;
         const { width: cssWidth, height: cssHeight } = renderContext.getCanvasSize();
 
         // Map boundaries in screen coordinates
-        const mapScreenLeft = 0 * this.mapState.zoom + this.mapState.panX;
-        const mapScreenTop = 0 * this.mapState.zoom + this.mapState.panY;
-        const mapScreenRight = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panX;
-        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * this.mapState.zoom + this.mapState.panY;
+        const mapScreenLeft = 0 * vp.zoom + vp.panX;
+        const mapScreenTop = 0 * vp.zoom + vp.panY;
+        const mapScreenRight = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panX;
+        const mapScreenBottom = (this.config.MAP_SIZE || 8192) * vp.zoom + vp.panY;
 
         // Grid spacing: divide map into 8x8 = 64 cells (each 1024x1024)
         const gridSpacing = (this.config.MAP_SIZE || 8192) / 8;
@@ -237,7 +251,7 @@
         // Compute a readable font size based on zoom but clamp it
         const fontMin = 12;
         const fontMax = 48; // avoid excessively large labels when zooming in
-        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.mapState.zoom * 80)));
+        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(vp.zoom * 80)));
         // Use Orbitron (with Space Grotesk fallback) for canvas axis labels to match DOM quadrant labels
         ctx.font = `700 ${fontSize}px "Orbitron", "Space Grotesk", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif`;
         ctx.textBaseline = 'middle';
@@ -254,7 +268,7 @@
         ctx.textAlign = 'center';
         for (let i = 0; i < 8; i++) {
             const mapX = gridSpacing * (i + 0.5); // Center of each cell
-            const screenX = mapX * this.mapState.zoom + this.mapState.panX;
+            const screenX = mapX * vp.zoom + vp.panX;
 
             // Only draw if centered column is within the horizontal viewport
             if (screenX + halfW < 0 || screenX - halfW > cssWidth) continue;
@@ -272,7 +286,7 @@
         ctx.textAlign = 'right';
         for (let i = 0; i < 8; i++) {
             const mapY = gridSpacing * (i + 0.5); // Center of each cell
-            const screenY = mapY * this.mapState.zoom + this.mapState.panY;
+            const screenY = mapY * vp.zoom + vp.panY;
 
             // Only draw if centered row is within vertical viewport
             if (screenY + halfH < 0 || screenY - halfH > cssHeight) continue;
@@ -298,9 +312,12 @@
      * Updates the DOM quadrant labels with marker counts and positioning.
      * Labels show green crystal marker counts per quadrant and are only visible
      * when the grid layer is enabled.
+     * @param {RenderContext} renderContext - The render context
+     * @param {Object} viewport - Optional viewport context with zoom/pan values
      */
-    updateQuadLabels(renderContext) {
+    updateQuadLabels(renderContext, viewport = null) {
       try {
+        const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
         // Use the stored container reference, or find it if not available
         let container = this._labelsContainer;
         if (!container) {
@@ -329,7 +346,7 @@
         const labels = container.querySelectorAll('.grid-quad-label');
         const fontMin = 12;
         const fontMax = 48;
-        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(this.mapState.zoom * 80)));
+        const fontSize = Math.max(fontMin, Math.min(fontMax, Math.round(vp.zoom * 80)));
         const pad = Math.max(2, Math.round(fontSize * 0.18));
         const greenKeys = this.greenCrystalLayers;
         const counts = new Array(cols * rows).fill(0);
@@ -354,8 +371,8 @@
           const r = Number(el.dataset.row);
           const mapX = (gridSpacing * (c + 0.5));
           const mapY = (gridSpacing * (r + 0.5));
-          const screenX = mapX * this.mapState.zoom + this.mapState.panX;
-          const screenY = mapY * this.mapState.zoom + this.mapState.panY;
+          const screenX = mapX * vp.zoom + vp.panX;
+          const screenY = mapY * vp.zoom + vp.panY;
           el.style.left = Math.round(screenX) + 'px';
           el.style.top = Math.round(screenY) + 'px';
           el.style.fontSize = fontSize + 'px';

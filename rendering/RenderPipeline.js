@@ -7,11 +7,13 @@
      * Creates a new RenderPipeline instance for orchestrating multiple rendering stages.
      * @param {Array} stages - Array of renderer objects with render() methods to be managed
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {MapState} [mapState] - Optional MapState for creating ViewportContext
      */
-    constructor(stages, renderContext) {
+    constructor(stages, renderContext, mapState) {
       this.errorHandler = global.errorHandler;
       this.stages = stages || [];
       this.renderContext = renderContext; // Store render context for passing to renderers
+      this.mapState = mapState; // Store mapState for creating ViewportContext during render
       this._enabledStages = new Set(); // Track enabled stages
       this._stageOrder = []; // Custom ordering
       this._profilingEnabled = false;
@@ -223,8 +225,13 @@
 
         try {
           if (typeof stage.render === 'function') {
-            // Pass renderContext to renderer for clean canvas access
-            stage.render(this.renderContext);
+            // Create ViewportContext from MapState if available
+            let viewportContext = null;
+            if (typeof ViewportContext !== 'undefined' && this.mapState) {
+              viewportContext = ViewportContext.fromMapState(this.mapState);
+            }
+            // Pass renderContext and optional viewportContext to renderer
+            stage.render(this.renderContext, viewportContext);
             renderedStages.push(stageName);
 
             if (this._profilingEnabled) {

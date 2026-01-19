@@ -127,7 +127,10 @@
     }
 
     // Micro-optimization: Cache path computation when route hasn't changed
-    _computePathData() {
+    _computePathData(viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+
       // Get route from routeManager (source of truth)
       const currentRoute = this.routeManager && this.routeManager.currentRoute;
       if (!currentRoute || !Array.isArray(currentRoute)) {
@@ -140,7 +143,7 @@
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const routeKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const routeKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions;
 
       if (this._cachedPath && this._pathCacheValid && this._cachedPath.key === routeKey) {
         return this._cachedPath.data;
@@ -191,7 +194,10 @@
     }
 
     // Micro-optimization: Cache glow path separately
-    _computeGlowPathData() {
+    _computeGlowPathData(viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+
       // Get route from routeManager (source of truth)
       const currentRoute = this.routeManager && this.routeManager.currentRoute;
       if (!currentRoute || !Array.isArray(currentRoute)) {
@@ -204,13 +210,13 @@
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const glowKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|glow|' + this.mapState.zoom + '|' + this.mapState.panX + '|' + this.mapState.panY + '|' + markerPositions;
+      const glowKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|glow|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions;
 
       if (this._glowCache && this._glowCacheValid && this._glowCache.key === glowKey) {
         return this._glowCache.data;
       }
 
-      const pathData = this._computePathData();
+      const pathData = this._computePathData(viewport);
       this._glowCache = {
         key: glowKey,
         data: pathData
@@ -224,10 +230,14 @@
      * Renders the route path to the map canvas.
      * Includes performance monitoring and automatic cache invalidation.
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {ViewportContext} [viewportContext] - Optional viewport context; falls back to this.mapState
      */
-    render(renderContext) {
+    render(renderContext, viewportContext) {
       const startTime = performance.now();
       this._renderCount++;
+
+      // Use viewportContext if available, otherwise fall back to this.mapState
+      const viewport = viewportContext || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
 
       try {
         if (!this._validateRouteData()) {
@@ -246,27 +256,27 @@
           this.errorHandler.logWarning('RouteRenderer.render called without valid renderContext', 'RouteRenderer.render');
           return;
         }
-        const pathData = this._computePathData();
+        const pathData = this._computePathData(viewport);
 
         if (!pathData.valid || pathData.points.length < 2) {
           // Edge case: single point or invalid path - render as single node
-          this._renderSingleNode(ctx, pathData.points[0]);
+          this._renderSingleNode(ctx, pathData.points[0], viewport);
           return;
         }
 
         ctx.save();
-        this._setupLineStyle(ctx);
+        this._setupLineStyle(ctx, viewport);
 
         // Render glow effect if highlighted
         if (this._shouldRenderGlow()) {
-          this._renderGlow(ctx);
+          this._renderGlow(ctx, viewport);
         }
 
         // Render main route path
         this._renderMainPath(ctx, pathData);
 
         // Render route nodes
-        this._renderNodes(ctx, pathData);
+        this._renderNodes(ctx, pathData, viewport);
 
         // Render route preview dot (transient UI element during route editing)
         this._renderRoutePreview(ctx);
@@ -291,7 +301,10 @@
       return !!(this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has && this.highlightState.highlightedLayers.has('route'));
     }
 
-    _setupLineStyle(ctx) {
+    _setupLineStyle(ctx, viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
@@ -302,12 +315,12 @@
 
       const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
       const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
-      ctx.lineWidth = Math.max(1, baseLine * this.mapState.zoom * detailScale);
+      ctx.lineWidth = Math.max(1, baseLine * vp.zoom * detailScale);
 
       // Optimized dash pattern calculation
       const spacingScale = Math.max(0.35, baseLine / 5);
-      const dashLen = Math.max(3, 8 * this.mapState.zoom * spacingScale * detailScale);
-      const gapLen = Math.max(3, 6 * this.mapState.zoom * spacingScale * detailScale);
+      const dashLen = Math.max(3, 8 * vp.zoom * spacingScale * detailScale);
+      const gapLen = Math.max(3, 6 * vp.zoom * spacingScale * detailScale);
 
       if (routeHex) {
         ctx.setLineDash([dashLen, gapLen]);
@@ -315,8 +328,11 @@
       }
     }
 
-    _renderGlow(ctx) {
-      const pathData = this._computeGlowPathData();
+    _renderGlow(ctx, viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+
+      const pathData = this._computeGlowPathData(viewport);
 
       try {
         const glowAlpha = 0.85;
@@ -337,7 +353,7 @@
 
         const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
         const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
-        const glowLine = Math.max(1, baseLine * this.mapState.zoom * detailScale) * 2.6;
+        const glowLine = Math.max(1, baseLine * vp.zoom * detailScale) * 2.6;
 
         ctx.lineWidth = glowLine;
         ctx.strokeStyle = glowColor;
@@ -368,7 +384,10 @@
       ctx.setLineDash([]);
     }
 
-    _renderNodes(ctx, pathData) {
+    _renderNodes(ctx, pathData, viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+
       const routeHex = this.routeColor;
       const nodeFill = routeHex ? this._hexToRgba(routeHex, 0.95) : null;
 
@@ -378,7 +397,7 @@
 
       const lineWidth = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
       const dotSize = this.routeManager && typeof this.routeManager.getRouteNodeSize === 'function' ?
-        this.routeManager.getRouteNodeSize(lineWidth, this.mapState.zoom) : 6;
+        this.routeManager.getRouteNodeSize(lineWidth, vp.zoom) : 6;
 
       // Skip the closing loop point for node rendering (only when a loop was actually added)
       const nodeCount = (map.routeLooping && pathData.points.length >= 4) ? pathData.points.length - 1 : pathData.points.length;
@@ -391,7 +410,10 @@
       }
     }
 
-    _renderSingleNode(ctx, point) {
+    _renderSingleNode(ctx, point, viewport = null) {
+      // Use provided viewport or fall back to this.mapState
+      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+
       if (!point) return;
 
       ctx.save();
@@ -405,7 +427,7 @@
 
       const lineWidth = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
       const dotSize = this.routeManager && typeof this.routeManager.getRouteNodeSize === 'function' ?
-        this.routeManager.getRouteNodeSize(lineWidth, this.mapState.zoom) : 6;
+        this.routeManager.getRouteNodeSize(lineWidth, vp.zoom) : 6;
       ctx.beginPath();
       ctx.arc(point.x, point.y, dotSize, 0, Math.PI * 2);
       ctx.fill();
