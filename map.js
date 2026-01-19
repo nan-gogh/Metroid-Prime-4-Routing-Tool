@@ -48,7 +48,7 @@ class InteractiveMap {
         this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState);
 
-        console.log('✅ State managers initialized');
+        // State managers initialized
 
         // Initialize controllers
         this.dataController = null;
