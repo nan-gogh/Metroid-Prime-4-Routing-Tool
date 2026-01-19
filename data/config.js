@@ -4,6 +4,8 @@
 const MP4Config = {
     MAP_SIZE: 8192,
     TILE_RESOLUTIONS: [256, 512, 1024, 2048, 4096, 8192],
+    // Linear range distribution squashed toward 256 using gamma correction
+    TILE_RESOLUTION_GAMMA: 0.6,
     // Image resolution tuning for viewport-aware tile selection
     IMAGE_RESOLUTION_BASE_MULTIPLIER: 3.5,
     IMAGE_RESOLUTION_MAX_MULTIPLIER: 6,

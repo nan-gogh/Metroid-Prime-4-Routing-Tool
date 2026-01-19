@@ -17,8 +17,16 @@
       this.imageState = imageState;
       this.config = config || (global.MP4Config || {});
       this._lowSpec = options.lowSpec || false;
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : global.errorHandler;
+      this.errorHandler = options.errorHandler || null;
       // No direct map reference needed - all access through state managers and renderContext
+    }
+
+    /**
+     * Inject error handler for logging
+     * @param {ErrorHandler} handler - Error handler instance
+     */
+    setErrorHandler(handler) {
+      this.errorHandler = handler;
     }
 
     /**
@@ -383,10 +391,37 @@
         const displayedCss = this.config.MAP_SIZE * (this.mapState.zoom || 0);
         const dpr = window.devicePixelRatio || 1;
         const displayedPx = displayedCss * dpr;
-        for (let i = 0; i < this.config.TILE_RESOLUTIONS.length; i++) {
-          if (this.config.TILE_RESOLUTIONS[i] >= displayedPx) return i;
+
+        // Get available resolutions sorted in ascending order
+        const resolutions = [...this.config.TILE_RESOLUTIONS].sort((a, b) => a - b);
+        const minRes = resolutions[0];
+        const maxRes = resolutions[resolutions.length - 1];
+
+        // Normalize displayedPx to [0, 1] range
+        // 0 = minRes, 1 = maxRes
+        const normalized = Math.max(0, Math.min(1, (displayedPx - minRes) / (maxRes - minRes)));
+
+        // Apply gamma correction to squash toward 256 (smaller resolutions)
+        const gamma = this.config.TILE_RESOLUTION_GAMMA || 0.6;
+        const gammaAdjusted = Math.pow(normalized, gamma);
+
+        // Map back to resolution index
+        // resolutionIndex 0 = highest quality (smallest file), increases as we zoom out
+        const maxIndex = resolutions.length - 1;
+        const targetIndex = gammaAdjusted * maxIndex;
+
+        // Find closest resolution index
+        let bestIndex = 0;
+        let bestDist = Math.abs(resolutions[0] - displayedPx);
+        for (let i = 0; i < resolutions.length; i++) {
+          const dist = Math.abs(resolutions[i] - displayedPx);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = i;
+          }
         }
-        return this.config.TILE_RESOLUTIONS.length - 1;
+
+        return bestIndex;
       } catch (e) { return 0; }
     }
 
