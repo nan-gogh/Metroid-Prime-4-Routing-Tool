@@ -150,7 +150,7 @@ function checkPoolStats() {
     const eh = typeof window !== 'undefined' ? window.errorHandler : null;
     const globalEh = (typeof window !== 'undefined' && window.errorHandler) || (typeof global !== 'undefined' && global.errorHandler) || null;
     if (globalEh && typeof globalEh.logDebug === 'function') {
-        try { globalEh.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
+        try { console.debug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
     }
     }
 }

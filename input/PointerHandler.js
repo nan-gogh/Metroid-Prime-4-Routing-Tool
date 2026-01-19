@@ -84,7 +84,7 @@
           this._findMarkerAt = this.map.markerRenderer.findMarkerAt.bind(this.map.markerRenderer);
         }
         
-      } catch (e) { this.errorHandler.logDebug('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
+      } catch (e) { console.debug('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
     }
 
     init() {
@@ -111,7 +111,7 @@
         window.addEventListener('beforeunload', this._onPageUnload);
         
         this.bound = true;
-      } catch (e) { this.errorHandler.logDebug('PointerHandler.init failed', 'PointerHandler.init', { error: e }); }
+      } catch (e) { console.debug('PointerHandler.init failed', 'PointerHandler.init', { error: e }); }
     }
 
     destroy() {
@@ -130,7 +130,7 @@
         window.removeEventListener('beforeunload', this._onPageUnload);
         
         this.bound = false;
-      } catch (e) { this.errorHandler.logDebug('PointerHandler.destroy failed', 'PointerHandler.destroy', { error: e }); }
+      } catch (e) { console.debug('PointerHandler.destroy failed', 'PointerHandler.destroy', { error: e }); }
     }
 
     _onWheel(ev) {
@@ -172,7 +172,7 @@
             try { this._saveViewToStorage(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
           }, 150);
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.setTimeout'); }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
     }
 
     _onPointerDown(ev) {
@@ -196,7 +196,7 @@
             this.gestureHandler.startPinch(Array.from(this.pointers.values()));
           }
         }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerDown failed', 'PointerHandler._onPointerDown', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onPointerDown failed', 'PointerHandler._onPointerDown', { error: e }); }
     }
 
     _handleSinglePointerDown(ev, localX, localY, downTime) {
@@ -240,7 +240,7 @@
           this.pointerDownTime = downTime;
           try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
         }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
     }
 
     _onPointerMove(ev) {
@@ -331,7 +331,7 @@
           // Update hover state (only when not dragging anything)
           this._checkMarkerHover(localX, localY);
         }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
     }
 
     _onPointerUp(ev) {
@@ -367,7 +367,7 @@
           this.routeEditHandler.handlePointerUp(ev, localX, localY);
         }
         
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
     }
 
     _scheduleEmitViewChange(triggeredBy) {
@@ -475,7 +475,7 @@
         if (this.routeEditHandler) {
           this.routeEditHandler.handleMouseLeave(ev);
         }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onMouseLeave failed', 'PointerHandler._onMouseLeave', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onMouseLeave failed', 'PointerHandler._onMouseLeave', { error: e }); }
     }
 
     _onClick(e) {
@@ -518,14 +518,14 @@
             return; // Marker handler handled it
           }
         }
-      } catch (e) { this.errorHandler.logDebug('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }
+      } catch (e) { console.debug('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }
     }
 
     // ===== PAGE UNLOAD CLEANUP =====
 
     _onPageUnload(ev) {
       try {
-        this.errorHandler && this.errorHandler.logDebug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
+        this.errorHandler && console.debug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
         
         // Use DragState to cancel all drags (handles marker and route drag cleanup)
         this.dragState.cancelAllDrags('Page unload');
@@ -533,7 +533,7 @@
         // Clear remaining transient states
         this.pointers.clear();
         
-        this.errorHandler && this.errorHandler.logDebug('PointerHandler: Drag state cleanup complete', 'PointerHandler._onPageUnload.complete', {});
+        this.errorHandler && console.debug('PointerHandler: Drag state cleanup complete', 'PointerHandler._onPageUnload.complete', {});
         
       } catch (e) {
         this.errorHandler && this.errorHandler.logWarning(e, 'PointerHandler._onPageUnload.failed', {});
@@ -549,3 +549,4 @@
 
   global.PointerHandler = PointerHandler;
 })(window);
+

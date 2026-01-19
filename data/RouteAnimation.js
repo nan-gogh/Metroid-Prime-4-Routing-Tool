@@ -78,7 +78,7 @@ const RouteAnimation = {
                     map.render(); // Fallback for compatibility
                 }
             } catch (e) {
-                this.errorHandler.logDebug('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
+                console.debug('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
             }
 
             // Schedule next frame and store RAF ID properly

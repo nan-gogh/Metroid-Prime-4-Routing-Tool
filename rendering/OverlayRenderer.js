@@ -50,7 +50,7 @@
                     layerKey: layerKey
                   });
                 } catch (e) {
-                  if (this.errorHandler) this.errorHandler.logDebug('OverlayRenderer: Failed to emit tooltip event', 'OverlayRenderer.render.tooltipEvent', { error: e });
+                  if (this.errorHandler) console.debug('OverlayRenderer: Failed to emit tooltip event', 'OverlayRenderer.render.tooltipEvent', { error: e });
                 }
               }
             }
@@ -60,16 +60,17 @@
               try {
                 this.eventBus.emit(window.EventTypes.TOOLTIP_HIDE_REQUESTED, {});
               } catch (e) {
-                if (this.errorHandler) this.errorHandler.logDebug('OverlayRenderer: Failed to emit hide tooltip event', 'OverlayRenderer.render.hideTooltipEvent', { error: e });
+                if (this.errorHandler) console.debug('OverlayRenderer: Failed to emit hide tooltip event', 'OverlayRenderer.render.hideTooltipEvent', { error: e });
               }
             }
           }
         } catch (e) {
-          if (this.errorHandler) this.errorHandler.logDebug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
+          if (this.errorHandler) console.debug('OverlayRenderer.render: Tooltip positioning failed', 'OverlayRenderer.render.tooltip', { error: e });
         }
-      } catch (e) { this.errorHandler.logDebug('OverlayRenderer.render failed', 'OverlayRenderer.render', { error: e }); }
+      } catch (e) { console.debug('OverlayRenderer.render failed', 'OverlayRenderer.render', { error: e }); }
     }
   }
 
   global.OverlayRenderer = OverlayRenderer;
 })(window);
+

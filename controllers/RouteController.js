@@ -51,7 +51,7 @@
             routeRenderer.invalidateCache();
           }
         } catch (e) {
-          this.errorHandler.logDebug('Failed to invalidate route renderer cache', 'RouteController.setRoute.invalidateCache', { error: e });
+          console.debug('Failed to invalidate route renderer cache', 'RouteController.setRoute.invalidateCache', { error: e });
         }
 
         try {

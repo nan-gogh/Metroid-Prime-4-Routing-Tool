@@ -23,7 +23,7 @@
       try {
         return !!this._heatmapVisible;
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState.isVisible failed', 'HeatmapDisplayState.isVisible', { error: e });
+        this.errorHandler && console.debug('HeatmapDisplayState.isVisible failed', 'HeatmapDisplayState.isVisible', { error: e });
         return false;
       }
     }
@@ -47,11 +47,11 @@
               triggeredBy: 'heatmap-display-state'
             });
           } catch (e) {
-            this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState: Failed to emit HEATMAP_VISIBILITY_CHANGED', 'HeatmapDisplayState.setVisible.emit', { error: e });
+            this.errorHandler && console.debug('HeatmapDisplayState: Failed to emit HEATMAP_VISIBILITY_CHANGED', 'HeatmapDisplayState.setVisible.emit', { error: e });
           }
         }
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState.setVisible failed', 'HeatmapDisplayState.setVisible', { error: e });
+        this.errorHandler && console.debug('HeatmapDisplayState.setVisible failed', 'HeatmapDisplayState.setVisible', { error: e });
       }
     }
 
@@ -64,7 +64,7 @@
         this.setVisible(!this._heatmapVisible);
         return this._heatmapVisible;
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState.toggle failed', 'HeatmapDisplayState.toggle', { error: e });
+        this.errorHandler && console.debug('HeatmapDisplayState.toggle failed', 'HeatmapDisplayState.toggle', { error: e });
         return this._heatmapVisible;
       }
     }
@@ -83,7 +83,7 @@
         this._heatmapVisible = loaded;
         return loaded;
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState.loadFromStorage failed', 'HeatmapDisplayState.loadFromStorage', { error: e });
+        this.errorHandler && console.debug('HeatmapDisplayState.loadFromStorage failed', 'HeatmapDisplayState.loadFromStorage', { error: e });
         return this._heatmapVisible;
       }
     }
@@ -101,7 +101,7 @@
           this._heatmapVisible ? '1' : '0'
         );
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('HeatmapDisplayState.saveToStorage failed', 'HeatmapDisplayState.saveToStorage', { error: e });
+        this.errorHandler && console.debug('HeatmapDisplayState.saveToStorage failed', 'HeatmapDisplayState.saveToStorage', { error: e });
       }
     }
 
@@ -119,3 +119,4 @@
   }
   global.HeatmapDisplayState = HeatmapDisplayState;
 })(typeof window !== 'undefined' ? window : global);
+

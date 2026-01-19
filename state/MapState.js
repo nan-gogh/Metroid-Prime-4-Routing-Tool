@@ -188,7 +188,7 @@
           triggeredBy: triggeredBy || null
         });
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('MapState.emitViewChange failed', 'MapState.emitViewChange', { error: e });
+        this.errorHandler && console.debug('MapState.emitViewChange failed', 'MapState.emitViewChange', { error: e });
       }
     }
 
@@ -272,7 +272,7 @@
           StorageUtils.saveMapView(viewData);
         }
       } catch (e) {
-        this.errorHandler.logDebug('MapState.saveToStorage failed', 'MapState.saveToStorage', { error: e });
+        console.debug('MapState.saveToStorage failed', 'MapState.saveToStorage', { error: e });
       }
     }
 
@@ -317,7 +317,7 @@
         }
         return false;
       } catch (e) {
-        this.errorHandler.logDebug('MapState.loadFromStorage failed', 'MapState.loadFromStorage', { error: e });
+        console.debug('MapState.loadFromStorage failed', 'MapState.loadFromStorage', { error: e });
         return false;
       }
     }
@@ -325,3 +325,4 @@
 
   global.MapState = MapState;
 })(window);
+

@@ -40,7 +40,7 @@
           hasActiveDrag: { get: () => this.isDragging || this.hasDraggingMarker || this.hasDraggingCandidate || this.hasRouteInsert || this.hasRouteNodeCandidate || this.hasWaypointDrag }
         });
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('DragState fast accessors failed', 'DragState.constructor.fastAccessors', { error: e });
+        this.errorHandler && console.debug('DragState fast accessors failed', 'DragState.constructor.fastAccessors', { error: e });
       }
     }
 
@@ -64,7 +64,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('Failed to find marker object for drag promotion', 'DragState.promoteDraggingCandidate', { error: e });
+        this.errorHandler && console.debug('Failed to find marker object for drag promotion', 'DragState.promoteDraggingCandidate', { error: e });
       }
 
       this.draggingMarker = {
@@ -109,7 +109,7 @@
       // Restore original position if available
       if (this.draggingMarker.originalX !== undefined && this.draggingMarker.originalY !== undefined) {
         this.updateDraggingMarkerPosition(this.draggingMarker.originalX, this.draggingMarker.originalY);
-        this.errorHandler && this.errorHandler.logDebug('Restored marker to original position', 'DragState.cancelDraggingMarker', {
+        this.errorHandler && console.debug('Restored marker to original position', 'DragState.cancelDraggingMarker', {
           markerUid: this.draggingMarker.uid, originalX: this.draggingMarker.originalX, originalY: this.draggingMarker.originalY
         });
       }
@@ -165,7 +165,7 @@
     cancelRouteInsert(reason = 'Operation cancelled') {
       if (!this.routeInsert) return;
 
-      this.errorHandler && this.errorHandler.logDebug('Cancelling route insert', 'DragState.cancelRouteInsert', { reason });
+      this.errorHandler && console.debug('Cancelling route insert', 'DragState.cancelRouteInsert', { reason });
 
       // Release pooled objects
       if (this.routeInsert.tempMarker && typeof markerPool !== 'undefined') {

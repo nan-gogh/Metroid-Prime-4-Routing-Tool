@@ -74,7 +74,7 @@
       try { 
         this._renderNow(renderContext); 
       } catch (e) { 
-        this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); 
+        this.errorHandler && console.debug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); 
       }
     }
 
@@ -117,7 +117,7 @@
                 });
               }
             });
-        } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: failed to build buckets', 'HeatmapRenderer._renderNow.buildBuckets', { error: e }); }
+        } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: failed to build buckets', 'HeatmapRenderer._renderNow.buildBuckets', { error: e }); }
 
         // Compute counts and draw soft radial blobs per marker into offscreen
         const counts = buckets.map(b => b.length);
@@ -174,11 +174,12 @@
           try { heatmapCtx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', 'function', e); }
           try { heatmapCtx.globalCompositeOperation = 'source-over'; } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to reset composite operation:', 'function', e); }
           heatmapCtx.restore();
-        } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
+        } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
 
-      } catch (e) { this.errorHandler && this.errorHandler.logDebug('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }
+      } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }
     }
   }
 
   global.HeatmapRenderer = HeatmapRenderer;
 })(window);
+

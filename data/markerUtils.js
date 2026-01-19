@@ -1,4 +1,4 @@
-﻿// Marker utility functions - now uses manager pattern with dependency injection
+// Marker utility functions - now uses manager pattern with dependency injection
 // Legacy compatibility layer that delegates to MarkerManager instance
 
 const MarkerUtils = {
@@ -20,7 +20,7 @@ const MarkerUtils = {
                 try {
                     this._onCleanupRouteReferences(uid);
                 } catch (e) {
-                    this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.routeCleanupCallback', { error: e });
+                    console.debug('Route cleanup callback failed', 'MarkerUtils.routeCleanupCallback', { error: e });
                 }
             }
         };
@@ -42,12 +42,12 @@ const MarkerUtils = {
                             try {
                                 this._onCleanupRouteReferences(uid);
                             } catch (e) {
-                                this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.getManager.routeCleanupCallback', { error: e });
+                                console.debug('Route cleanup callback failed', 'MarkerUtils.getManager.routeCleanupCallback', { error: e });
                             }
                         }
                     };
                     
-                    this.errorHandler.logDebug('On-demand MarkerManager creation succeeded', 'MarkerUtils.getManager.creationSuccess', {});
+                    console.debug('On-demand MarkerManager creation succeeded', 'MarkerUtils.getManager.creationSuccess', {});
                 } catch (e) {
                     this.errorHandler.logError(e, 'MarkerUtils.getManager.creationFailed', {});
                     throw new Error('MarkerManager creation failed: ' + e.message);
@@ -68,7 +68,7 @@ const MarkerUtils = {
                     try {
                         callback(uid);
                     } catch (e) {
-                        this.errorHandler.logDebug('Route cleanup callback failed', 'MarkerUtils.setOnCleanupRouteReferences', { error: e });
+                        console.debug('Route cleanup callback failed', 'MarkerUtils.setOnCleanupRouteReferences', { error: e });
                     }
                 }
             };
@@ -105,7 +105,7 @@ const MarkerUtils = {
                 window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
                 return;
             } catch (e) {
-                this.errorHandler.logDebug('MarkerUtils.clearCustomMarkers emit failed', 'MarkerUtils.clearCustomMarkers', { error: e });
+                console.debug('MarkerUtils.clearCustomMarkers emit failed', 'MarkerUtils.clearCustomMarkers', { error: e });
                 // Fall through to direct call
             }
         }
@@ -165,3 +165,4 @@ const MarkerUtils = {
 
 // Make MarkerUtils globally available
 window.MarkerUtils = MarkerUtils;
+

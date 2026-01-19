@@ -100,7 +100,7 @@
               ctx.fillStyle = color;
               ctx.fill();
               ctx.restore();
-            } catch (e) { this.errorHandler && this.errorHandler.logDebug('MarkerRenderer: failed to draw selection halo', 'MarkerRenderer.render.selectionHalo', { error: e }); }
+            } catch (e) { this.errorHandler && console.debug('MarkerRenderer: failed to draw selection halo', 'MarkerRenderer.render.selectionHalo', { error: e }); }
           }
 
           try {
@@ -108,7 +108,7 @@
             ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
-          } catch (e) { this.errorHandler && this.errorHandler.logDebug('MarkerRenderer: failed to draw marker', 'MarkerRenderer.render.marker', { error: e }); }
+          } catch (e) { this.errorHandler && console.debug('MarkerRenderer: failed to draw marker', 'MarkerRenderer.render.marker', { error: e }); }
         }
       }
     }
@@ -164,7 +164,7 @@
         // Ensure minimum size
         return Math.max(size, 1);
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('MarkerRenderer.computeMarkerSize failed', 'MarkerRenderer.computeMarkerSize', { error: e });
+        this.errorHandler && console.debug('MarkerRenderer.computeMarkerSize failed', 'MarkerRenderer.computeMarkerSize', { error: e });
         return baseSize || 4;
       }
     }
@@ -313,3 +313,4 @@
 
   global.MarkerRenderer = MarkerRenderer;
 })(window);
+

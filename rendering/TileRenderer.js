@@ -52,7 +52,7 @@
           if (!this._honeycombPatternCanvas) {
             const baseSize = 28;
             const preferred = (this._lowSpec ? Math.round(baseSize * 1.6) : baseSize);
-            try { this._createHoneycombPattern(preferred); } catch (e) { this.errorHandler.logDebug('TileRenderer: _createHoneycombPattern failed', 'TileRenderer.render.honeycomb', { error: e }); }
+            try { this._createHoneycombPattern(preferred); } catch (e) { console.debug('TileRenderer: _createHoneycombPattern failed', 'TileRenderer.render.honeycomb', { error: e }); }
           }
 
           if (this._honeycombPatternCanvas) {
@@ -66,13 +66,13 @@
               ctxT.restore();
             }
           }
-        } catch (e) { this.errorHandler.logDebug('TileRenderer: honeycomb fill failed', 'TileRenderer.render.honeycombFill', { error: e }); }
-      } catch (e) { this.errorHandler.logDebug('TileRenderer: background fill failed', 'TileRenderer.render.backgroundFill', { error: e }); }
+        } catch (e) { console.debug('TileRenderer: honeycomb fill failed', 'TileRenderer.render.honeycombFill', { error: e }); }
+      } catch (e) { console.debug('TileRenderer: background fill failed', 'TileRenderer.render.backgroundFill', { error: e }); }
 
       if (this.imageState.currentImage) {
         const size = (this.config.MAP_SIZE || 8192) * this.mapState.zoom;
-        try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { this.errorHandler.logDebug('TileRenderer: image smoothing not supported', 'TileRenderer.render.imageSmoothing', { error: e.message }); }
-        try { ctxT.drawImage(this.imageState.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { this.errorHandler.logDebug('TileRenderer: drawImage failed', 'TileRenderer.render.drawImage', { error: e }); }
+        try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { console.debug('TileRenderer: image smoothing not supported', 'TileRenderer.render.imageSmoothing', { error: e.message }); }
+        try { ctxT.drawImage(this.imageState.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', 'TileRenderer.render.drawImage', { error: e }); }
       }
     }
 
@@ -90,7 +90,7 @@
         const i = toPreload[p];
         // Stagger fetches to avoid a burst of work on load
         setTimeout(() => {
-          try { this.preloadResolution(i); } catch (e) { this.errorHandler.logDebug('TileRenderer.preloadAllMapImages: preloadResolution failed', 'TileRenderer.preloadAllMapImages', { error: e, resolution: i }); }
+          try { this.preloadResolution(i); } catch (e) { console.debug('TileRenderer.preloadAllMapImages: preloadResolution failed', 'TileRenderer.preloadAllMapImages', { error: e, resolution: i }); }
         }, i * 150);
       }
     }
@@ -116,7 +116,7 @@
       if (this.imageState.images[resolutionIndex]) {
         this.imageState.currentImage = this.imageState.images[resolutionIndex];
         this.imageState.currentResolution = resolutionIndex;
-        try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logDebug('TileRenderer: render failed after tile load', 'TileRenderer.loadImage.markDirty', { error: e.message }); }
+        try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { console.debug('TileRenderer: render failed after tile load', 'TileRenderer.loadImage.markDirty', { error: e.message }); }
         return;
       }
 
@@ -131,7 +131,7 @@
       try {
         if (window.fetch && window.createImageBitmap) {
           const controller = new AbortController();
-          try { this.imageState._imageControllers[resolutionIndex] = controller; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to set image controller', 'TileRenderer.loadImage.setController', { error: e.message }); }
+          try { this.imageState._imageControllers[resolutionIndex] = controller; } catch (e) { console.debug('TileRenderer: failed to set image controller', 'TileRenderer.loadImage.setController', { error: e.message }); }
 
           let fetchTimer = null;
           try {
@@ -162,8 +162,8 @@
             } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to handle previous bitmap cleanup'); }
 
             if (this.imageState._tilesetGeneration === gen) {
-              try { this.imageState._imageBitmaps[resolutionIndex] = bmp; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to cache bitmap', 'TileRenderer.loadImage.cacheBitmap', { error: e.message }); }
-              try { this.imageState.images[resolutionIndex] = bmp; } catch (e) { this.errorHandler.logDebug('TileRenderer: failed to cache image', 'TileRenderer.loadImage.cacheImage', { error: e.message }); }
+              try { this.imageState._imageBitmaps[resolutionIndex] = bmp; } catch (e) { console.debug('TileRenderer: failed to cache bitmap', 'TileRenderer.loadImage.cacheBitmap', { error: e.message }); }
+              try { this.imageState.images[resolutionIndex] = bmp; } catch (e) { console.debug('TileRenderer: failed to cache image', 'TileRenderer.loadImage.cacheImage', { error: e.message }); }
             } else {
               try { if (bmp && typeof bmp.close === 'function') bmp.close(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to close unused bitmap'); }
               this.imageState.loadingResolution = null;
@@ -203,7 +203,7 @@
             if ((imgFolder && imgFolder === curFolder) || (!this.imageState.currentImage || resolutionIndex === this.imageState.getNeededResolution())) {
               this.imageState.currentImage = img;
               this.imageState.currentResolution = resolutionIndex;
-              try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { this.errorHandler.logDebug('TileRenderer: render failed after image load', 'TileRenderer.loadImage.markDirtyAfterLoad', { error: e.message }); }
+              try { this.imageState.markRendererDirty('TileRenderer'); } catch (e) { console.debug('TileRenderer: render failed after image load', 'TileRenderer.loadImage.markDirtyAfterLoad', { error: e.message }); }
             }
             try { this.imageState.updateResolution(); } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to update resolution after image load'); }
             
@@ -370,7 +370,7 @@
             img.src = href;
           } catch (e) { this.errorHandler.logError('TileRenderer: Failed to preload tile image:', 'function', e); }
         })();
-      } catch (e) { this.errorHandler.logDebug('TileRenderer.preloadResolution failed', 'TileRenderer.preloadResolution', { error: e }); }
+      } catch (e) { console.debug('TileRenderer.preloadResolution failed', 'TileRenderer.preloadResolution', { error: e }); }
     }
 
     /**
@@ -481,3 +481,4 @@
 
   global.TileRenderer = TileRenderer;
 })(window);
+

@@ -49,7 +49,7 @@
             // drawImage is GPU-accelerated and very efficient
             ctx.drawImage(layer.canvas, 0, 0);
           } catch (e) {
-            this.errorHandler && this.errorHandler.logDebug(
+            this.errorHandler && console.debug(
               `CompositeStage: Failed to composite ${layer.name} layer`,
               'CompositeStage.render.composite',
               { error: e, layerName: layer.name }
@@ -57,7 +57,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug(
+        this.errorHandler && console.debug(
           'CompositeStage: Failed to render',
           'CompositeStage.render',
           { error: e }
@@ -77,3 +77,4 @@
   global.CompositeStage = CompositeStage;
 
 })(typeof window !== 'undefined' ? window : this);
+

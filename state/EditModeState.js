@@ -40,7 +40,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.setEditMarkersMode failed', 'EditModeState.setEditMarkersMode', { error: e });
+        console.debug('EditModeState.setEditMarkersMode failed', 'EditModeState.setEditMarkersMode', { error: e });
       }
     }
 
@@ -69,7 +69,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.setEditRouteMode failed', 'EditModeState.setEditRouteMode', { error: e });
+        console.debug('EditModeState.setEditRouteMode failed', 'EditModeState.setEditRouteMode', { error: e });
       }
     }
 
@@ -99,7 +99,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.enterEditMode failed', 'EditModeState.enterEditMode', { error: e });
+        console.debug('EditModeState.enterEditMode failed', 'EditModeState.enterEditMode', { error: e });
       }
     }
 
@@ -112,7 +112,7 @@
           row.style.removeProperty('--edit-mode-outline-color');
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.exitEditMode failed', 'EditModeState.exitEditMode', { error: e });
+        console.debug('EditModeState.exitEditMode failed', 'EditModeState.exitEditMode', { error: e });
       }
     }
 
@@ -136,7 +136,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e });
+        console.debug('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e });
       }
     }
 
@@ -168,7 +168,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e });
+        console.debug('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e });
       }
     }
 
@@ -188,7 +188,7 @@
         this.editMarkersMode = false;
         this.editRouteMode = false;
       } catch (e) {
-        this.errorHandler.logDebug('EditModeState.reset failed', 'EditModeState.reset', { error: e });
+        console.debug('EditModeState.reset failed', 'EditModeState.reset', { error: e });
       }
     }
   }

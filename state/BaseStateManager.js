@@ -28,7 +28,7 @@
           this.eventBus.emit(event, data);
         }
       } catch (e) {
-        this.errorHandler.logDebug(`${this.constructor.name}._emitChange failed`, `${this.constructor.name}._emitChange`, { error: e, event });
+        console.debug(`${this.constructor.name}._emitChange failed`, `${this.constructor.name}._emitChange`, { error: e, event });
       }
     }
 

@@ -234,7 +234,7 @@
           }
         } catch (e) {
           const stageName = stage.constructor.name || 'UnknownStage';
-          this.errorHandler && this.errorHandler.logDebug(`RenderPipeline: ${stageName} failed`, 'RenderPipeline.render.stage', { stageName, error: e });
+          this.errorHandler && console.debug(`RenderPipeline: ${stageName} failed`, 'RenderPipeline.render.stage', { stageName, error: e });
 
           if (this._profilingEnabled) {
             this._recordStageError(stage, e);
@@ -249,7 +249,7 @@
 
       // Log performance warnings
       if (totalTime > 16.67 && this._profilingEnabled) { // Slower than 60fps
-        this.errorHandler && this.errorHandler.logDebug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
+        this.errorHandler && console.debug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
       }
 
       return renderedStages; // Return for debugging/analysis
@@ -407,3 +407,4 @@
 
   global.RenderPipeline = RenderPipeline;
 })(window);
+

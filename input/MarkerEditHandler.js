@@ -45,7 +45,7 @@
           }
         });
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('MarkerEditHandler fast accessors failed', 'MarkerEditHandler.constructor.fastAccessors', { error: e });
+        this.errorHandler && console.debug('MarkerEditHandler fast accessors failed', 'MarkerEditHandler.constructor.fastAccessors', { error: e });
       }
     }
 
@@ -65,7 +65,7 @@
         return this._handleEmptySpaceClick(ev, localX, localY);
 
       } catch (e) {
-        this.errorHandler.logDebug('MarkerEditHandler.handleClick failed', 'MarkerEditHandler.handleClick', { error: e });
+        console.debug('MarkerEditHandler.handleClick failed', 'MarkerEditHandler.handleClick', { error: e });
         return false;
       }
     }

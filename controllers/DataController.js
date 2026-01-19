@@ -102,7 +102,7 @@
             try {
               this._routeManager.cleanupRouteReferences(deletedMarkerUid);
             } catch (e) {
-              this.errorHandler.logDebug('Route cleanup failed', 'DataController._setupManagerCallbacks', { error: e });
+              console.debug('Route cleanup failed', 'DataController._setupManagerCallbacks', { error: e });
             }
           }
         });
@@ -114,7 +114,7 @@
           try {
             this.eventBus.emit('route:updated');
           } catch (e) {
-            this.errorHandler.logDebug('Route callback failed', 'DataController._setupManagerCallbacks', { error: e });
+            console.debug('Route callback failed', 'DataController._setupManagerCallbacks', { error: e });
           }
         });
       }
@@ -135,7 +135,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('Failed to load marker scaling config', 'DataController._loadStoredData', { error: e });
+        console.debug('Failed to load marker scaling config', 'DataController._loadStoredData', { error: e });
       }
 
       // Additional storage loading can be added here
@@ -164,7 +164,7 @@
         try {
           unsubscribe();
         } catch (e) {
-          this.errorHandler.logDebug('Failed to unsubscribe event listener', 'DataController.destroy', { error: e });
+          console.debug('Failed to unsubscribe event listener', 'DataController.destroy', { error: e });
         }
       });
       this._eventUnsubscribers = [];
@@ -174,7 +174,7 @@
         try {
           this._routeManager.destroy();
         } catch (e) {
-          this.errorHandler.logDebug('Failed to destroy routeManager', 'DataController.destroy', { error: e });
+          console.debug('Failed to destroy routeManager', 'DataController.destroy', { error: e });
         }
       }
 
@@ -182,7 +182,7 @@
         try {
           this._markerManager.destroy();
         } catch (e) {
-          this.errorHandler.logDebug('Failed to destroy markerManager', 'DataController.destroy', { error: e });
+          console.debug('Failed to destroy markerManager', 'DataController.destroy', { error: e });
         }
       }
 

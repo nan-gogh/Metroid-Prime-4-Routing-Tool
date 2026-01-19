@@ -21,7 +21,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('TilesetState.setTileset failed', 'TilesetState.setTileset', { error: e });
+        console.debug('TilesetState.setTileset failed', 'TilesetState.setTileset', { error: e });
       }
     }
 
@@ -33,7 +33,7 @@
           triggeredBy: 'grayscale-state-change'
         });
       } catch (e) {
-        this.errorHandler.logDebug('TilesetState.setGrayscale failed', 'TilesetState.setGrayscale', { error: e });
+        console.debug('TilesetState.setGrayscale failed', 'TilesetState.setGrayscale', { error: e });
       }
     }
 
@@ -74,7 +74,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e });
+        console.debug('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e });
       }
     }
 
@@ -106,7 +106,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e });
+        console.debug('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e });
       }
     }
 
@@ -124,7 +124,7 @@
         this.tileset = 'sat';
         this.grayscale = false;
       } catch (e) {
-        this.errorHandler.logDebug('TilesetState.reset failed', 'TilesetState.reset', { error: e });
+        console.debug('TilesetState.reset failed', 'TilesetState.reset', { error: e });
       }
     }
   }

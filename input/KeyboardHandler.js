@@ -278,7 +278,7 @@
           return;
         }
 
-      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._onKeyDown failed', 'KeyboardHandler._onKeyDown', { error: e }); }
+      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._onKeyDown failed', 'KeyboardHandler._onKeyDown', { error: e }); }
     }
 
     _updateEditModeUI(mode, enabled) {
@@ -308,7 +308,7 @@
             miniMarkers.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
           }
         }
-      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
+      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
     }
 
     _updateTilesetUI(tileset) {
@@ -330,9 +330,10 @@
           gbtn.classList.toggle('active', !!this.map.tilesetGrayscale); 
           gbtn.setAttribute('aria-pressed', this.map.tilesetGrayscale ? 'true' : 'false'); 
         }
-      } catch (e) { this.errorHandler && this.errorHandler.logDebug('KeyboardHandler._updateTilesetUI failed', 'KeyboardHandler._updateTilesetUI', { error: e }); }
+      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._updateTilesetUI failed', 'KeyboardHandler._updateTilesetUI', { error: e }); }
     }
   }
 
   global.KeyboardHandler = KeyboardHandler;
 })(window);
+

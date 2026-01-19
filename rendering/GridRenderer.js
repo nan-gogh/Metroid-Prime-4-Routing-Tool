@@ -71,7 +71,7 @@
         }
         container.style.display = 'none';
         this._labelsContainer = container;
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.init failed', 'GridRenderer.init', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.init failed', 'GridRenderer.init', { error: e }); }
     }
 
     /**
@@ -91,13 +91,13 @@
         gridCtx.clearRect(0, 0, canvasSize.width, canvasSize.height);
 
         // Always update DOM labels to ensure they reflect current grid visibility state
-        try { this.updateQuadLabels(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
+        try { this.updateQuadLabels(renderContext); } catch (e) { console.debug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
 
         // Only render the grid when the runtime grid layer is enabled
         if (!this.layerState.isLayerVisible('grid')) return;
-        try { this.renderQuadrantGrid(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
-        try { this.renderDetailGrid(renderContext); } catch (e) { this.errorHandler.logDebug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
+        try { this.renderQuadrantGrid(renderContext); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
+        try { this.renderDetailGrid(renderContext); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
     }
 
     /**
@@ -146,7 +146,7 @@
 
             ctx.restore();
         }
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderQuadrantGrid failed', 'GridRenderer.renderQuadrantGrid', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.renderQuadrantGrid failed', 'GridRenderer.renderQuadrantGrid', { error: e }); }
     }
 
     /**
@@ -210,7 +210,7 @@
         
         this.renderAxisLabels(renderContext);
         ctx.restore();
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
     }
 
     /**
@@ -291,7 +291,7 @@
         }
 
         ctx.restore();
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.renderAxisLabels failed', 'GridRenderer.renderAxisLabels', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.renderAxisLabels failed', 'GridRenderer.renderAxisLabels', { error: e }); }
     }
 
     /**
@@ -346,7 +346,7 @@
                     });
                 }
             });
-        } catch (e) { this.errorHandler.logDebug('GridRenderer.updateQuadLabels: failed to compute counts', 'GridRenderer.updateQuadLabels.computeCounts', { error: e }); }
+        } catch (e) { console.debug('GridRenderer.updateQuadLabels: failed to compute counts', 'GridRenderer.updateQuadLabels.computeCounts', { error: e }); }
 
         for (let i = 0; i < labels.length; i++) {
           const el = labels[i];
@@ -383,9 +383,10 @@
             }
           }
         }
-      } catch (e) { this.errorHandler.logDebug('GridRenderer.updateQuadLabels: non-fatal error', 'GridRenderer.updateQuadLabels', { error: e }); }
+      } catch (e) { console.debug('GridRenderer.updateQuadLabels: non-fatal error', 'GridRenderer.updateQuadLabels', { error: e }); }
     }
   }
 
   global.GridRenderer = GridRenderer;
 })(window);
+

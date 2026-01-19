@@ -95,7 +95,7 @@
         try {
           await this.tileRenderer.init();
         } catch (e) {
-          this.errorHandler.logDebug('TileRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('TileRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
 
@@ -117,7 +117,7 @@
         try {
           await this.heatmapRenderer.init();
         } catch (e) {
-          this.errorHandler.logDebug('HeatmapRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('HeatmapRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
 
@@ -141,7 +141,7 @@
         try {
           await this.gridRenderer.init(this.containerNode);
         } catch (e) {
-          this.errorHandler.logDebug('GridRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('GridRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
 
@@ -168,7 +168,7 @@
         try {
           await this.markerRenderer.init();
         } catch (e) {
-          this.errorHandler.logDebug('MarkerRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('MarkerRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
 
@@ -188,7 +188,7 @@
         try {
           await this.routeRenderer.init();
         } catch (e) {
-          this.errorHandler.logDebug('RouteRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('RouteRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
 
@@ -205,7 +205,7 @@
         try {
           await this.overlayRenderer.init();
         } catch (e) {
-          this.errorHandler.logDebug('OverlayRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          console.debug('OverlayRenderer.init failed', 'RenderController._createRenderers', { error: e });
         }
       }
     }
@@ -310,7 +310,7 @@
           this._renderFallback();
         }
       } catch (e) {
-        this.errorHandler.logDebug('Render failed', 'RenderController._render', { error: e });
+        console.debug('Render failed', 'RenderController._render', { error: e });
       }
     }
 
@@ -333,7 +333,7 @@
           try {
             renderer.render();
           } catch (e) {
-            this.errorHandler.logDebug(`Fallback render failed for ${renderer.constructor.name}`, 'RenderController._renderFallback', { error: e });
+            console.debug(`Fallback render failed for ${renderer.constructor.name}`, 'RenderController._renderFallback', { error: e });
           }
         }
       });
@@ -392,7 +392,7 @@
         try {
           unsubscribe();
         } catch (e) {
-          this.errorHandler.logDebug('Failed to unsubscribe event listener', 'RenderController.destroy', { error: e });
+          console.debug('Failed to unsubscribe event listener', 'RenderController.destroy', { error: e });
         }
       });
       this._eventUnsubscribers = [];
@@ -412,7 +412,7 @@
           try {
             renderer.destroy();
           } catch (e) {
-            this.errorHandler.logDebug(`Failed to destroy ${renderer.constructor.name}`, 'RenderController.destroy', { error: e });
+            console.debug(`Failed to destroy ${renderer.constructor.name}`, 'RenderController.destroy', { error: e });
           }
         }
       });
@@ -422,7 +422,7 @@
         try {
           this.renderPipeline.destroy();
         } catch (e) {
-          this.errorHandler.logDebug('Failed to destroy renderPipeline', 'RenderController.destroy', { error: e });
+          console.debug('Failed to destroy renderPipeline', 'RenderController.destroy', { error: e });
         }
       }
 

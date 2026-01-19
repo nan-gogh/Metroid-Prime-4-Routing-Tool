@@ -271,11 +271,11 @@
 
         // Log performance warnings for slow renders
         if (renderTime > 16.67) { // Slower than 60fps
-          this.errorHandler.logDebug(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`, 'RouteRenderer.render.performance', { renderTime, pointCount: pathData.points.length });
+          console.debug(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`, 'RouteRenderer.render.performance', { renderTime, pointCount: pathData.points.length });
         }
 
       } catch (e) {
-        this.errorHandler.logDebug('RouteRenderer.render failed', 'RouteRenderer.render', { error: e });
+        console.debug('RouteRenderer.render failed', 'RouteRenderer.render', { error: e });
       }
     }
 
@@ -340,7 +340,7 @@
         ctx.restore();
 
       } catch (e) {
-        this.errorHandler.logDebug('RouteRenderer: Glow render failed', 'RouteRenderer._renderGlow', { error: e });
+        console.debug('RouteRenderer: Glow render failed', 'RouteRenderer._renderGlow', { error: e });
       }
     }
 
@@ -446,7 +446,7 @@
         try {
           nodeFill = this._hexToRgba(routeHex, 0.95);
         } catch (e) {
-          this.errorHandler && this.errorHandler.logDebug('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e });
+          this.errorHandler && console.debug('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e });
         }
 
         const dotSize = (global.map && global.map.getRouteNodeSize && typeof global.map.getRouteNodeSize === 'function') ?
@@ -460,7 +460,7 @@
         ctx.restore();
 
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e });
+        this.errorHandler && console.debug('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e });
       }
     }
 
@@ -482,3 +482,4 @@
 
   global.RouteRenderer = RouteRenderer;
 })(window);
+

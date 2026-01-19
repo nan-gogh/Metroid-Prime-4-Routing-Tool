@@ -27,7 +27,7 @@
           ]);
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState._setupEventListeners failed', 'SelectionState._setupEventListeners', { error: e });
+        console.debug('SelectionState._setupEventListeners failed', 'SelectionState._setupEventListeners', { error: e });
       }
     }
 
@@ -64,7 +64,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState._handleLayerVisibilityChanged failed', 'SelectionState._handleLayerVisibilityChanged', { error: e });
+        console.debug('SelectionState._handleLayerVisibilityChanged failed', 'SelectionState._handleLayerVisibilityChanged', { error: e });
       }
     }
 
@@ -78,7 +78,7 @@
           layer: layerKey || null
         });
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e });
+        console.debug('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e });
       }
     }
 
@@ -88,7 +88,7 @@
         this.selectedMarkerLayer = null;
         this._emitChange(window.EventTypes.SELECTION_CLEARED);
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e });
+        console.debug('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e });
       }
     }
 
@@ -98,7 +98,7 @@
                this.selectedMarkerLayer === layerKey &&
                this.selectedMarker.uid === marker.uid;
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.isMarkerSelected failed', 'SelectionState.isMarkerSelected', { error: e });
+        console.debug('SelectionState.isMarkerSelected failed', 'SelectionState.isMarkerSelected', { error: e });
         return false;
       }
     }
@@ -117,7 +117,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.addToMultiSelection failed', 'SelectionState.addToMultiSelection', { error: e });
+        console.debug('SelectionState.addToMultiSelection failed', 'SelectionState.addToMultiSelection', { error: e });
       }
     }
 
@@ -134,7 +134,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.removeFromMultiSelection failed', 'SelectionState.removeFromMultiSelection', { error: e });
+        console.debug('SelectionState.removeFromMultiSelection failed', 'SelectionState.removeFromMultiSelection', { error: e });
       }
     }
 
@@ -149,7 +149,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.clearMultiSelection failed', 'SelectionState.clearMultiSelection', { error: e });
+        console.debug('SelectionState.clearMultiSelection failed', 'SelectionState.clearMultiSelection', { error: e });
       }
     }
 
@@ -161,7 +161,7 @@
         }
         return false;
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.isInMultiSelection failed', 'SelectionState.isInMultiSelection', { error: e });
+        console.debug('SelectionState.isInMultiSelection failed', 'SelectionState.isInMultiSelection', { error: e });
         return false;
       }
     }
@@ -200,7 +200,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e });
+        console.debug('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e });
       }
     }
 
@@ -238,7 +238,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e });
+        console.debug('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e });
       }
     }
 
@@ -266,7 +266,7 @@
           this._eventManager.cleanup();
         }
       } catch (e) {
-        this.errorHandler.logDebug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
+        console.debug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
       }
     }
   }
@@ -277,3 +277,4 @@
   }
 
 })(typeof window !== 'undefined' ? window : global);
+

@@ -34,7 +34,7 @@
         return `rgba(${r}, ${g}, ${b}, ${a})`;
       } catch (e) {
         if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.errorHandler.logDebug('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha });
+          global.console.debug('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha });
         }
         return null;
       }
@@ -56,7 +56,7 @@
         }
       } catch (e) {
         if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.errorHandler.logDebug('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e });
+          global.console.debug('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e });
         }
       }
     },
@@ -83,7 +83,7 @@
         }
       } catch (e) {
         if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.errorHandler.logDebug('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e });
+          global.console.debug('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e });
         }
       }
     },
@@ -98,7 +98,7 @@
         return { x, y };
       } catch (e) {
         if (global.errorHandler && typeof global.errorHandler.logDebug === 'function') {
-          global.errorHandler.logDebug('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e });
+          global.console.debug('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e });
         }
         return null;
       }
@@ -115,3 +115,4 @@
   }
 
 })(typeof window !== 'undefined' ? window : global);
+

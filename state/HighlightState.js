@@ -27,7 +27,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.setLayerHighlight failed', 'HighlightState.setLayerHighlight', { error: e });
+        console.debug('HighlightState.setLayerHighlight failed', 'HighlightState.setLayerHighlight', { error: e });
       }
     }
 
@@ -45,7 +45,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.clearLayerHighlight failed', 'HighlightState.clearLayerHighlight', { error: e });
+        console.debug('HighlightState.clearLayerHighlight failed', 'HighlightState.clearLayerHighlight', { error: e });
       }
     }
 
@@ -65,10 +65,10 @@
             highlightedLayers: Array.from(this.highlightedLayers)
           });
         } catch (e) {
-          this.errorHandler.logDebug('HighlightState.emitToggleChange failed', 'HighlightState.toggleLayerHighlight', { error: e });
+          console.debug('HighlightState.emitToggleChange failed', 'HighlightState.toggleLayerHighlight', { error: e });
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.toggleLayerHighlight failed', 'HighlightState.toggleLayerHighlight', { error: e });
+        console.debug('HighlightState.toggleLayerHighlight failed', 'HighlightState.toggleLayerHighlight', { error: e });
       }
     }
 
@@ -76,7 +76,7 @@
       try {
         return this.highlightedLayers.has(layerKey);
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.isLayerHighlighted failed', 'HighlightState.isLayerHighlighted', { error: e });
+        console.debug('HighlightState.isLayerHighlighted failed', 'HighlightState.isLayerHighlighted', { error: e });
         return false;
       }
     }
@@ -86,7 +86,7 @@
         const config = this.highlightConfig[layerKey];
         return (config ? config.scale : 1.0) * this.highlightScaleMultiplier;
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.getHighlightScale failed', 'HighlightState.getHighlightScale', { error: e });
+        console.debug('HighlightState.getHighlightScale failed', 'HighlightState.getHighlightScale', { error: e });
         return 1.0;
       }
     }
@@ -98,7 +98,7 @@
           multiplier: this.highlightScaleMultiplier
         });
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.setHighlightScaleMultiplier failed', 'HighlightState.setHighlightScaleMultiplier', { error: e });
+        console.debug('HighlightState.setHighlightScaleMultiplier failed', 'HighlightState.setHighlightScaleMultiplier', { error: e });
       }
     }
 
@@ -116,7 +116,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.clearAllHighlights failed', 'HighlightState.clearAllHighlights', { error: e });
+        console.debug('HighlightState.clearAllHighlights failed', 'HighlightState.clearAllHighlights', { error: e });
       }
     }
 
@@ -142,7 +142,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e });
+        console.debug('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e });
       }
     }
 
@@ -180,7 +180,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e });
+        console.debug('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e });
       }
     }
 
@@ -201,7 +201,7 @@
         this.highlightScaleMultiplier = 1.0;
         this._previousHighlights.clear();
       } catch (e) {
-        this.errorHandler.logDebug('HighlightState.reset failed', 'HighlightState.reset', { error: e });
+        console.debug('HighlightState.reset failed', 'HighlightState.reset', { error: e });
       }
     }
   }

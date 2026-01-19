@@ -54,7 +54,7 @@ class MarkerManager {
                                 try {
                                     this.clearMarkers();
                                 } catch (e) {
-                                    this.errorHandler.logDebug('MarkerManager clear handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                                    console.debug('MarkerManager clear handler failed', 'MarkerManager._setupEventListeners', { error: e });
                                 }
                             }
                         }
@@ -69,7 +69,7 @@ class MarkerManager {
                                 this.removeMarker(data.uid);
                             }
                         } catch (e) {
-                            this.errorHandler.logDebug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                            console.debug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
                         }
                     });
 
@@ -79,14 +79,14 @@ class MarkerManager {
                         try {
                             this.clearMarkers();
                         } catch (e) {
-                            this.errorHandler.logDebug('MarkerManager MARKER_CLEAR_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                            console.debug('MarkerManager MARKER_CLEAR_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
                         }
                     });
 
                     if (typeof unsubscribeClear === 'function') this._eventUnsubscribers.push(unsubscribeClear);
                 }
             } catch (e) {
-                this.errorHandler.logDebug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
+                console.debug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
             }
         }
     }
@@ -98,7 +98,7 @@ class MarkerManager {
             try {
                 this.eventBus.emit(eventType, eventData);
             } catch (e) {
-                this.errorHandler.logDebug('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
+                console.debug('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
             }
         }
     }
@@ -185,7 +185,7 @@ class MarkerManager {
             try {
                 this.onCleanupRouteReferences(uid);
             } catch (e) {
-                this.errorHandler.logDebug('MarkerManager cleanup callback failed', 'MarkerManager.deleteMarker.cleanupCallback', { error: e });
+                console.debug('MarkerManager cleanup callback failed', 'MarkerManager.deleteMarker.cleanupCallback', { error: e });
             }
         }
 
@@ -442,7 +442,7 @@ class MarkerManager {
                 this._eventUnsubscribers = [];
             }
         } catch (e) {
-            this.errorHandler && this.errorHandler.logDebug('MarkerManager.destroy failed', 'MarkerManager.destroy', { error: e });
+            this.errorHandler && console.debug('MarkerManager.destroy failed', 'MarkerManager.destroy', { error: e });
         }
     }
 }

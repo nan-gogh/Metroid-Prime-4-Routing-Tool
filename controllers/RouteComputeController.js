@@ -131,7 +131,7 @@ class RouteComputeController {
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.reverseRouteDirection'); }
                 // Emit route direction changed event for subscribers
-                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { this.errorHandler.logDebug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
+                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { console.debug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
                 // Emit render requested event instead of direct render
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-direction-toggle'

@@ -79,7 +79,7 @@
                 try {
                   location.reload();
                 } catch (e) {
-                  this.errorHandler.logDebug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
+                  console.debug('SettingsController: Failed to reload after clearing data', 'SettingsController._setStorageConsent.reload', { error: e });
                 }
               }
             }
@@ -90,7 +90,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to bind storage consent toggle', 'SettingsController._bindStorageConsentToggle', { error: e });
+        console.debug('SettingsController: Failed to bind storage consent toggle', 'SettingsController._bindStorageConsentToggle', { error: e });
       }
     }
 
@@ -118,7 +118,7 @@
         this._updateTilesetButtonStates();
 
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to bind tileset controls', 'SettingsController._bindTilesetControls', { error: e });
+        console.debug('SettingsController: Failed to bind tileset controls', 'SettingsController._bindTilesetControls', { error: e });
       }
     }
 
@@ -175,7 +175,7 @@
         }
 
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to bind display toggles', 'SettingsController._bindDisplayToggles', { error: e });
+        console.debug('SettingsController: Failed to bind display toggles', 'SettingsController._bindDisplayToggles', { error: e });
       }
     }
 
@@ -223,14 +223,14 @@
               // Request a render so marker renderer picks up new scale
               try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
             } catch (e) {
-              this.errorHandler.logDebug('SettingsController: Failed to update marker scale', 'SettingsController._bindHighlightControls.markerScale', { error: e });
+              console.debug('SettingsController: Failed to update marker scale', 'SettingsController._bindHighlightControls.markerScale', { error: e });
             }
           };
 
           markerSlider.addEventListener('input', (ev) => updateMarkerScale(ev.target.value, ev.target));
 
           markerSlider.addEventListener('change', (ev) => {
-            try { updateMarkerScale(ev.target.value, ev.target); } catch (e) { this.errorHandler.logDebug('SettingsController: markerSize change failed', 'SettingsController._bindHighlightControls.markerChange', { error: e }); }
+            try { updateMarkerScale(ev.target.value, ev.target); } catch (e) { console.debug('SettingsController: markerSize change failed', 'SettingsController._bindHighlightControls.markerChange', { error: e }); }
             try {
               // Trigger hover update for UX parity
               if (this.map && typeof this.map.checkMarkerHover === 'function') {
@@ -241,7 +241,7 @@
                   if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
                 }
               }
-            } catch (e) { this.errorHandler.logDebug('SettingsController: markerSize change hover update failed', 'SettingsController._bindHighlightControls.markerChangeHover', { error: e }); }
+            } catch (e) { console.debug('SettingsController: markerSize change hover update failed', 'SettingsController._bindHighlightControls.markerChangeHover', { error: e }); }
           });
         }
 
@@ -304,14 +304,14 @@
               // Request render so renderers pick up new settings
               try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
             } catch (e) {
-              this.errorHandler.logDebug('SettingsController: Failed to update highlight scale', 'SettingsController._bindHighlightControls.highlightScale', { error: e });
+              console.debug('SettingsController: Failed to update highlight scale', 'SettingsController._bindHighlightControls.highlightScale', { error: e });
             }
           };
 
           highlightSlider.addEventListener('input', (ev) => updateHighlight(ev.target.value, ev.target));
 
           highlightSlider.addEventListener('change', (ev) => {
-            try { updateHighlight(ev.target.value, ev.target); } catch (e) { this.errorHandler.logDebug('SettingsController: highlight change failed', 'SettingsController._bindHighlightControls.highlightChange', { error: e }); }
+            try { updateHighlight(ev.target.value, ev.target); } catch (e) { console.debug('SettingsController: highlight change failed', 'SettingsController._bindHighlightControls.highlightChange', { error: e }); }
             try {
               // Trigger hover update for UX parity
               if (this.map && typeof this.map.checkMarkerHover === 'function') {
@@ -322,12 +322,12 @@
                   if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
                 }
               }
-            } catch (e) { this.errorHandler.logDebug('SettingsController: highlight change hover update failed', 'SettingsController._bindHighlightControls.highlightChangeHover', { error: e }); }
+            } catch (e) { console.debug('SettingsController: highlight change hover update failed', 'SettingsController._bindHighlightControls.highlightChangeHover', { error: e }); }
           });
         }
 
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });
+        console.debug('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });
       }
     }
 
@@ -347,7 +347,7 @@
                     this._updateGridButtonState();
                   }
                 } catch (e) {
-                  this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
+                  console.debug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
                 }
               }
             }
@@ -365,7 +365,7 @@
                 this._updateGridButtonState();
               }
             } catch (e) {
-              this.errorHandler.logDebug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
+              console.debug('SettingsController: Failed to handle DISPLAY_SETTINGS_CHANGED', 'SettingsController._bindEventListeners.DISPLAY_SETTINGS_CHANGED', { error: e });
             }
           });
 
@@ -374,7 +374,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to bind event listeners', 'SettingsController._bindEventListeners', { error: e });
+        console.debug('SettingsController: Failed to bind event listeners', 'SettingsController._bindEventListeners', { error: e });
       }
     }
 
@@ -395,7 +395,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to set tileset', 'SettingsController._setTileset', { tileset, error: e });
+        console.debug('SettingsController: Failed to set tileset', 'SettingsController._setTileset', { tileset, error: e });
       }
     }
 
@@ -415,7 +415,7 @@
           tilesetHoloBtn.classList.toggle('active', currentTileset === 'holo');
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update tileset button states', 'SettingsController._updateTilesetButtonStates', { error: e });
+        console.debug('SettingsController: Failed to update tileset button states', 'SettingsController._updateTilesetButtonStates', { error: e });
       }
     }
 
@@ -429,7 +429,7 @@
           gridHeatmapBtn.classList.toggle('active', this.heatmapDisplayState.isVisible());
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });
+        console.debug('SettingsController: Failed to update grid/heatmap button state', 'SettingsController._updateGridHeatmapButtonState', { error: e });
       }
     }
 
@@ -443,7 +443,7 @@
           gridToggleBtn.classList.toggle('active', this.layerState.isGridVisible());
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update grid button state', 'SettingsController._updateGridButtonState', { error: e });
+        console.debug('SettingsController: Failed to update grid button state', 'SettingsController._updateGridButtonState', { error: e });
       }
     }
 
@@ -457,7 +457,7 @@
           tilesetGrayscaleBtn.classList.toggle('active', !!this.tilesetState.grayscale);
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update grayscale button state', 'SettingsController._updateGrayscaleButtonState', { error: e });
+        console.debug('SettingsController: Failed to update grayscale button state', 'SettingsController._updateGrayscaleButtonState', { error: e });
       }
     }
 
@@ -500,7 +500,7 @@
           }
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to set storage consent', 'SettingsController._setStorageConsent', { error: e });
+        console.debug('SettingsController: Failed to set storage consent', 'SettingsController._setStorageConsent', { error: e });
       }
     }
 
@@ -519,7 +519,7 @@
           label.textContent = consent ? 'Clear Savedata' : 'Save Progress';
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update consent toggle UI', 'SettingsController._updateConsentToggleUI', { error: e });
+        console.debug('SettingsController: Failed to update consent toggle UI', 'SettingsController._updateConsentToggleUI', { error: e });
       }
     }
 
@@ -570,7 +570,7 @@
         }
 
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to save all settings', 'SettingsController._saveAllSettings', { error: e });
+        console.debug('SettingsController: Failed to save all settings', 'SettingsController._saveAllSettings', { error: e });
       }
     }
 
@@ -599,7 +599,7 @@
           localStorage.setItem('mp4_grid_visible', settings.gridVisible ? '1' : '0');
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });
+        console.debug('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });
       }
     }
 
@@ -632,7 +632,7 @@
           });
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to clear saved data', 'SettingsController._clearAllSavedData', { error: e });
+        console.debug('SettingsController: Failed to clear saved data', 'SettingsController._clearAllSavedData', { error: e });
       }
     }
 
@@ -644,7 +644,7 @@
         // Emit layer counts changed event instead of direct call
         this.eventBus.emit(this.eventTypes.LAYER_COUNTS_CHANGED);
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to emit layer counts changed event', 'SettingsController._updateLayerCounts', { error: e });
+        console.debug('SettingsController: Failed to emit layer counts changed event', 'SettingsController._updateLayerCounts', { error: e });
       }
     }
 
@@ -659,7 +659,7 @@
           handle.classList.toggle('emphasized', !consent);
         }
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to update sidebar handle emphasis', 'SettingsController._updateSidebarHandleEmphasis', { error: e });
+        console.debug('SettingsController: Failed to update sidebar handle emphasis', 'SettingsController._updateSidebarHandleEmphasis', { error: e });
       }
     }
 
@@ -680,7 +680,7 @@
         this._updateGridHeatmapButtonState();
 
       } catch (e) {
-        this.errorHandler.logDebug('SettingsController: Failed to load saved settings', 'SettingsController.loadSavedSettings', { error: e });
+        console.debug('SettingsController: Failed to load saved settings', 'SettingsController.loadSavedSettings', { error: e });
       }
     }
 
@@ -699,7 +699,7 @@
           this._eventUnsubscribers = [];
         }
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('SettingsController.destroy failed', 'SettingsController.destroy', { error: e });
+        this.errorHandler && console.debug('SettingsController.destroy failed', 'SettingsController.destroy', { error: e });
       }
     }
   }

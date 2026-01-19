@@ -43,7 +43,7 @@
         try {
           await this.gestureHandler.init();
         } catch (e) {
-          this.errorHandler.logDebug('GestureHandler.init failed', 'InputController._createHandlers', { error: e });
+          console.debug('GestureHandler.init failed', 'InputController._createHandlers', { error: e });
         }
       }
 
@@ -53,7 +53,7 @@
         try {
           await this.pointerHandler.init();
         } catch (e) {
-          this.errorHandler.logDebug('PointerHandler.init failed', 'InputController._createHandlers', { error: e });
+          console.debug('PointerHandler.init failed', 'InputController._createHandlers', { error: e });
         }
       }
 
@@ -63,7 +63,7 @@
         try {
           await this.keyboardHandler.init();
         } catch (e) {
-          this.errorHandler.logDebug('KeyboardHandler.init failed', 'InputController._createHandlers', { error: e });
+          console.debug('KeyboardHandler.init failed', 'InputController._createHandlers', { error: e });
         }
       }
     }
@@ -101,7 +101,7 @@
           try {
             handler.destroy();
           } catch (e) {
-            this.errorHandler.logDebug(`Failed to destroy ${handler.constructor.name}`, 'InputController.destroy', { error: e });
+            console.debug(`Failed to destroy ${handler.constructor.name}`, 'InputController.destroy', { error: e });
           }
         }
       });
