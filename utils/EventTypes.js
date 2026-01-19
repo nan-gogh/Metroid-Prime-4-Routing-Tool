@@ -38,9 +38,10 @@ const EventTypes = {
     LAYER_HIGHLIGHT_CHANGED: 'layer:highlight-changed',
     LAYER_HIGHLIGHT_MULTIPLIER_CHANGED: 'layer:highlight-multiplier-changed',
     LAYER_EDIT_MODE_CHANGED: 'layer:edit-mode-changed',
-    LAYER_MARKERS_ADDED: 'layer:markers-added',
-    LAYER_MARKERS_REMOVED: 'layer:markers-removed',
-    LAYER_MARKERS_MOVED: 'layer:markers-moved',
+    // Per-layer marker diff events (added/removed/moved) removed from
+    // the core API because they are not referenced. Reintroduce only
+    // if you implement incremental marker diffs in the data or
+    // rendering subsystems.
 
     // Route Events
     ROUTE_COMPUTATION_STARTED: 'route:computation-started',
@@ -62,12 +63,8 @@ const EventTypes = {
     ROUTE_CLEARED: 'route:cleared',
     ROUTE_LOOPING_CHANGED: 'route:looping-changed',
     ROUTE_DIRECTION_CHANGED: 'route:direction-changed',
-    /**
-     * Scaffolding: emitted when a route is expanded (e.g. nearby expansion
-     * or programmatic augment). Currently unused but kept for future
-     * features that may react to expansion events.
-     */
-    ROUTE_EXPANDED: 'route:expanded',
+    // `ROUTE_EXPANDED` removed (unused scaffolding). Reintroduce only
+    // if programmatic route expansion events are implemented.
     ROUTE_ANIMATION_STARTED: 'route:animation-started',
     ROUTE_ANIMATION_STOPPED: 'route:animation-stopped',
     ROUTE_ANIMATION_OFFSET_CHANGED: 'route:animation-offset-changed',
@@ -115,27 +112,11 @@ const EventTypes = {
     MARKER_MOVED: 'marker:moved',
     MARKER_EDITED: 'marker:edited',
 
-    // Input Events
-    /**
-     * Emitted on pointer down events.
-     * @event INPUT_POINTER_DOWN
-     * @param {Object} data
-     * @param {number} data.pointerId - Unique pointer identifier
-     * @param {number} data.clientX - Client X coordinate
-     * @param {number} data.clientY - Client Y coordinate
-     * @param {number} data.button - Mouse button (0=left, 1=middle, 2=right)
-     * @param {number} data.timeStamp - Event timestamp
-     */
-    INPUT_POINTER_DOWN: 'input:pointer-down',
-    INPUT_POINTER_MOVE: 'input:pointer-move',
-    INPUT_POINTER_UP: 'input:pointer-up',
-    INPUT_CLICK: 'input:click',
-    INPUT_DOUBLE_CLICK: 'input:double-click',
-    INPUT_KEY_DOWN: 'input:key-down',
-    INPUT_KEY_UP: 'input:key-up',
-    INPUT_PAN: 'input:pan',
-    INPUT_ZOOM: 'input:zoom',
-    INPUT_ROTATE: 'input:rotate',
+    // Input-level constants (pointer/click/key/pan/zoom/rotate) have
+    // been removed from the core EventTypes because the codebase uses
+    // higher-level, state-driven events (e.g., `MAP_VIEW_CHANGED`,
+    // `MARKER_*`, and route edit events). Reintroduce only if you
+    // normalize raw input events onto the EventBus.
 
     // State Events
     /**
@@ -182,13 +163,20 @@ const EventTypes = {
 
     // Highlight Events (enhanced)
     LAYER_HIGHLIGHT_TOGGLED: 'layer:highlight-toggled',
-    HIGHLIGHT_MULTIPLIER_CHANGED: 'layer:highlight-multiplier-changed',
+    // Keep `LAYER_HIGHLIGHT_MULTIPLIER_CHANGED` as the canonical event
+    // used by the HighlightState; duplicate/ambiguous names were
+    // removed to avoid confusion.
+    LAYER_HIGHLIGHT_MULTIPLIER_CHANGED: 'layer:highlight-multiplier-changed',
 
     // Route Animation Events
-    ROUTE_ANIMATION_FRAME: 'route:animation-frame',
+    // (non-suffixed `ROUTE_ANIMATION_FRAME` removed; use
+    // `ROUTE_ANIMATION_FRAME_CHANGED` which is emitted by the
+    // animation subsystem.)
 
     // Storage Events (enhanced)
-    HIGHLIGHT_SETTINGS_SAVE_REQUESTED: 'storage:highlight-settings-save',
+    // `HIGHLIGHT_SETTINGS_SAVE_REQUESTED` removed (unused). Keep
+    // the persistence hooks below which are emitted by settings
+    // controllers when users change visibility/scaling presets.
     LAYER_VISIBILITY_SAVE_REQUESTED: 'storage:layer-visibility-save',
     // Marker scaling persistence (user + highlight multipliers)
     MARKER_SCALING_SAVE_REQUESTED: 'storage:marker-scaling-save',
