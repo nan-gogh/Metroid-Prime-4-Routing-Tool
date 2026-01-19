@@ -68,21 +68,7 @@ class ErrorHandler {
         }
     }
 
-    /**
-     * Log debug information
-     * @param {string} message - Debug message
-     * @param {string} context - Description of where the debug occurred
-     * @param {Object} additionalData - Additional context data
-     */
-    logDebug(message, context = '', additionalData = {}) {
-        if (this.config.enableDebugLogging && this.config.logLevel === 'debug') {
-            this._writeConsole('debug', `[${context}] ${message}`, {
-                timestamp: new Date().toISOString(),
-                context,
-                ...additionalData
-            });
-        }
-    }
+    // `logDebug` removed: non-critical debug messages now use `console.debug` directly.
 
     _writeConsole(level, ...args) {
         try {
