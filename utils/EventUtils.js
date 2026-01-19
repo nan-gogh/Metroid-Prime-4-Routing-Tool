@@ -12,16 +12,18 @@
      * @returns {Function} Wrapped event handler with error handling
      */
     static createEventHandler(handler, context = null, eventName = '', errorHandler = null) {
-      const eh = errorHandler || (global.errorHandler || global.window && global.window.errorHandler);
+      const eh = errorHandler || (global && (global.errorHandler || (global.window && global.window.errorHandler))) || null;
 
       return function(data) {
         try {
           return handler.call(context || this, data);
         } catch (e) {
           const errorContext = context ? `${context.constructor.name || 'Unknown'}.${eventName}` : eventName;
-          if (eh) {
+          if (eh && typeof eh.logError === 'function') {
             eh.logError(e, `EventHandler.${errorContext}`, { eventData: data });
-          } else {
+          } else if (typeof ErrorHandler !== 'undefined') {
+            try { new ErrorHandler().logError(e, `EventHandler.${errorContext}`, { eventData: data }); } catch (tmpErr) { /* best-effort */ }
+          } else if (typeof console !== 'undefined' && console.error) {
             console.error(`Event handler error for ${errorContext}:`, e);
           }
         }

@@ -151,10 +151,17 @@ function checkPoolStats() {
     const globalEh = eh || (typeof window !== 'undefined' && window.errorHandler) || null;
     if (globalEh && typeof globalEh.logDebug === 'function') {
         try { globalEh.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
-    } else if (typeof console !== 'undefined' && console.error) {
-        console.error('=== Object Pool Statistics ===', 'ObjectPool');
-        console.error('Marker Pool:', 'ObjectPool', markerPool.getStats());
-        console.error('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
+    } else {
+        const TmpEH = (typeof window !== 'undefined' && window.errorHandler) || (typeof global !== 'undefined' && global.errorHandler) || null;
+        if (TmpEH && typeof TmpEH.logDebug === 'function') {
+            try { TmpEH.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
+        } else if (typeof ErrorHandler !== 'undefined') {
+            try { new ErrorHandler().logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() }); } catch (e) { /* best-effort */ }
+        } else if (typeof console !== 'undefined' && console.error) {
+            console.error('=== Object Pool Statistics ===', 'ObjectPool');
+            console.error('Marker Pool:', 'ObjectPool', markerPool.getStats());
+            console.error('Route Source Pool:', 'ObjectPool', routeSourcePool.getStats());
+        }
     }
 }
 

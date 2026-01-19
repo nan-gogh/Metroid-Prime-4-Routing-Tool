@@ -42,12 +42,15 @@
           try {
             listener(data);
           } catch (e) {
-            const eh = this._errorHandler || (typeof window !== 'undefined' && window.errorHandler) || null;
+            const eh = this._errorHandler || (typeof window !== 'undefined' ? window.errorHandler : null) || (global && global.errorHandler) || null;
             if (eh && typeof eh.logError === 'function') {
-              eh.logError(e, `EventBus.emit.${event}`);
+              try { eh.logError(e, `EventBus.emit.${event}`); } catch (logErr) { /* best-effort */ }
+            } else if (typeof ErrorHandler !== 'undefined') {
+              try { new ErrorHandler().logError(e, `EventBus.emit.${event}`); } catch (tmpErr) { /* best-effort */ }
             } else if (typeof console !== 'undefined' && console.error) {
               console.error(`EventBus handler error for ${event}:`, e);
             }
+          }
           }
         });
       }
