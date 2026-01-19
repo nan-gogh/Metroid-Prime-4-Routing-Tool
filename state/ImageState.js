@@ -3,13 +3,13 @@
 
 (function (global) {
   class ImageState {
-    constructor(config, tilesetState, mapState) {
+    constructor(config, tilesetState, mapState, options = {}) {
       this.config = config || (global.MP4Config || {});
       this.tilesetState = tilesetState;
       this.mapState = mapState;
 
-      // Error handling
-      this.errorHandler = typeof errorHandler !== 'undefined' ? errorHandler : new ErrorHandler();
+      // Error handling (constructor-injected)
+      this.errorHandler = options.errorHandler || new ErrorHandler();
 
       // Images cache
       this.images = {};
@@ -46,45 +46,37 @@
     }
 
     // Get the needed resolution based on current zoom and canvas size
+    // Zoom-first tier approach: map zoom to resolution tier, then refine by screen size
+    // This guarantees 256px is always reachable at low zoom levels
     getNeededResolution() {
       try {
         if (!this.mapState) return 0;
 
-        const zoom = this.mapState.zoom;
-        const canvasWidth = this.mapState.canvasWidth;
-        const canvasHeight = this.mapState.canvasHeight;
-        const mapSize = this.mapState.mapSize;
-        const dpr = this.mapState.devicePixelRatio;
-
-        // Calculate the resolution needed for current zoom level
-        // Base multiplier tuned for small screens; scale up on larger canvases so
-        // desktop monitors request higher-resolution tiles. Make values configurable
-        // via `this.config` so they can be tuned without code changes.
-        const baseMultiplier = (this.config && this.config.IMAGE_RESOLUTION_BASE_MULTIPLIER) || 3.5;
-        const maxMultiplier = (this.config && this.config.IMAGE_RESOLUTION_MAX_MULTIPLIER) || 6;
-        const widthRef = (this.config && this.config.IMAGE_RESOLUTION_WIDTH_REF) || 1200;
-        const widthScale = Math.max(1, canvasWidth / widthRef); // >1 for wider viewports
-        const multiplier = Math.min(maxMultiplier, baseMultiplier * widthScale);
-        const pixelsNeeded = Math.max(canvasWidth, canvasHeight) * zoom * dpr * multiplier;
-
-
-        // Find the best resolution from available ones
-        // We need the smallest tile resolution that is >= pixelsNeeded
+        const zoom = (typeof this.mapState.zoom === 'number') ? this.mapState.zoom : 1;
         const resolutions = this.config.TILE_RESOLUTIONS || [256, 512, 1024, 2048, 4096, 8192];
-        let bestResolution = resolutions[resolutions.length - 1]; // Default to highest
-        let bestIndex = resolutions.length - 1;
 
-        for (let i = 0; i < resolutions.length; i++) {
-          if (resolutions[i] >= pixelsNeeded) {
-            bestResolution = resolutions[i];
-            bestIndex = i;
-            break;
-          }
+        // Use zoom range normalization so the selection is predictable across
+        // min..max zoom and can be gamma-adjusted. This ensures TILE_RESOLUTION_GAMMA
+        // affects the initial resolution selection (including preload/startup).
+        const zoomMin = (this.config && this.config.ZOOM && typeof this.config.ZOOM.DEFAULT_MIN === 'number') ? this.config.ZOOM.DEFAULT_MIN : 0.05;
+        const zoomMax = (this.config && this.config.ZOOM && typeof this.config.ZOOM.MAX === 'number') ? this.config.ZOOM.MAX : 4;
+
+        let normalized = 0;
+        if (zoomMax > zoomMin) {
+          normalized = (zoom - zoomMin) / (zoomMax - zoomMin);
+          normalized = Math.max(0, Math.min(1, normalized));
         }
 
-        
+        const cfgGamma = (this.config && typeof this.config.TILE_RESOLUTION_GAMMA === 'number') ? this.config.TILE_RESOLUTION_GAMMA : 0.6;
+        const exponent = cfgGamma > 0 ? (1 / cfgGamma) : 1;
+        const gammaAdjusted = Math.pow(normalized, exponent);
 
-        return bestIndex;
+        const sorted = [...resolutions].sort((a, b) => a - b);
+        const maxIndex = sorted.length - 1;
+        const idxFloat = gammaAdjusted * maxIndex;
+        const idx = Math.max(0, Math.min(maxIndex, Math.round(idxFloat)));
+
+        return idx;
       } catch (e) {
         this.errorHandler.logError(e, 'ImageState.getNeededResolution failed');
         return 0;
