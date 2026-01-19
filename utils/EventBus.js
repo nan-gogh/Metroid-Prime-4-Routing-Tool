@@ -47,8 +47,6 @@
               try { eh.logError(e, `EventBus.emit.${event}`); } catch (logErr) { /* best-effort */ }
             } else if (typeof ErrorHandler !== 'undefined') {
               try { new ErrorHandler().logError(e, `EventBus.emit.${event}`); } catch (tmpErr) { /* best-effort */ }
-            } else if (typeof console !== 'undefined' && console.error) {
-              console.error(`EventBus handler error for ${event}:`, e);
             }
           }
           }

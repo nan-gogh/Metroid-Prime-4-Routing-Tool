@@ -23,8 +23,6 @@
             eh.logError(e, `EventHandler.${errorContext}`, { eventData: data });
           } else if (typeof ErrorHandler !== 'undefined') {
             try { new ErrorHandler().logError(e, `EventHandler.${errorContext}`, { eventData: data }); } catch (tmpErr) { /* best-effort */ }
-          } else if (typeof console !== 'undefined' && console.error) {
-            console.error(`Event handler error for ${errorContext}:`, e);
           }
         }
       };
@@ -53,8 +51,8 @@
           const eh = errorHandler || (global && global.errorHandler) || null;
           if (eh && typeof eh.logWarning === 'function') {
             try { eh.logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (e) { /* best-effort */ }
-          } else if (typeof console !== 'undefined' && console.warn) {
-            console.warn('Invalid listener configuration:', config);
+          } else if (typeof ErrorHandler !== 'undefined') {
+            try { new ErrorHandler().logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (e) { /* best-effort */ }
           }
           return;
         }
@@ -94,8 +92,8 @@
           } catch (e) {
             if (eh && typeof eh.logWarning === 'function') {
               try { eh.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
-            } else if (typeof console !== 'undefined' && console.warn) {
-              console.warn('Error during event listener cleanup:', e);
+            } else if (typeof ErrorHandler !== 'undefined') {
+              try { new ErrorHandler().logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
             }
           }
         }
