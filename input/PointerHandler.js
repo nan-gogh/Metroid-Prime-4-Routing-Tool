@@ -414,7 +414,13 @@
         
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._handleMarkerDrag.setCursor'); }
       } catch (err) {
-        NotificationUtils.showSaveError('Error in marker drag: ' + err.message);
+        if (this.errorHandler) {
+          this.errorHandler.logError(err, 'PointerHandler._handleMarkerDrag');
+        } else if (typeof window !== 'undefined' && window.errorHandler) {
+          window.errorHandler.logError(err, 'PointerHandler._handleMarkerDrag');
+        } else {
+          console.error('PointerHandler._handleMarkerDrag error', err);
+        }
       }
     }
 

@@ -70,7 +70,11 @@ const RouteComputation = {
                 }
             }
         } catch (e) {
-            NotificationUtils.showRouteComputationError('Route expansion failed: ' + e.message);
+            if (typeof window !== 'undefined' && window.errorHandler) {
+                window.errorHandler.logError(e, 'RouteComputation.expandRouteNearby');
+            } else {
+                console.error('RouteComputation.expandRouteNearby error', e);
+            }
         } finally {
             endRouteCompute();
         }

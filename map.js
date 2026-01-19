@@ -3276,9 +3276,9 @@ async function init() {
             if (map.markerManager) {
                 await map.markerManager.importMarkers(file);
             } else {
-                // Fallback if markerManager not available
+                // Fallback if markerManager not available — log instead of notifying user
                 moduleErrorHandler.logWarning('markerManager not available during marker import', 'InteractiveMap.importMarkers');
-                NotificationUtils.showMarkerError('Marker manager not available.');
+                moduleErrorHandler.logError('Marker manager not available', 'InteractiveMap.importMarkers');
             }
         } catch (error) {
             NotificationUtils.showMarkerError('Failed to import markers: ' + (error.message || String(error)));
@@ -3399,7 +3399,8 @@ async function init() {
             handle.classList.remove('pressed');
         });
     } else {
-        NotificationUtils.showLoadError('Sidebar handle element not found; collapsing unavailable');
+        // Sidebar handle missing — internal condition, log to ErrorHandler instead of notifying user
+        moduleErrorHandler.logError('Sidebar handle element not found; collapsing unavailable', 'InteractiveMap.init.sidebarHandle');
     }
 
     // Start with the sidebar collapsed on page load
