@@ -109,7 +109,7 @@ class RouteManager {
             try {
                 this.onRouteChanged();
             } catch (e) {
-                console.debug('RouteManager._notifyRouteChanged failed', 'RouteManager._notifyRouteChanged', { error: e });
+                this.errorHandler && this.errorHandler.logDebug('RouteManager._notifyRouteChanged failed', 'RouteManager._notifyRouteChanged', { error: e });
             }
         }
 
@@ -122,7 +122,7 @@ class RouteManager {
                     looping: this.routeLooping
                 });
             } catch (e) {
-                console.debug('RouteManager EventBus emission failed', 'RouteManager._notifyRouteChanged', { error: e });
+                this.errorHandler && this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager._notifyRouteChanged', { error: e });
             }
         }
     }
@@ -175,7 +175,7 @@ class RouteManager {
                 try {
                     this.eventBus.emit(window.EventTypes.ROUTE_CLEARED);
                 } catch (e) {
-                    console.debug('RouteManager EventBus emission failed', 'RouteManager.setRoute', { error: e });
+                    this.errorHandler && this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager.setRoute', { error: e });
                 }
             }
         }
@@ -196,7 +196,7 @@ class RouteManager {
             try {
                 this.eventBus.emit(window.EventTypes.ROUTE_CLEARED);
             } catch (e) {
-                console.debug('RouteManager EventBus emission failed', 'RouteManager.clearRoute', { error: e });
+                this.errorHandler && this.errorHandler.logDebug('RouteManager EventBus emission failed', 'RouteManager.clearRoute', { error: e });
             }
         }
 
@@ -266,7 +266,7 @@ class RouteManager {
 
             return length / mapSize;
         } catch (e) {
-            console.debug('RouteManager.computeRouteLengthNormalized failed', 'RouteManager.computeRouteLengthNormalized', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.computeRouteLengthNormalized failed', 'RouteManager.computeRouteLengthNormalized', { error: e });
             return 0;
         }
     }
@@ -374,7 +374,7 @@ class RouteManager {
             this.setRoute(newIndices, this.computeRouteLengthNormalized(newSources, 8192), newSources); // Use default map size
 
         } catch (e) {
-            console.debug('RouteManager.insertWaypointAtSegment failed', 'RouteManager.insertWaypointAtSegment', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.insertWaypointAtSegment failed', 'RouteManager.insertWaypointAtSegment', { error: e });
         }
     }
 
@@ -392,9 +392,9 @@ class RouteManager {
                 originalLength: this.currentRouteLengthNormalized
             };
 
-            console.debug('Started waypoint drag', 'RouteManager.startWaypointDrag', { waypointIndex });
+            this.errorHandler && this.errorHandler.logDebug('Started waypoint drag', 'RouteManager.startWaypointDrag', { waypointIndex });
         } catch (e) {
-            console.debug('RouteManager.startWaypointDrag failed', 'RouteManager.startWaypointDrag', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.startWaypointDrag failed', 'RouteManager.startWaypointDrag', { error: e });
         }
     }
 
@@ -439,7 +439,7 @@ class RouteManager {
             this._notifyRouteChanged();
 
         } catch (e) {
-            console.debug('RouteManager.updateWaypointPosition failed', 'RouteManager.updateWaypointPosition', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.updateWaypointPosition failed', 'RouteManager.updateWaypointPosition', { error: e });
         }
     }
 
@@ -453,7 +453,7 @@ class RouteManager {
                 this.routeSources = this.dragWaypointState.originalSources.slice();
                 this.currentRoute = this.dragWaypointState.originalIndices.slice();
                 this.currentRouteLengthNormalized = this.dragWaypointState.originalLength;
-                console.debug('Cancelled waypoint drag - restored original route', 'RouteManager.finalizeWaypointDrag');
+                this.errorHandler && this.errorHandler.logDebug('Cancelled waypoint drag - restored original route', 'RouteManager.finalizeWaypointDrag');
             } else {
                 // Snap to marker: replace the waypoint with the target marker
                 const waypointIndex = this.dragWaypointState.originalIndex;
@@ -472,13 +472,13 @@ class RouteManager {
                     // Recalculate route length
                     this.currentRouteLengthNormalized = this.computeRouteLengthNormalized(this.routeSources, 8192);
 
-                    console.debug('Snapped waypoint to marker', 'RouteManager.finalizeWaypointDrag', { markerUid: snapToMarker.uid });
+                    this.errorHandler && this.errorHandler.logDebug('Snapped waypoint to marker', 'RouteManager.finalizeWaypointDrag', { markerUid: snapToMarker.uid });
                 } else {
                     // Fallback: cancel if marker not found
                     this.routeSources = this.dragWaypointState.originalSources.slice();
                     this.currentRoute = this.dragWaypointState.originalIndices.slice();
                     this.currentRouteLengthNormalized = this.dragWaypointState.originalLength;
-                    console.debug('Marker not found for snap - cancelled drag', 'RouteManager.finalizeWaypointDrag');
+                    this.errorHandler && this.errorHandler.logDebug('Marker not found for snap - cancelled drag', 'RouteManager.finalizeWaypointDrag');
                 }
             }
 
@@ -490,7 +490,7 @@ class RouteManager {
             this._notifyRouteChanged();
 
         } catch (e) {
-            console.debug('RouteManager.finalizeWaypointDrag failed', 'RouteManager.finalizeWaypointDrag', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.finalizeWaypointDrag failed', 'RouteManager.finalizeWaypointDrag', { error: e });
             // Emergency cleanup
             if (this.dragWaypointState) {
                 this.routeSources = this.dragWaypointState.originalSources.slice();
@@ -794,7 +794,7 @@ class RouteManager {
                 this._eventUnsubscribers = [];
             }
         } catch (e) {
-            this.errorHandler && console.debug('RouteManager.destroy failed', 'RouteManager.destroy', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('RouteManager.destroy failed', 'RouteManager.destroy', { error: e });
         }
     }
 }

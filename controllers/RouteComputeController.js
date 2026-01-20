@@ -131,7 +131,7 @@ class RouteComputeController {
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.reverseRouteDirection'); }
                 // Emit route direction changed event for subscribers
-                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { console.debug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
+                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { this.errorHandler && this.errorHandler.logDebug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
                 // Emit render requested event instead of direct render
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-direction-toggle'
@@ -198,7 +198,7 @@ class RouteComputeController {
             if (this.errorHandler) {
                 this.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
             } else if (typeof console !== 'undefined' && console.debug) {
-                console.debug('Advanced TSP solver not available.');
+                this.errorHandler && this.errorHandler.logDebug('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
             }
             return;
         }
@@ -297,14 +297,14 @@ class RouteComputeController {
                         if (this.errorHandler) {
                             this.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
                         } else if (typeof console !== 'undefined' && console.debug) {
-                            console.debug('Advanced solver returned no route.');
+                            this.errorHandler && this.errorHandler.logDebug('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
                         }
                     }
                 } catch (err) {
                     if (this.errorHandler) {
                         this.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
                     } else if (typeof console !== 'undefined' && console.debug) {
-                        console.debug('RouteComputeController.computeImprovedRoute error', err);
+                        this.errorHandler && this.errorHandler.logDebug('RouteComputeController.computeImprovedRoute error', 'RouteComputeController.computeImprovedRoute', { error: err });
                     }
                 } finally {
                     if (computeImprovedBtn) {
@@ -324,7 +324,7 @@ class RouteComputeController {
             if (this.errorHandler) {
                 this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
             } else if (typeof console !== 'undefined' && console.debug) {
-                console.debug('RouteComputation module not available');
+                this.errorHandler && this.errorHandler.logDebug('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
             }
         }
     }

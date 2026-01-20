@@ -21,7 +21,7 @@
         this.animationOffset = offset;
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_OFFSET_CHANGED, { offset });
       } catch (e) {
-        console.debug('RouteAnimationState.setAnimationOffset failed', 'RouteAnimationState.setAnimationOffset', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationOffset failed', 'RouteAnimationState.setAnimationOffset', { error: e });
       }
     }
 
@@ -35,7 +35,7 @@
         this.animationFrameId = rafId;
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: rafId });
       } catch (e) {
-        console.debug('RouteAnimationState.setAnimationFrameId failed', 'RouteAnimationState.setAnimationFrameId', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationFrameId failed', 'RouteAnimationState.setAnimationFrameId', { error: e });
       }
     }
 
@@ -51,7 +51,7 @@
           this._emitChange(window.EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: null });
         }
       } catch (e) {
-        console.debug('RouteAnimationState.clearAnimationFrameId failed', 'RouteAnimationState.clearAnimationFrameId', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.clearAnimationFrameId failed', 'RouteAnimationState.clearAnimationFrameId', { error: e });
       }
     }
 
@@ -60,7 +60,7 @@
       try {
         this.lastAnimationTime = time;
       } catch (e) {
-        console.debug('RouteAnimationState.setLastAnimationTime failed', 'RouteAnimationState.setLastAnimationTime', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setLastAnimationTime failed', 'RouteAnimationState.setLastAnimationTime', { error: e });
       }
     }
 
@@ -74,7 +74,7 @@
         this.animationSpeed = Math.max(1, speed); // Minimum 1 pixel/second
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_SPEED_CHANGED, { speed: this.animationSpeed });
       } catch (e) {
-        console.debug('RouteAnimationState.setAnimationSpeed failed', 'RouteAnimationState.setAnimationSpeed', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationSpeed failed', 'RouteAnimationState.setAnimationSpeed', { error: e });
       }
     }
 
@@ -88,7 +88,7 @@
         this.lineWidth = Math.max(1, width); // Minimum 1 pixel
         this._emitChange(window.EventTypes.ROUTE_LINE_WIDTH_CHANGED, { width: this.lineWidth });
       } catch (e) {
-        console.debug('RouteAnimationState.setLineWidth failed', 'RouteAnimationState.setLineWidth', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setLineWidth failed', 'RouteAnimationState.setLineWidth', { error: e });
       }
     }
 
@@ -102,7 +102,7 @@
         this.animationDirection = direction === -1 ? -1 : 1;
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_DIRECTION_CHANGED, { direction: this.animationDirection });
       } catch (e) {
-        console.debug('RouteAnimationState.setAnimationDirection failed', 'RouteAnimationState.setAnimationDirection', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationDirection failed', 'RouteAnimationState.setAnimationDirection', { error: e });
       }
     }
 
@@ -115,7 +115,7 @@
       try {
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_STARTED);
       } catch (e) {
-        console.debug('RouteAnimationState.startAnimation failed', 'RouteAnimationState.startAnimation', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.startAnimation failed', 'RouteAnimationState.startAnimation', { error: e });
       }
     }
 
@@ -124,7 +124,7 @@
         this.clearAnimationFrameId();
         this._emitChange(window.EventTypes.ROUTE_ANIMATION_STOPPED);
       } catch (e) {
-        console.debug('RouteAnimationState.stopAnimation failed', 'RouteAnimationState.stopAnimation', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.stopAnimation failed', 'RouteAnimationState.stopAnimation', { error: e });
       }
     }
 
@@ -152,7 +152,7 @@
           }
         }
       } catch (e) {
-        console.debug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
       }
     }
 
@@ -184,7 +184,7 @@
           }
         }
       } catch (e) {
-        console.debug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
       }
     }
 
@@ -208,7 +208,7 @@
         this.clearAnimationFrameId();
         this.setLastAnimationTime(0);
       } catch (e) {
-        console.debug('RouteAnimationState.reset failed', 'RouteAnimationState.reset', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.reset failed', 'RouteAnimationState.reset', { error: e });
       }
     }
 
@@ -227,7 +227,7 @@
           StorageUtils.saveRouteAnimation(animationData);
         }
       } catch (e) {
-        console.debug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
       }
     }
 
@@ -255,7 +255,7 @@
         }
         return false;
       } catch (e) {
-        console.debug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
         return false;
       }
     }

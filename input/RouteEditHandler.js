@@ -70,7 +70,7 @@
           }
         });
       } catch (e) {
-        console.debug('RouteEditHandler fast accessors failed', 'RouteEditHandler.constructor.fastAccessors', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler fast accessors failed', 'RouteEditHandler.constructor.fastAccessors', { error: e });
       }
 
       // Pending waypoint finalization event (stores pointer event for drop target detection)
@@ -119,7 +119,7 @@
                     localX = (ev.clientX || 0) - rect.left;
                     localY = (ev.clientY || 0) - rect.top;
                   } catch (e) {
-                    this.errorHandler && console.debug('Failed to get local coords', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
+                    this.errorHandler && this.errorHandler.logDebug('Failed to get local coords', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
                   }
 
                   const hit = this._findMarkerAt(localX, localY);
@@ -167,7 +167,7 @@
           }
         ], this, this.errorHandler);
       } catch (e) {
-        this.errorHandler && console.debug('RouteEditHandler._setupDragFinalizeListeners failed', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._setupDragFinalizeListeners failed', 'RouteEditHandler._setupDragFinalizeListeners', { error: e });
       }
     }
 
@@ -225,7 +225,7 @@
         return false; // Not handled
       } catch (e) {
         this.errorHandler.logError('RouteEditHandler.handlePointerDown failed:', 'interactions', e);
-        console.debug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
         return false;
       }
     }
@@ -253,7 +253,7 @@
         return false; // Not handled
       } catch (e) {
         this.errorHandler.logError('RouteEditHandler.handlePointerMove failed:', 'interactions', e);
-        console.debug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
         return false;
       }
     }
@@ -272,7 +272,7 @@
         this._finalizeRouteInsert(ev);
         return false; // Continue with other handlers
       } catch (e) {
-        console.debug('RouteEditHandler.handlePointerUp failed', 'RouteEditHandler.handlePointerUp', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerUp failed', 'RouteEditHandler.handlePointerUp', { error: e });
         return false;
       }
     }
@@ -294,7 +294,7 @@
         return true; // Handled
 
       } catch (e) {
-        console.debug('RouteEditHandler.handleClick failed', 'RouteEditHandler.handleClick', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handleClick failed', 'RouteEditHandler.handleClick', { error: e });
         return false;
       }
     }
@@ -321,7 +321,7 @@
 
         return false; // Continue with other handlers
       } catch (e) {
-        console.debug('RouteEditHandler.handleMouseLeave failed', 'RouteEditHandler.handleMouseLeave', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handleMouseLeave failed', 'RouteEditHandler.handleMouseLeave', { error: e });
         return false;
       }
     }
@@ -417,7 +417,7 @@
           try {
             this.eventBus.emit(window.EventTypes.LAYER_COUNTS_CHANGED);
           } catch (e) {
-            console.debug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
+            this.errorHandler && this.errorHandler.logDebug('Failed to update layer counts after route insert drag', 'RouteEditHandler.handlePointerUp.updateLayerCounts', { error: e });
           }
 
           // Update route length display immediately using computed value
@@ -427,7 +427,7 @@
               dev_routeLength.textContent = (typeof newLengthNormalized === 'number' && !isNaN(newLengthNormalized)) ?
                 newLengthNormalized.toFixed(3) : '—';
             }
-          } catch (e) { console.debug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
+          } catch (e) { this.errorHandler && this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
       } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
     }
@@ -690,11 +690,11 @@
           lengthNormalized: lengthNormalized,
           sources: newSources
         });
-      } catch (err) {
+        } catch (err) {
         if (this.errorHandler) {
           this.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
         } else if (typeof console !== 'undefined' && console.debug) {
-          console.debug('RouteEditHandler._handleRouteEditClick error', err);
+          this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._handleRouteEditClick error', 'RouteEditHandler._handleRouteEditClick', { error: err });
         }
       }
     }
@@ -733,7 +733,7 @@
           this.dragState.setRouteInsert(null);
         }
       } catch (e) {
-        console.debug('RouteEditHandler._cancelRouteInsert failed', 'RouteEditHandler._cancelRouteInsert', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._cancelRouteInsert failed', 'RouteEditHandler._cancelRouteInsert', { error: e });
       }
     }
 
@@ -765,7 +765,7 @@
         // Cancel any pending operations
         this.cancelOperations('Destroyed');
       } catch (e) {
-        this.errorHandler && console.debug('RouteEditHandler.destroy failed', 'RouteEditHandler.destroy', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.destroy failed', 'RouteEditHandler.destroy', { error: e });
       }
     }
 
@@ -780,7 +780,7 @@
         }
         this.dragState.setRoutePreview(null);
       } catch (e) {
-        console.debug('RouteEditHandler.cancelOperations failed', 'RouteEditHandler.cancelOperations', { error: e });
+        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.cancelOperations failed', 'RouteEditHandler.cancelOperations', { error: e });
       }
     }
   }
