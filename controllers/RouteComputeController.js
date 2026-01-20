@@ -128,7 +128,8 @@ class RouteComputeController {
                             const newSources = ordered.map((s, i) => ({ marker: s.marker, layerKey: s.layerKey, layerIndex: i }));
                             const newIndices = newSources.map((_, i) => i);
                             try { 
-                                const len = this.routeManager ? this.routeManager.computeRouteLengthNormalized(newSources, this.config.MAP_SIZE) : 0;
+                                // Delegate to RouteManager to compute normalized route length (single source of truth)
+                                const len = this.routeManager.computeRouteLengthNormalized(newSources, this.config.MAP_SIZE);
                                 this.routeManager.setRoute(newIndices, len, newSources);
                             } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.setReversedRoute'); }
                         }
@@ -171,6 +172,13 @@ class RouteComputeController {
     }
 
     computeImprovedRoute(startMarkerIndex = -1) {
+        // Validate RouteManager is available (single source of truth for all route calculations)
+        if (!this.routeManager || typeof this.routeManager.computeRouteLengthNormalized !== 'function') {
+            this.errorHandler.logError('RouteManager not available or invalid', 'RouteComputeController.computeImprovedRoute');
+            NotificationUtils.showRouteComputationError('Route manager not available.');
+            return;
+        }
+
         // Emit event to request route computation UI update
         this.eventBus.emit(EventTypes.ROUTE_COMPUTATION_REQUESTED);
 
@@ -244,24 +252,14 @@ class RouteComputeController {
                             }
                         }
 
-                        // Compute non-looping length (sum of consecutive segments only)
+                        // Compute non-looping length via RouteManager (single source of truth for calculations)
                         let length = 0;
                         try {
-                            if (Array.isArray(finalTour) && finalTour.length > 1) {
-                                for (let i = 0; i < finalTour.length - 1; i++) {
-                                    const a = points[finalTour[i]];
-                                    const b = points[finalTour[i + 1]];
-                                    const dx = b.x - a.x;
-                                    const dy = b.y - a.y;
-                                    length += Math.sqrt(dx * dx + dy * dy);
-                                }
-                            } else {
-                                length = 0;
-                            }
+                            // Delegate to RouteManager to compute normalized route length
+                            length = this.routeManager.computeRouteLengthNormalized(sources, this.config.MAP_SIZE);
                         } catch (e) {
-                            length = (typeof result.length === 'number') ? result.length : 0;
                             h.logError(e, 'RouteComputeController.computeImprovedRoute.getRouteLength');
-                        }
+                            length = 0;
                         this.routeManager.setRoute(finalTour, length, sources);
                         // Do not change looping preference when computing a route; looping is explicit via UI.
                         // Deselect the marker after route is computed
