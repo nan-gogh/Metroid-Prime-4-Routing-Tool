@@ -2569,8 +2569,12 @@ async function init() {
                                     try { map.updateResolution && map.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - updateResolution'); }
                                 }, 0);
                             }
-                            // Trigger render for view changes (map.mapState already has the new panX, panY, zoom)
-                            if (map && typeof map.render === 'function') {
+                            // Trigger render intent for view changes (map.mapState already has the new panX, panY, zoom)
+                            // InteractiveMap handles state-side effects and then emits a render intent
+                            if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - emit RENDER_REQUESTED'); }
+                            } else if (map && typeof map.render === 'function') {
+                                // Fallback: call direct render if no event bus is available
                                 map.render();
                             }
                         }

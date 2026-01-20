@@ -248,8 +248,42 @@
      * @private
      */
     _setupEventSubscriptions() {
-      // Event coordination is delegated to map.js to avoid duplicate event listeners
-      // and maintain a single point of render request coordination
+      // Subscribe to render intent events. Actual state-side effects (e.g. resolution
+      // selection) are handled by InteractiveMap (`map.js`). RenderController only
+      // listens for render intent events and executes the pipeline.
+      if (!this.eventBus) return;
+
+      try {
+        // Full render requested
+        const unsubFull = this.eventBus.on(window.EventTypes.RENDER_REQUESTED, (data) => {
+          // Optionally allow callers to mark specific renderers dirty via data, but
+          // default is a full render request.
+          if (data && Array.isArray(data.renderers) && data.renderers.length > 0) {
+            try {
+              data.renderers.forEach(r => this.markRendererDirty(r));
+            } catch (e) { /* best-effort */ }
+          } else {
+            // Mark all known renderers dirty so pipeline performs full render
+            try {
+              const all = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer', 'CompositeStage'];
+              all.forEach(name => this.markRendererDirty(name));
+            } catch (e) { /* best-effort */ }
+          }
+          this._requestRender();
+        });
+        this._eventUnsubscribers.push(unsubFull);
+
+        // Selective render requested (explicit renderer list)
+        const unsubSelective = this.eventBus.on(window.EventTypes.RENDER_SELECTIVE_REQUESTED, (data) => {
+          if (data && data.renderers && Array.isArray(data.renderers)) {
+            try { data.renderers.forEach(r => this.markRendererDirty(r)); } catch (e) { /* best-effort */ }
+            this._requestRender();
+          }
+        });
+        this._eventUnsubscribers.push(unsubSelective);
+      } catch (e) {
+        try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions'); } catch (err) { /* swallow */ }
+      }
     }
 
     /**
