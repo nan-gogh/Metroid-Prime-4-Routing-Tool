@@ -242,43 +242,14 @@
 
     /**
      * Set up event subscriptions for render triggers
+     * NOTE: Event subscription is now coordinated by InteractiveMap (map.js) which is the single owner
+     * of all render event coordination. RenderController focuses only on pipeline execution.
+     * This avoids duplicate listeners and ensures consistent render batching.
      * @private
      */
     _setupEventSubscriptions() {
-      // Pan/zoom events
-      this._eventUnsubscribers.push(
-        this.eventBus.on('pan', () => this._requestRender()),
-        this.eventBus.on('zoom', () => this._requestRender()),
-        this.eventBus.on('map:reset', () => this._requestRender())
-      );
-
-      // Selection changes
-      this._eventUnsubscribers.push(
-        this.eventBus.on('selection:changed', () => this._requestRender()),
-        this.eventBus.on('marker:selected', () => this._requestRender()),
-        this.eventBus.on('marker:deselected', () => this._requestRender())
-      );
-
-      // Layer visibility changes
-      this._eventUnsubscribers.push(
-        this.eventBus.on('layer:toggled', () => this._requestRender()),
-        this.eventBus.on('layer:visibility-changed', () => this._requestRender())
-      );
-
-      // Route changes
-      this._eventUnsubscribers.push(
-        this.eventBus.on('route:updated', () => this._requestRender()),
-        this.eventBus.on('route:cleared', () => this._requestRender()),
-        this.eventBus.on('route:marker-added', () => this._requestRender()),
-        this.eventBus.on('route:marker-removed', () => this._requestRender())
-      );
-
-      // Marker changes
-      this._eventUnsubscribers.push(
-        this.eventBus.on('marker:added', () => this._requestRender()),
-        this.eventBus.on('marker:removed', () => this._requestRender()),
-        this.eventBus.on('marker:updated', () => this._requestRender())
-      );
+      // Event coordination is delegated to map.js to avoid duplicate event listeners
+      // and maintain a single point of render request coordination
     }
 
     /**

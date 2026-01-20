@@ -1203,13 +1203,7 @@ class InteractiveMap {
         if (needed !== current && loading !== needed) {
             try {
                 if (this.tileRenderer && typeof this.tileRenderer.loadImage === 'function') {
-                    const runLoad = () => {
-                        try { this.tileRenderer.loadImage(needed); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage.scheduled'); }
-                    };
-
-                    // Use a short setTimeout (macro task) to avoid starting heavy decode/fetch
-                    // work synchronously in the rAF/input path; 50ms matches main branch behavior
-                    try { setTimeout(runLoad, 50); } catch (e) { setTimeout(runLoad, 0); }
+                    try { this.tileRenderer.loadImage(needed); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage'); }
                 }
             } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage'); }
         }
@@ -1217,7 +1211,9 @@ class InteractiveMap {
         // Update status display
         const status = document.getElementById('resolutionStatus');
         if (status) {
-            const res = MP4Config.TILE_RESOLUTIONS[this.imageState.currentResolution] || MP4Config.TILE_RESOLUTIONS[0];
+            // Show the needed resolution, not the currently loaded one
+            // This ensures the display is correct even before images finish loading
+            const res = MP4Config.TILE_RESOLUTIONS[needed] || MP4Config.TILE_RESOLUTIONS[0];
             status.textContent = `${res}px`;
         }
 
@@ -3600,8 +3596,6 @@ async function init() {
             // Do one overlay render now that the initial image is available
             try {
                 if (map && typeof map.render === 'function') map.render();
-                // Give the browser a chance to paint and finish any decode work
-                await new Promise(res => requestAnimationFrame(() => setTimeout(res, 50)));
             } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to render initial overlay'); }
         } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to wait for initial image'); }
         try { window._mp4Ready = true; } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to set _mp4Ready flag'); }
