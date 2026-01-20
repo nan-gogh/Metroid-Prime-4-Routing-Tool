@@ -132,9 +132,13 @@
     }
 
     // Micro-optimization: Cache path computation when route hasn't changed
-    _computePathData(viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+    _computePathData(viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_computePathData: viewport parameter is required', '_computePathData.missingViewport');
+        return { points: [], valid: false };
+      }
+
+      const vp = viewport;
 
       // Get route from routeManager (source of truth)
       const currentRoute = this.routeManager && this.routeManager.currentRoute;
@@ -173,8 +177,8 @@
         }
 
         const MAP_SIZE = (this.config && this.config.MAP_SIZE) ? this.config.MAP_SIZE : (typeof window !== 'undefined' && window.MAP_SIZE) ? window.MAP_SIZE : 8192;
-        const x = m.x * MAP_SIZE * this.mapState.zoom + this.mapState.panX;
-        const y = m.y * MAP_SIZE * this.mapState.zoom + this.mapState.panY;
+        const x = m.x * MAP_SIZE * vp.zoom + vp.panX;
+        const y = m.y * MAP_SIZE * vp.zoom + vp.panY;
 
         pathData.points.push({ x, y });
       }
@@ -196,9 +200,13 @@
     }
 
     // Micro-optimization: Cache glow path separately
-    _computeGlowPathData(viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+    _computeGlowPathData(viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_computeGlowPathData: viewport parameter is required', '_computeGlowPathData.missingViewport');
+        return { points: [], valid: false };
+      }
+
+      const vp = viewport;
 
       // Get route from routeManager (source of truth)
       const currentRoute = this.routeManager && this.routeManager.currentRoute;
@@ -232,7 +240,7 @@
      * Renders the route path to the map canvas.
      * Includes performance monitoring and automatic cache invalidation.
      * @param {RenderContext} renderContext - The render context providing canvas access
-     * @param {ViewportContext} [viewportContext] - Optional viewport context; falls back to this.mapState
+     * @param {ViewportContext} viewportContext - Required viewport context for rendering
      */
     render(renderContext, viewportContext) {
       const startTime = performance.now();
@@ -241,7 +249,7 @@
       const h = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       if (!viewportContext) {
-        try { h.logWarning('RouteRenderer.render called without viewportContext', 'RouteRenderer.render'); } catch (ignore) {}
+        h.logError('RouteRenderer.render: viewportContext parameter is required', 'RouteRenderer.render.missingViewport');
         return;
       }
 
@@ -287,7 +295,7 @@
         this._renderNodes(ctx, pathData, viewport);
 
         // Render route preview dot (transient UI element during route editing)
-        this._renderRoutePreview(ctx);
+        this._renderRoutePreview(ctx, viewport);
 
         ctx.restore();
 
@@ -309,9 +317,13 @@
       return !!(this.highlightState && this.highlightState.highlightedLayers && this.highlightState.highlightedLayers.has && this.highlightState.highlightedLayers.has('route'));
     }
 
-    _setupLineStyle(ctx, viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+    _setupLineStyle(ctx, viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_setupLineStyle: viewport parameter is required', '_setupLineStyle.missingViewport');
+        return;
+      }
+
+      const vp = viewport;
 
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
@@ -336,9 +348,13 @@
       }
     }
 
-    _renderGlow(ctx, viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+    _renderGlow(ctx, viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_renderGlow: viewport parameter is required', '_renderGlow.missingViewport');
+        return;
+      }
+
+      const vp = viewport;
 
       const pathData = this._computeGlowPathData(viewport);
 
@@ -393,9 +409,13 @@
       ctx.setLineDash([]);
     }
 
-    _renderNodes(ctx, pathData, viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+    _renderNodes(ctx, pathData, viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_renderNodes: viewport parameter is required', '_renderNodes.missingViewport');
+        return;
+      }
+
+      const vp = viewport;
 
       const routeHex = this.routeColor;
       const nodeFill = routeHex ? this._hexToRgba(routeHex, 0.95) : null;
@@ -419,9 +439,13 @@
       }
     }
 
-    _renderSingleNode(ctx, point, viewport = null) {
-      // Use provided viewport or fall back to this.mapState
-      const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom } : { zoom: 1 });
+    _renderSingleNode(ctx, point, viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_renderSingleNode: viewport parameter is required', '_renderSingleNode.missingViewport');
+        return;
+      }
+
+      const vp = viewport;
 
       if (!point) return;
 
@@ -459,8 +483,14 @@
      * Renders the route preview dot when editing a route.
      * Shows where the next waypoint will be placed during route editing.
      * @param {CanvasRenderingContext2D} ctx - The route canvas context
+     * @param {ViewportContext} viewport - The viewport context for coordinate transformation
      */
-    _renderRoutePreview(ctx) {
+    _renderRoutePreview(ctx, viewport) {
+      if (!viewport) {
+        this.errorHandler.logError('_renderRoutePreview: viewport parameter is required', '_renderRoutePreview.missingViewport');
+        return;
+      }
+
       try {
         // Get route preview from dragState
         const routePreview = this.dragState ? this.dragState.routePreview : null;
@@ -469,8 +499,8 @@
         // Transform route preview coordinates to screen coordinates
         const MAP_SIZE = (this.config && this.config.MAP_SIZE) ? this.config.MAP_SIZE : (typeof window !== 'undefined' && window.MAP_SIZE) ? window.MAP_SIZE : 8192;
         const pos = {
-          x: routePreview.x * MAP_SIZE * this.mapState.zoom + this.mapState.panX,
-          y: routePreview.y * MAP_SIZE * this.mapState.zoom + this.mapState.panY
+          x: routePreview.x * MAP_SIZE * viewport.zoom + viewport.panX,
+          y: routePreview.y * MAP_SIZE * viewport.zoom + viewport.panY
         };
 
         if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
