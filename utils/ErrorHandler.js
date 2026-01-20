@@ -17,24 +17,31 @@ class ErrorHandler {
      * @param {Object} additionalData - Additional context data
      */
     logError(error, context = '', additionalData = {}) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? error.stack : '';
+        try {
+            const isErr = error instanceof Error;
+            const errorMessage = isErr ? error.message : (error && typeof error === 'object' && error.message) ? error.message : String(error);
+            const errorStack = isErr ? error.stack : (error && error.stack) ? error.stack : '';
 
-        const logData = {
-            timestamp: new Date().toISOString(),
-            context,
-            message: errorMessage,
-            stack: errorStack,
-            ...additionalData
-        };
+            const logData = {
+                timestamp: new Date().toISOString(),
+                context,
+                message: errorMessage,
+                stack: errorStack,
+                ...additionalData
+            };
 
-        // Console logging (through internal safe writer)
-        this._writeConsole('error', `[${context}] ${errorMessage}`, logData);
+            // Console logging (through internal safe writer)
+            this._writeConsole('error', `[${context}] ${errorMessage}`, logData);
 
-        // Always include error details for diagnostics
-        this._writeConsole('debug', 'Error details:', logData);
-
-        // No user notifications from ErrorHandler; it only logs and formats errors
+            // Always include error details for diagnostics
+            this._writeConsole('debug', 'Error details:', logData);
+        } catch (inner) {
+            try {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('ErrorHandler.logError internal failure', inner);
+                }
+            } catch (ignore) {}
+        }
     }
     // Notification/storage wiring removed: ErrorHandler only logs to console
 
@@ -45,11 +52,17 @@ class ErrorHandler {
      * @param {Object} additionalData - Additional context data
      */
     logWarning(message, context = '', additionalData = {}) {
-        this._writeConsole('warn', `[${context}] ${message}`, {
-            timestamp: new Date().toISOString(),
-            context,
-            ...additionalData
-        });
+        try {
+            this._writeConsole('warn', `[${context}] ${message}`, {
+                timestamp: new Date().toISOString(),
+                context,
+                ...additionalData
+            });
+        } catch (inner) {
+            try {
+                if (typeof console !== 'undefined' && console.warn) console.warn('ErrorHandler.logWarning internal failure', inner);
+            } catch (ignore) {}
+        }
     }
 
     /**
@@ -66,11 +79,17 @@ class ErrorHandler {
             // ignore and continue to best-effort log
         }
 
-        this._writeConsole('debug', `[${context}] ${message}`, {
-            timestamp: new Date().toISOString(),
-            context,
-            ...additionalData
-        });
+        try {
+            this._writeConsole('debug', `[${context}] ${message}`, {
+                timestamp: new Date().toISOString(),
+                context,
+                ...additionalData
+            });
+        } catch (inner) {
+            try {
+                if (typeof console !== 'undefined' && console.debug) console.debug('ErrorHandler.logDebug internal failure', inner);
+            } catch (ignore) {}
+        }
     }
     
     _writeConsole(level, ...args) {
