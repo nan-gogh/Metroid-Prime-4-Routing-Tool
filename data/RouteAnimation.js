@@ -75,6 +75,8 @@ const RouteAnimation = {
             try {
                 if (map.markRendererDirty) {
                     map.markRendererDirty('RouteRenderer');
+                } else if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
+                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] }); } catch (e) { try { RouteAnimation._errorHandler && RouteAnimation._errorHandler.logError && RouteAnimation._errorHandler.logError(e, 'RouteAnimation.emitRenderIntent'); } catch (logErr) { try { console.debug('RouteAnimation emit failed', logErr); } catch (ignore) {} } }
                 } else if (map.render) {
                     map.render(); // Fallback for compatibility
                 }

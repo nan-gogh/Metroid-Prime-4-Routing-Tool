@@ -261,13 +261,17 @@
           if (data && Array.isArray(data.renderers) && data.renderers.length > 0) {
             try {
               data.renderers.forEach(r => this.markRendererDirty(r));
-            } catch (e) { /* best-effort */ }
+            } catch (e) {
+              try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} }
+            }
           } else {
             // Mark all known renderers dirty so pipeline performs full render
             try {
               const all = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer', 'CompositeStage'];
               all.forEach(name => this.markRendererDirty(name));
-            } catch (e) { /* best-effort */ }
+            } catch (e) {
+              try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.markAll'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} }
+            }
           }
           this._requestRender();
         });
@@ -276,7 +280,7 @@
         // Selective render requested (explicit renderer list)
         const unsubSelective = this.eventBus.on(window.EventTypes.RENDER_SELECTIVE_REQUESTED, (data) => {
           if (data && data.renderers && Array.isArray(data.renderers)) {
-            try { data.renderers.forEach(r => this.markRendererDirty(r)); } catch (e) { /* best-effort */ }
+            try { data.renderers.forEach(r => this.markRendererDirty(r)); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
             this._requestRender();
           }
         });
@@ -289,17 +293,17 @@
             this.markRendererDirty('RouteRenderer');
             this.markRendererDirty('OverlayRenderer');
             this._requestRender();
-          } catch (e) { /* best-effort */ }
+          } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.LAYER_VISIBILITY_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubLayerVis);
 
         const unsubTileset = this.eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
-          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.TILESET_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubTileset);
 
         const unsubTilesetGray = this.eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
-          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.TILESET_GRAYSCALE_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubTilesetGray);
 
@@ -308,32 +312,32 @@
             if (data && typeof data.gridVisible === 'boolean') this.markRendererDirty('GridRenderer');
             if (data && typeof data.heatmapVisible === 'boolean') this.markRendererDirty('HeatmapRenderer');
             this._requestRender();
-          } catch (e) { /* best-effort */ }
+          } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.DISPLAY_SETTINGS_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubDisplay);
 
         const unsubHeatmapVis = this.eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
-          try { this.markRendererDirty('HeatmapRenderer'); this.markRendererDirty('CompositeStage'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('HeatmapRenderer'); this.markRendererDirty('CompositeStage'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.HEATMAP_VISIBILITY_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubHeatmapVis);
 
         const unsubLayerHighlight = this.eventBus.on(window.EventTypes.LAYER_HIGHLIGHT_CHANGED, (data) => {
-          try { this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.LAYER_HIGHLIGHT_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubLayerHighlight);
 
         const unsubSelectionCleared = this.eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
-          try { this.markRendererDirty('MarkerRenderer'); this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('MarkerRenderer'); this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CLEARED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubSelectionCleared);
 
         const unsubSelectionChanged = this.eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
-          try { this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubSelectionChanged);
 
         const unsubRouteUpdated = this.eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
-          try { this.markRendererDirty('RouteRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+          try { this.markRendererDirty('RouteRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.ROUTE_UPDATED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
         });
         this._eventUnsubscribers.push(unsubRouteUpdated);
       } catch (e) {

@@ -157,7 +157,7 @@ function setObjectPoolDefaultErrorHandler(handler) {
 function checkPoolStats() {
     try {
         console.debug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() });
-    } catch (e) { /* best-effort */ }
+    } catch (e) { try { if (markerPool && markerPool._errorHandler && typeof markerPool._errorHandler.logError === 'function') markerPool._errorHandler.logError(e, 'ObjectPool.checkPoolStats'); else if (routeSourcePool && routeSourcePool._errorHandler && typeof routeSourcePool._errorHandler.logError === 'function') routeSourcePool._errorHandler.logError(e, 'ObjectPool.checkPoolStats'); else console.debug('checkPoolStats failed', e); } catch (ignore) {} }
 }
 
 // Make debug function globally available

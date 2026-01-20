@@ -1313,14 +1313,17 @@ class InteractiveMap {
             if (layerKey === 'grid') {
                 this.markRendererDirty('GridRenderer');
             }
-            // Execute render immediately with dirty flags - only marked renderers will execute
-            if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
-                // Get the set of dirty renderers and render them immediately
-                const dirtyRenderers = this.renderPipeline.getDirtyRenderers();
-                if (dirtyRenderers.size > 0) {
-                    this.renderPipeline.render(dirtyRenderers);
+            // Request selective render via RenderController (preserve immediate fallback)
+            try {
+                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
+                    const dirtyRenderers = this.renderPipeline && typeof this.renderPipeline.getDirtyRenderers === 'function'
+                        ? Array.from(this.renderPipeline.getDirtyRenderers()) : ['MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
+                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: dirtyRenderers }); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.emitRenderSelective'); } catch (logErr) { try { console.debug('toggleLayer emit failed', logErr); } catch (ignore) {} } }
+                } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
+                    const dirtyRenderers = this.renderPipeline.getDirtyRenderers();
+                    if (dirtyRenderers.size > 0) this.renderPipeline.render(dirtyRenderers);
                 }
-            }
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.requestSelectiveRender'); }
         } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.render'); }
     }
     
@@ -2188,7 +2191,13 @@ function exitEditModeForLayer(layerKey) {
             } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.updateMiniEditMarkersToggle'); }
             // Properly hide edit overlay with full cleanup
             hideEditOverlayProperly();
-            try { if (map && typeof map.render === 'function') map.render(); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.renderAfterExitCustomMarkers'); }
+            try {
+                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
+                } else if (map && typeof map.render === 'function') {
+                    map.render();
+                }
+            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.renderAfterExitCustomMarkers'); }
         } else if (layerKey === 'route' && map && map.editRouteMode) {
             map.editRouteMode = false;
             try { map._exitEditMode && map._exitEditMode('route'); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.exitRouteMode'); }
@@ -2210,7 +2219,13 @@ function exitEditModeForLayer(layerKey) {
             try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.resetCursor'); }
             // Properly hide edit overlay with full cleanup
             hideEditOverlayProperly();
-            try { if (map && typeof map.render === 'function') map.render(); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.renderAfterExitRoute'); }
+            try {
+                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
+                } else if (map && typeof map.render === 'function') {
+                    map.render();
+                }
+            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.renderAfterExitRoute'); }
         }
     } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer'); }
 }
@@ -2289,23 +2304,6 @@ async function init() {
 
             eventManager.setup(eventBus, [
                 {
-                    event: window.EventTypes.RENDER_REQUESTED,
-                    handler: (data) => {
-                        // Use renderPipeline's batching system instead of direct render()
-                        // This ensures multiple render requests in one frame are batched together
-                        if (map && map.renderPipeline && typeof map.renderPipeline.markDirty === 'function') {
-                            // Mark all renderers dirty for a full render, batched via rAF
-                            // With sub-canvas architecture, each renderer clears its own canvas
-                            // CompositeStage composes all sub-canvases onto the main display
-                            const allRenderers = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer', 'CompositeStage'];
-                            allRenderers.forEach(name => map.renderPipeline.markDirty(name));
-                        } else if (map && typeof map.render === 'function') {
-                            // Fallback if pipeline is not available
-                            map.render();
-                        }
-                    }
-                },
-                {
                     event: window.EventTypes.LAYER_VISIBILITY_CHANGED,
                     handler: (data) => {
                         // Update layer state manager when controllers change visibility
@@ -2378,8 +2376,8 @@ async function init() {
                     handler: (data) => {
                         // Display settings have changed — update persistence/UI as needed.
                         // Rendering decisions are owned by RenderController; do not markDirty/render here.
-                        if (map && typeof window.storageService !== 'undefined' && data && typeof data.persist === 'boolean') {
-                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { /* best-effort */ }
+                            if (map && typeof window.storageService !== 'undefined' && data && typeof data.persist === 'boolean') {
+                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { console.debug('DISPLAY_SETTINGS_CHANGED save failed', logErr); } catch (ignore) {} } }
                         }
                     }
                 },
@@ -2443,9 +2441,13 @@ async function init() {
 
                         // Edit mode changes require updating the overlay UI and then rendering
                         updateEditOverlay();
-                        if (map && typeof map.render === 'function') {
-                            map.render();
-                        }
+                        try {
+                            if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EDIT_MODE_CHANGED.emit RENDER_REQUESTED'); }
+                            } else if (map && typeof map.render === 'function') {
+                                map.render();
+                            }
+                        } catch (e) { moduleErrorHandler.logError(e, 'EDIT_MODE_CHANGED.renderFallback'); }
                     }
                 },
                 {
@@ -2508,10 +2510,8 @@ async function init() {
                             // Defer updateResolution off the input stack to prevent heavy bitmap decode
                             // from blocking rAF during zoom transitions (especially 4K -> 8K)
                             if (typeof data.zoom === 'number') {
-                                setTimeout(() => {
-                                    try { map.imageState && map.imageState.updateResolution && map.imageState.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - imageState.updateResolution'); }
-                                    try { map.updateResolution && map.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - updateResolution'); }
-                                }, 0);
+                                try { map.imageState && map.imageState.updateResolution && map.imageState.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - imageState.updateResolution'); }
+                                try { map.updateResolution && map.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - updateResolution'); }
                             }
                             // Trigger render intent for view changes (map.mapState already has the new panX, panY, zoom)
                             // InteractiveMap handles state-side effects and then emits a render intent
@@ -2531,12 +2531,12 @@ async function init() {
                         if (map && map.routeManager) {
                             try {
                                 if (data && Array.isArray(data.route)) {
-                                    map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []);
+                                    try { map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRoute'); } catch (logErr) { try { console.debug('ROUTE_UPDATED.setRoute failed', logErr); } catch (ignore) {} } }
                                 }
-                            } catch (e) { /* best-effort, continue */ }
+                            } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.handler'); } catch (logErr) { try { console.debug('ROUTE_UPDATED handler failed', logErr); } catch (ignore) {} } }
 
                             if (data && typeof data.looping === 'boolean') {
-                                try { map.routeManager.setRouteLooping(data.looping); } catch (e) { /* best-effort */ }
+                                try { map.routeManager.setRouteLooping(data.looping); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRouteLooping'); } catch (logErr) { try { console.debug('ROUTE_UPDATED.setRouteLooping failed', logErr); } catch (ignore) {} } }
                             }
 
                             // Update layer counts; rendering handled by RenderController
@@ -2677,8 +2677,14 @@ async function init() {
                                 });
                             }
 
-                            // Request a render so renderers pick up new settings
-                            if (map && typeof map.render === 'function') map.render();
+                            // Request a render so renderers pick up new settings (delegated to RenderController)
+                            try {
+                                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                    window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {});
+                                } else if (map && typeof map.render === 'function') {
+                                    map.render();
+                                }
+                            } catch (e) { moduleErrorHandler.logError(e, 'MARKER_SCALING_SAVE_REQUESTED.emitRender'); }
                         } catch (e) { moduleErrorHandler.logError(e, 'MARKER_SCALING_SAVE_REQUESTED'); }
                     }
                 },
@@ -3515,7 +3521,11 @@ async function init() {
             await waitForInitialImage(500);
             // Do one overlay render now that the initial image is available
             try {
-                if (map && typeof map.render === 'function') map.render();
+                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'init.emit RENDER_REQUESTED'); }
+                } else if (map && typeof map.render === 'function') {
+                    map.render();
+                }
             } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to render initial overlay'); }
         } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to wait for initial image'); }
         try { window._mp4Ready = true; } catch (e) { moduleErrorHandler.logError(e, 'init: Failed to set _mp4Ready flag'); }
