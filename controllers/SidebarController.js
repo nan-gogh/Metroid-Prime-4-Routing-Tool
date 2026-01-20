@@ -187,23 +187,34 @@
     }
 
     /**
-     * Bind individual layer checkboxes
+     * Bind individual layer toggle buttons
+     * Note: Modern UI uses aria-pressed buttons, not checkboxes
      */
     _bindLayerCheckboxes() {
-      // Layer checkboxes are created dynamically by initializeLayerIcons()
-      // This method would be called after layer icons are initialized
+      // Layer toggles are button rows with aria-pressed attributes
+      // This method is called after layer icons are initialized
       try {
+        const h = this.errorHandler;
         const layerRows = document.querySelectorAll('#layerList .layer-toggle');
         layerRows.forEach(row => {
-          const checkbox = row.querySelector('input[type="checkbox"]');
-          if (checkbox) {
-            checkbox.addEventListener('change', (e) => {
-              this._handleLayerCheckboxChange(row.dataset.layer, e.target.checked);
-            });
-          }
+          // The entire row is clickable, not just a checkbox
+          // We listen for click events on the row itself
+          row.addEventListener('click', (e) => {
+            // Determine new visibility state from aria-pressed or active class
+            const currentState = row.getAttribute('aria-pressed') === 'true' || row.classList.contains('active');
+            const newState = !currentState;  // Toggle to opposite state
+            const layerKey = row.dataset.layer;
+            
+            if (layerKey) {
+              h.logDebug('SidebarController: Layer toggle button clicked', 
+                'SidebarController._bindLayerCheckboxes.click', 
+                { layerKey, currentState, newState });
+              this._handleLayerCheckboxChange(layerKey, newState);
+            }
+          });
         });
       } catch (e) {
-        this.errorHandler.logError(e, 'SidebarController: Failed to bind layer checkboxes');
+        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to bind layer toggles');
       }
     }
 
