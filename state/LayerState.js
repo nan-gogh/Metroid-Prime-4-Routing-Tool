@@ -97,7 +97,9 @@
       try {
         if (layerKey && typeof layerKey === 'string') {
           const prev = !!this.layerVisibility[layerKey];
-          h.logDebug('LayerState.setLayerVisible called', 'LayerState.setLayerVisible', { layerKey, visible: !!visible, prev });
+          if (this.config && this.config.DEBUG) {
+            h.logDebug('LayerState.setLayerVisible called', 'LayerState.setLayerVisible', { layerKey, visible: !!visible, prev });
+          }
           this.layerVisibility[layerKey] = !!visible;
           this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
             layerKey,
@@ -105,7 +107,9 @@
             layerVisibility: { ...this.layerVisibility },
             triggeredBy: 'state-setter'
           });
-          h.logDebug('LayerState.setLayerVisible emitted LAYER_VISIBILITY_CHANGED', 'LayerState.setLayerVisible.emit', { layerKey, visible: !!visible });
+          if (this.config && this.config.DEBUG) {
+            h.logDebug('LayerState.setLayerVisible emitted LAYER_VISIBILITY_CHANGED', 'LayerState.setLayerVisible.emit', { layerKey, visible: !!visible });
+          }
         }
       } catch (e) {
         try { h.logWarning('LayerState.setLayerVisible failed', 'LayerState.setLayerVisible', { error: e }); } catch (ignore) {}
@@ -117,7 +121,9 @@
       try {
         if (layerKey && typeof layerKey === 'string') {
           const current = !!this.layerVisibility[layerKey];
-          h.logDebug('LayerState.toggleLayer called', 'LayerState.toggleLayer', { layerKey, current });
+          if (this.config && this.config.DEBUG) {
+            h.logDebug('LayerState.toggleLayer called', 'LayerState.toggleLayer', { layerKey, current });
+          }
           this.layerVisibility[layerKey] = !current;
           this._emitChange(window.EventTypes.LAYER_VISIBILITY_CHANGED, {
             layerKey,
@@ -125,7 +131,9 @@
             layerVisibility: { ...this.layerVisibility },
             triggeredBy: 'state-toggle'
           });
-          h.logDebug('LayerState.toggleLayer emitted LAYER_VISIBILITY_CHANGED', 'LayerState.toggleLayer.emit', { layerKey, visible: !current });
+          if (this.config && this.config.DEBUG) {
+            h.logDebug('LayerState.toggleLayer emitted LAYER_VISIBILITY_CHANGED', 'LayerState.toggleLayer.emit', { layerKey, visible: !current });
+          }
         }
       } catch (e) {
         try { h.logWarning('LayerState.toggleLayer failed', 'LayerState.toggleLayer', { error: e }); } catch (ignore) {}
