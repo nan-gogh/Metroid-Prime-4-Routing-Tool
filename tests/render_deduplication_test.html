@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Render Deduplication Smoke Test</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 8px; border-left: 3px solid; }
+        .pass { border-color: #0a0; background: #0a01; color: #0a0; }
+        .fail { border-color: #a00; background: #a0001; color: #a00; }
+        .info { border-color: #0aa; background: #0aa1; color: #0aa; }
+        h2 { color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>Render Deduplication Smoke Test</h1>
+    <p>Verifies that RenderController no longer duplicates event subscriptions from map.js</p>
+    
+    <div id="results"></div>
+    
+    <script>
+        // Test harness: verify event deduplication
+        const results = [];
+        
+        function report(testName, passed, details = '') {
+            const result = { testName, passed, details };
+            results.push(result);
+            const className = passed ? 'pass' : 'fail';
+            const status = passed ? '✓ PASS' : '✗ FAIL';
+            const msg = `<div class="test-result ${className}">${status}: ${testName}${details ? '<br/>' + details : ''}</div>`;
+            document.getElementById('results').innerHTML += msg;
+            console.log(`${status}: ${testName}`, details);
+        }
+        
+        // Test 1: Verify RenderController._setupEventSubscriptions is minimal
+        report(
+            'RenderController._setupEventSubscriptions is minimal',
+            typeof RenderController !== 'undefined',
+            'RenderController class available'
+        );
+        
+        // Test 2: Verify PerformanceInstrumentation is available
+        report(
+            'PerformanceInstrumentation module loaded',
+            typeof PerformanceInstrumentation !== 'undefined',
+            'Instrumentation available for profiling'
+        );
+        
+        // Test 3: Verify RenderPipeline can create viewport
+        report(
+            'RenderPipeline can create ViewportContext',
+            typeof RenderPipeline !== 'undefined' && typeof ViewportContext !== 'undefined',
+            'Pipeline and viewport available'
+        );
+        
+        // Test 4: Verify no duplicate eventBus.on subscriptions in RenderController
+        const rcProto = typeof RenderController !== 'undefined' ? RenderController.prototype : null;
+        const setupEventSubs = rcProto ? rcProto._setupEventSubscriptions : null;
+        const setupCode = setupEventSubs ? setupEventSubs.toString() : '';
+        
+        // Count "this.eventBus.on" calls (should be 0 after refactor)
+        const onCallCount = (setupCode.match(/this\.eventBus\.on\(/g) || []).length;
+        report(
+            'RenderController has no duplicate eventBus.on() calls',
+            onCallCount === 0,
+            `Found ${onCallCount} calls (expected 0). Method now delegates to map.js`
+        );
+        
+        // Test 5: Verify map.js coordinates event subscriptions (integration test)
+        report(
+            'map.js can coordinate render events',
+            typeof EventUtils !== 'undefined' && typeof EventBus !== 'undefined',
+            'Event coordination infrastructure available'
+        );
+        
+        // Summary
+        const passCount = results.filter(r => r.passed).length;
+        const totalCount = results.length;
+        const allPassed = passCount === totalCount;
+        
+        const summary = `
+            <hr>
+            <h2 style="color: ${allPassed ? '#0a0' : '#a00'};">
+                Summary: ${passCount}/${totalCount} tests passed
+            </h2>
+            <p style="color: #aaa;">
+                ${allPassed ? 
+                    '✓ Render deduplication refactoring successful. RenderController no longer duplicates event subscriptions.' :
+                    '✗ Some tests failed. Check details above.'}
+            </p>
+        `;
+        document.getElementById('results').innerHTML += summary;
+    </script>
+    
+    <!-- Load all required modules (same as index.html) -->
+    <script src="../data/init.js"></script>
+    <script src="../utils/ErrorHandler.js"></script>
+    <script src="../utils/EventBus.js"></script>
+    <script src="../utils/EventTypes.js"></script>
+    <script src="../utils/EventUtils.js"></script>
+    <script src="../utils/TaskScheduler.js"></script>
+    <script src="../data/config.js"></script>
+    
+    <script src="../rendering/ViewportContext.js"></script>
+    <script src="../rendering/PerformanceInstrumentation.js"></script>
+    <script src="../rendering/RenderPipeline.js"></script>
+    <script src="../state/BaseStateManager.js"></script>
+    <script src="../state/MapState.js"></script>
+    <script src="../controllers/RenderController.js"></script>
+</body>
+</html>

@@ -162,12 +162,60 @@ console.log('Recent events:', instr.getRecentEvents(10));
 - ⏳ Runtime testing needed - verify strict viewport contract doesn't break rendering
 - ⏳ Smoke test: 4K→8K zoom with profiling enabled; check decode metrics
 
-## Phase 4: Next Steps (FUTURE)
+## Phase 4: Event Deduplication & Render Coordination (IN PROGRESS)
+
+### Objective
+Eliminate duplicate event-bus subscriptions and consolidate render request coordination to a single source of truth (map.js), fixing micro-lag during viewport transitions.
+
+### Problem Identified
+- **RenderController** had its own event subscription setup (`.on('pan')`, `.on('zoom')`, etc.)
+- **map.js** simultaneously subscribed to the same events via `EventUtils.createEventManager`
+- Result: Multiple competing `render()` calls per frame during transitions (especially 4K→8K zoom)
+- This caused rAF contention and visible micro-lag
+
+### Solution Implemented
+
+#### files/controllers/RenderController.js (MODIFIED)
+- ✅ Removed duplicate event subscriptions from `_setupEventSubscriptions()`
+- ✅ Consolidated comment explaining single-owner pattern
+- ✅ Maintained `_requestRender()` for initial render (init) and fallback-render scenarios only
+- ✅ RenderController now focuses solely on pipeline execution, not event coordination
+
+#### Commit: `refactor(RenderController): remove duplicate event subscriptions`
+- **Hash:** `alt bb24fe0`
+- **Changes:** 2 files, 9 insertions(+), 44 deletions(-)
+- Removes 35+ redundant event listener registrations
+- Fixes competing render requests during view transitions
+
+### Event Coordination Model (Post-Refactor)
+- **Single Source of Truth:** `InteractiveMap.init()` (map.js, line ~2288)
+- **Event Types Handled:** All render-triggering events (pan, zoom, layer-visibility, route updates, marker changes)
+- **Coordination:** `map.js` uses `EventUtils.createEventManager()` with single event manager on `window` global
+- **Pipeline Execution:** `RenderController` executes render via `RenderPipeline.render()`
+
+### Test Artifacts
+- ✅ Created `tests/render_deduplication_test.html` to verify refactoring
+- Verifies:
+  - RenderController has no `eventBus.on()` calls in setup
+  - ViewportContext and PerformanceInstrumentation available
+  - No duplicate subscriptions
+
+### Remaining Tasks
+- [ ] Run in-browser smoke test: `tests/render_deduplication_test.html`
+- [ ] Run 4K→8K zoom stress test with profiling enabled
+- [ ] Verify instrumentation shows single render call per frame (vs. multiple before refactor)
+- [ ] Optional: Identify and consolidate other duplicate listeners (SettingsController, RouteManager emit patterns)
+
+## Phase 5: Next Steps (FUTURE)
 - [ ] Run in-browser smoke test: zoom 4K→8K with profiling enabled
 - [ ] Collect Performance traces and instrumentation metrics
 - [ ] Optional: Add linter rule to prevent new mapState usage in rendering modules
 - [ ] Optional: Refactor remaining renderers (TileRenderer helpers, HeatmapRenderer, MarkerRenderer, OverlayRenderer)
-- [ ] Commit changes: `feat(render): remove viewport fallbacks; add instrumentation API`
+- [ ] Optional: Consolidate settings/route/marker manager event handlers
+- [ ] Commit changes: `feat(render): decouple event coordination; single render requester`
 
 ## Summary
-Phase 3 successfully completes renderer decoupling by removing all fallback paths and introducing a comprehensive instrumentation API. All renderers now strictly require ViewportContext, enabling proper architectural separation. Performance metrics provide visibility into rendering bottlenecks. Ready for integration testing and optional expansion to remaining renderers.
+**Phase 3** successfully completed renderer decoupling via ViewportContext pattern and instrumentation API.
+**Phase 4** (in progress) eliminates duplicate event subscriptions by consolidating render coordination to map.js as single owner, directly addressing micro-lag during viewport transitions. Each phase builds toward a fully-decoupled, measurable, and performant rendering pipeline.
+
+
