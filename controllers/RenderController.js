@@ -281,6 +281,61 @@
           }
         });
         this._eventUnsubscribers.push(unsubSelective);
+        // Additional render-related subscriptions: listen for domain events that affect rendering
+        const unsubLayerVis = this.eventBus.on(window.EventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
+          try {
+            if (data && data.layerKey === 'grid') this.markRendererDirty('GridRenderer');
+            this.markRendererDirty('MarkerRenderer');
+            this.markRendererDirty('RouteRenderer');
+            this.markRendererDirty('OverlayRenderer');
+            this._requestRender();
+          } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubLayerVis);
+
+        const unsubTileset = this.eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubTileset);
+
+        const unsubTilesetGray = this.eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubTilesetGray);
+
+        const unsubDisplay = this.eventBus.on(window.EventTypes.DISPLAY_SETTINGS_CHANGED, (data) => {
+          try {
+            if (data && typeof data.gridVisible === 'boolean') this.markRendererDirty('GridRenderer');
+            if (data && typeof data.heatmapVisible === 'boolean') this.markRendererDirty('HeatmapRenderer');
+            this._requestRender();
+          } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubDisplay);
+
+        const unsubHeatmapVis = this.eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
+          try { this.markRendererDirty('HeatmapRenderer'); this.markRendererDirty('CompositeStage'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubHeatmapVis);
+
+        const unsubLayerHighlight = this.eventBus.on(window.EventTypes.LAYER_HIGHLIGHT_CHANGED, (data) => {
+          try { this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubLayerHighlight);
+
+        const unsubSelectionCleared = this.eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
+          try { this.markRendererDirty('MarkerRenderer'); this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubSelectionCleared);
+
+        const unsubSelectionChanged = this.eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
+          try { this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubSelectionChanged);
+
+        const unsubRouteUpdated = this.eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
+          try { this.markRendererDirty('RouteRenderer'); this._requestRender(); } catch (e) { /* best-effort */ }
+        });
+        this._eventUnsubscribers.push(unsubRouteUpdated);
       } catch (e) {
         try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions'); } catch (err) { /* swallow */ }
       }

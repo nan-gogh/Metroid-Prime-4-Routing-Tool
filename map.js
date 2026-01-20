@@ -2313,23 +2313,7 @@ async function init() {
                         if (data && data.layerVisibility && map && map.layerState) {
                             map.layerState.layerVisibility = data.layerVisibility;
                         }
-                        // Render when layer visibility changes
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            // Grid layer visibility change requires grid to be redrawn
-                            if (data && data.layerKey === 'grid') {
-                                map.markRendererDirty('GridRenderer');
-                            }
-                            map.markRendererDirty('MarkerRenderer');
-                            map.markRendererDirty('RouteRenderer');
-                            map.markRendererDirty('OverlayRenderer');
-                            // Execute render immediately with dirty flags - only marked renderers will execute
-                            if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
-                                const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
-                                if (dirtyRenderers.size > 0) {
-                                    map.renderPipeline.render(dirtyRenderers);
-                                }
-                            }
-                        }
+                        // Rendering is handled by RenderController; do not perform markDirty/render here.
                     }
                 },
                 {
@@ -2343,13 +2327,9 @@ async function init() {
                 {
                     event: window.EventTypes.LAYER_HIGHLIGHT_CHANGED,
                     handler: (data) => {
-                        // Update highlighted layers state
+                        // Update highlighted layers state; rendering owned by RenderController
                         if (data && data.highlightedLayers && map) {
                             map.highlightedLayers = data.highlightedLayers;
-                        }
-                        // Trigger render for highlight changes
-                        if (map && typeof map.render === 'function') {
-                            map.render();
                         }
                     }
                 },
@@ -2359,11 +2339,7 @@ async function init() {
                         if (map && typeof map.hideTooltip === 'function') {
                             map.hideTooltip();
                         }
-                        // Trigger selective render for selection clearing using dirty flag system
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            map.markRendererDirty('MarkerRenderer');
-                            map.markRendererDirty('OverlayRenderer');
-                        }
+                        // Rendering handled by RenderController; do not mark dirty here.
                     }
                 },
                 {
@@ -2378,7 +2354,7 @@ async function init() {
                             try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset); } } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting'); }
                             try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - preloadImages'); }
                             try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - loadInitialImage'); }
-                            try { map.markRendererDirty('TileRenderer'); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - markDirty'); }
+                            // Rendering owned by RenderController; do not mark dirty/render here.
                         }
                     }
                 },
@@ -2393,32 +2369,17 @@ async function init() {
                             try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - abortTileLoads'); }
                             try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - preloadImages'); }
                             try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - loadInitialImage'); }
-                            try { map.markRendererDirty('TileRenderer'); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - markDirty'); }
+                            // Rendering owned by RenderController; do not mark dirty/render here.
                         }
                     }
                 },
                 {
                     event: window.EventTypes.DISPLAY_SETTINGS_CHANGED,
                     handler: (data) => {
-                        // Display settings have changed, mark affected renderers dirty to re-render
-                        // NOTE: SettingsController already updated layerState before emitting this event,
-                        //       so we just need to mark the renderer(s) dirty to trigger a re-render
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            // Grid visibility change requires grid to be redrawn
-                            if (data && typeof data.gridVisible === 'boolean') {
-                                map.markRendererDirty('GridRenderer');
-                            }
-                            // Heatmap visibility change requires heatmap to be redrawn
-                            if (data && typeof data.heatmapVisible === 'boolean') {
-                                map.markRendererDirty('HeatmapRenderer');
-                            }
-                            // Execute render immediately with dirty flags - only marked renderers will execute
-                            if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
-                                const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
-                                if (dirtyRenderers.size > 0) {
-                                    map.renderPipeline.render(dirtyRenderers);
-                                }
-                            }
+                        // Display settings have changed — update persistence/UI as needed.
+                        // Rendering decisions are owned by RenderController; do not markDirty/render here.
+                        if (map && typeof window.storageService !== 'undefined' && data && typeof data.persist === 'boolean') {
+                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { /* best-effort */ }
                         }
                     }
                 },
@@ -2426,7 +2387,7 @@ async function init() {
                     event: window.EventTypes.HEATMAP_VISIBILITY_CHANGED,
                     handler: (data) => {
                         // Heatmap visibility changed via dedicated HeatmapDisplayState
-                        // Step 1: Update UI button state to reflect new visibility
+                        // Update UI button state and persist visibility. Rendering handled by RenderController.
                         try {
                             const btn = document.getElementById('gridHeatmapBtn');
                             if (btn && map && map.heatmapDisplayState) {
@@ -2436,25 +2397,8 @@ async function init() {
                             }
                         } catch (e) { console.debug('HEATMAP_VISIBILITY_CHANGED: Failed to update button state', 'EventBus:HEATMAP_VISIBILITY_CHANGED - updateButton', { error: e }); }
 
-                        // Step 2: Mark HeatmapRenderer dirty and execute selective render
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            map.markRendererDirty('HeatmapRenderer');
-                            // CompositeStage must also be marked dirty since heatmap visibility affects final display
-                            map.markRendererDirty('CompositeStage');
-                            // Execute render immediately with dirty flags
-                            if (map.renderPipeline && typeof map.renderPipeline.render === 'function') {
-                                const dirtyRenderers = map.renderPipeline.getDirtyRenderers();
-                                if (dirtyRenderers.size > 0) {
-                                    map.renderPipeline.render(dirtyRenderers);
-                                }
-                            }
-                        }
-
-                        // Step 3: Save new visibility state to persistent storage (async, non-blocking)
                         if (map && map.heatmapDisplayState && window.storageService) {
-                            try {
-                                map.heatmapDisplayState.saveToStorage(window.storageService);
-                            } catch (e) { console.debug('HEATMAP_VISIBILITY_CHANGED: Failed to save storage', 'EventBus:HEATMAP_VISIBILITY_CHANGED - saveStorage', { error: e }); }
+                            try { map.heatmapDisplayState.saveToStorage(window.storageService); } catch (e) { console.debug('HEATMAP_VISIBILITY_CHANGED: Failed to save storage', 'EventBus:HEATMAP_VISIBILITY_CHANGED - saveStorage', { error: e }); }
                         }
                     }
                 },
@@ -2584,12 +2528,9 @@ async function init() {
                     event: window.EventTypes.ROUTE_UPDATED,
                     handler: (data) => {
                         // RouteManager is the canonical source of truth for route data.
-                        // Accept legacy payloads for backward compatibility, but
-                        // otherwise rely on map.routeManager's state.
                         if (map && map.routeManager) {
                             try {
                                 if (data && Array.isArray(data.route)) {
-                                    // Legacy emitter: provide full route payload
                                     map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []);
                                 }
                             } catch (e) { /* best-effort, continue */ }
@@ -2598,12 +2539,9 @@ async function init() {
                                 try { map.routeManager.setRouteLooping(data.looping); } catch (e) { /* best-effort */ }
                             }
 
-                            // Update layer counts and trigger render using manager state
+                            // Update layer counts; rendering handled by RenderController
                             if (map && typeof map.updateLayerCounts === 'function') {
                                 map.updateLayerCounts();
-                            }
-                            if (map && typeof map.render === 'function') {
-                                map.render();
                             }
                         }
                     }
@@ -2615,16 +2553,12 @@ async function init() {
                         if (map && typeof map.updateLayerCounts === 'function') {
                             map.updateLayerCounts();
                         }
-                        // Trigger render for route clearing
-                        if (map && typeof map.render === 'function') {
-                            map.render();
-                        }
+                        // Rendering handled by RenderController
                     }
                 },
                 {
                     event: window.EventTypes.MARKER_ADDED,
                     handler: (data) => {
-                        // Event handlers must ensure state is current before acting on it
                         // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
                         if (map && map.markerManager && LAYERS.customMarkers) {
                             LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
@@ -2633,28 +2567,21 @@ async function init() {
                         if (map && typeof map.updateLayerCounts === 'function') {
                             map.updateLayerCounts();
                         }
-                        // Trigger rendering through the batched render pipeline
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            map.markRendererDirty('MarkerRenderer');
-                        }
+                        // Rendering handled by RenderController; do not mark dirty here.
                     }
                 },
                 {
                     event: window.EventTypes.MARKER_REMOVED,
                     handler: (data) => {
-                        // Event handlers must ensure state is current before acting on it
                         // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
                         if (map && map.markerManager && LAYERS.customMarkers) {
                             LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
                         }
                         // Clear selection if markers were removed from the selected layer
                         if (data && data.layerKey === 'cm' && map && map.selectionState && map.selectedMarkerLayer === 'customMarkers') {
-                            // For individual marker removal, check if it was the selected marker
                             if (data.uid && map.selectedMarker && map.selectedMarker.uid === data.uid) {
                                 map.selectionState.clearSelectedMarker();
-                            }
-                            // For bulk removal (all markers), always clear selection
-                            else if (data.all) {
+                            } else if (data.all) {
                                 map.selectionState.clearSelectedMarker();
                             }
                         }
@@ -2662,12 +2589,8 @@ async function init() {
                         if (map && typeof map.updateLayerCounts === 'function') {
                             map.updateLayerCounts();
                         }
-                        // Trigger rendering through the batched render pipeline
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            map.markRendererDirty('MarkerRenderer');
-                        }
-                        // For marker removal (especially bulk clear), request immediate render for UX feedback
-                        // The { all: true } flag indicates bulk operation (multiple markers)
+                        // Rendering handled by RenderController; do not mark dirty here.
+                        // For bulk clears, keep the explicit full-render request for UX feedback
                         if (data && data.all && eventBus && typeof eventBus.emit === 'function') {
                             eventBus.emit(window.EventTypes.RENDER_REQUESTED);
                         }
@@ -2676,7 +2599,6 @@ async function init() {
                 {
                     event: window.EventTypes.MARKER_EDITED,
                     handler: (data) => {
-                        // Event handlers must ensure state is current before acting on it
                         // Sync LAYERS.customMarkers.markers from authoritative MarkerManager source
                         if (map && map.markerManager && LAYERS.customMarkers) {
                             LAYERS.customMarkers.markers = map.markerManager.getAllMarkers();
@@ -2685,10 +2607,7 @@ async function init() {
                         if (map && typeof map.updateLayerCounts === 'function') {
                             map.updateLayerCounts();
                         }
-                        // Trigger rendering through the batched render pipeline
-                        if (map && typeof map.markRendererDirty === 'function') {
-                            map.markRendererDirty('MarkerRenderer');
-                        }
+                        // Rendering handled by RenderController; do not mark dirty here.
                     }
                 },
                 {
@@ -2704,10 +2623,7 @@ async function init() {
                                     // Sync with LAYERS for rendering
                                     const allMarkers = map.markerManager.getAllMarkers();
                                     LAYERS.customMarkers.markers = allMarkers;
-                                    // Mark for re-render
-                                    if (typeof map.markRendererDirty === 'function') {
-                                        map.markRendererDirty('MarkerRenderer');
-                                    }
+                                    // Rendering handled by RenderController; do not mark dirty here.
                                 }
                             }
                         }
