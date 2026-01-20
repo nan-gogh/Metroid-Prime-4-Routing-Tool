@@ -13,6 +13,9 @@
       this.animationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
       this.lineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
       this.animationDirection = 1; // 1 for forward, -1 for reverse
+      // Injected services (prefer DI, fall back to globals for compatibility)
+      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
+      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
     }
 
     // Animation offset management
@@ -132,59 +135,63 @@
       return this.animationFrameId !== null;
     }
 
-    // State persistence (consent-gated)
+    // Unified persistence methods — use injected storage when available and emit storage events
     saveToStorage() {
       try {
-        if (window.storageService) {
-          const state = {
-            animationSpeed: this.animationSpeed,
-            lineWidth: this.lineWidth
-          };
-          window.storageService.set(this.config.STORAGE_KEYS.ROUTE_ANIMATION_STATE, state);
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const state = {
-              animationSpeed: this.animationSpeed,
-              lineWidth: this.lineWidth
-            };
-            localStorage.setItem('mp4_route_animation_state', JSON.stringify(state));
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.ROUTE_ANIMATION : 'mp4_route_animation_state';
+        const payload = {
+          animationSpeed: this.animationSpeed,
+          lineWidth: this.lineWidth,
+          animationDirection: this.animationDirection
+        };
+
+        try {
+          this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'routeAnimation' });
+        } catch (evErr) {
+          /* non-fatal */
         }
+
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveRouteAnimation === 'function') {
+          StorageUtils.saveRouteAnimation(payload);
+        } else if (typeof localStorage !== 'undefined') {
+          // last-resort fallback (consent not checked here because higher-level consent manager should gate calls)
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (_) {}
+        }
+
+        try {
+          this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'routeAnimation' });
+        } catch (evErr) { /* non-fatal */ }
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.saveToStorage failed', 'RouteAnimationState.saveToStorage', { error: e });
+        this.errorHandler && this.errorHandler.logError(e, 'RouteAnimationState.saveToStorage');
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { entity: 'routeAnimation', error: e && e.message ? e.message : String(e) }); } catch (__) {}
       }
     }
 
     loadFromStorage() {
       try {
-        if (window.storageService) {
-          const state = window.storageService.get(this.config.STORAGE_KEYS.ROUTE_ANIMATION_STATE);
-          if (state) {
-            if (typeof state.animationSpeed === 'number') {
-              this.animationSpeed = state.animationSpeed;
-            }
-            if (typeof state.lineWidth === 'number') {
-              this.lineWidth = state.lineWidth;
-            }
-          }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const saved = localStorage.getItem('mp4_route_animation_state');
-            if (saved) {
-              const state = JSON.parse(saved);
-              if (typeof state.animationSpeed === 'number') {
-                this.animationSpeed = state.animationSpeed;
-              }
-              if (typeof state.lineWidth === 'number') {
-                this.lineWidth = state.lineWidth;
-              }
-            }
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.ROUTE_ANIMATION : 'mp4_route_animation_state';
+        let data = null;
+
+        if (this.storage && typeof this.storage.get === 'function') {
+          data = this.storage.get(key);
+        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadRouteAnimation === 'function') {
+          data = StorageUtils.loadRouteAnimation();
+        } else if (typeof localStorage !== 'undefined') {
+          try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
         }
+
+        if (data && typeof data === 'object') {
+          if (typeof data.animationSpeed === 'number') this.animationSpeed = data.animationSpeed;
+          if (typeof data.lineWidth === 'number') this.lineWidth = data.lineWidth;
+          if (typeof data.animationDirection === 'number') this.animationDirection = data.animationDirection;
+          return true;
+        }
+        return false;
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.loadFromStorage failed', 'RouteAnimationState.loadFromStorage', { error: e });
+        this.errorHandler && this.errorHandler.logError(e, 'RouteAnimationState.loadFromStorage');
+        return false;
       }
     }
 
