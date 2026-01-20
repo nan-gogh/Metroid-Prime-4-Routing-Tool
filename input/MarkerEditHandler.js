@@ -26,8 +26,14 @@
       // Bind helper methods
       this._checkMarkerHover = checkMarkerHover ? checkMarkerHover.bind(this) : null;
 
+      // Track event subscriptions for cleanup
+      this._eventUnsubscribers = [];
+
       // Create fast property accessors
       this._createFastAccessors();
+
+      // Subscribe to layer visibility changes for reactive updates
+      this._setupEventListeners();
     }
 
     // Performance optimization: Create fast property accessors
@@ -51,6 +57,32 @@
         });
       } catch (e) {
         this.errorHandler && this.errorHandler.logWarning('MarkerEditHandler fast accessors failed', 'MarkerEditHandler.constructor.fastAccessors', { error: e });
+      }
+    }
+
+    // Subscribe to layer visibility changes for reactive updates
+    _setupEventListeners() {
+      try {
+        if (!this.eventBus) return;
+
+        // Listen for layer visibility changes
+        const unsubscribeVisibility = this.eventBus.on(this.eventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
+          try {
+            if (data && data.layerVisibility) {
+              // Update reference to latest layer visibility state
+              this.layerVisibility = data.layerVisibility;
+              this.errorHandler.logDebug('MarkerEditHandler: Updated layer visibility reference', 'MarkerEditHandler._setupEventListeners.visibilityUpdate', { visibility: data.layerVisibility });
+            }
+          } catch (e) {
+            this.errorHandler.logWarning('MarkerEditHandler: Failed to handle visibility change', 'MarkerEditHandler._setupEventListeners.visibilityChange', { error: e });
+          }
+        });
+
+        if (unsubscribeVisibility) {
+          this._eventUnsubscribers.push(unsubscribeVisibility);
+        }
+      } catch (e) {
+        this.errorHandler.logWarning('MarkerEditHandler: Failed to setup event listeners', 'MarkerEditHandler._setupEventListeners', { error: e });
       }
     }
 
@@ -178,6 +210,22 @@
      * Clean up resources
      */
     destroy() {
+      try {
+        // Clean up event subscriptions
+        if (this._eventUnsubscribers && Array.isArray(this._eventUnsubscribers)) {
+          this._eventUnsubscribers.forEach(unsub => {
+            try {
+              unsub();
+            } catch (e) {
+              this.errorHandler.logDebug('MarkerEditHandler: Failed to unsubscribe', 'MarkerEditHandler.destroy.unsubscribe', { error: e });
+            }
+          });
+          this._eventUnsubscribers = [];
+        }
+      } catch (e) {
+        this.errorHandler.logWarning('MarkerEditHandler.destroy failed', 'MarkerEditHandler.destroy', { error: e });
+      }
+
       // Clear references to prevent memory leaks
       this.markerManager = null;
       this.showTooltip = null;
