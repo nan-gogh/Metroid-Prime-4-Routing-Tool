@@ -17,6 +17,9 @@
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
 
+      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
+      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+
       // Set up event listeners
       this._setupEventListeners();
     }
@@ -179,78 +182,36 @@
       return this.multiSelectedMarkers.size;
     }
 
-    // State persistence (consent-gated)
+    // Unified persistence
     saveToStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = {
-            selectedMarker: this.selectedMarker ? {
-              uid: this.selectedMarker.uid,
-              x: this.selectedMarker.x,
-              y: this.selectedMarker.y
-            } : null,
-            selectedMarkerLayer: this.selectedMarkerLayer,
-            multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
-          };
-          window.storageService.set(this.config.STORAGE_KEYS.SELECTION_STATE, state);
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const state = {
-              selectedMarker: this.selectedMarker ? {
-                uid: this.selectedMarker.uid,
-                x: this.selectedMarker.x,
-                y: this.selectedMarker.y
-              } : null,
-              selectedMarkerLayer: this.selectedMarkerLayer,
-              multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
-            };
-            localStorage.setItem('mp4_selection_state', JSON.stringify(state));
-          }
-        }
-      } catch (e) {
-        try { h.logWarning('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e }); } catch (ignore) {}
-      }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.SELECTION_STATE : 'mp4_selection_state';
+        const payload = {
+          selectedMarker: this.selectedMarker ? { uid: this.selectedMarker.uid, x: this.selectedMarker.x, y: this.selectedMarker.y } : null,
+          selectedMarkerLayer: this.selectedMarkerLayer,
+          multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
+        };
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'selection' }); } catch (__) {}
+        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
+        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'selection' }); } catch (__) {}
+      } catch (e) { try { this.errorHandler.logWarning('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e }); } catch (ignore) {} }
     }
 
     loadFromStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = window.storageService.get(this.config.STORAGE_KEYS.SELECTION_STATE);
-          if (state) {
-            if (state.selectedMarker && typeof state.selectedMarker === 'object') {
-              this.selectedMarker = state.selectedMarker;
-            }
-            if (typeof state.selectedMarkerLayer === 'string') {
-              this.selectedMarkerLayer = state.selectedMarkerLayer;
-            }
-            if (state.multiSelectedMarkers && Array.isArray(state.multiSelectedMarkers)) {
-              this.multiSelectedMarkers = new Set(state.multiSelectedMarkers);
-            }
-          }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const saved = localStorage.getItem('mp4_selection_state');
-            if (saved) {
-              const state = JSON.parse(saved);
-              if (state.selectedMarker && typeof state.selectedMarker === 'object') {
-                this.selectedMarker = state.selectedMarker;
-              }
-              if (typeof state.selectedMarkerLayer === 'string') {
-                this.selectedMarkerLayer = state.selectedMarkerLayer;
-              }
-              if (state.multiSelectedMarkers && Array.isArray(state.multiSelectedMarkers)) {
-                this.multiSelectedMarkers = new Set(state.multiSelectedMarkers);
-              }
-            }
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.SELECTION_STATE : 'mp4_selection_state';
+        let data = null;
+        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (data && typeof data === 'object') {
+          if (data.selectedMarker && typeof data.selectedMarker === 'object') this.selectedMarker = data.selectedMarker;
+          if (typeof data.selectedMarkerLayer === 'string') this.selectedMarkerLayer = data.selectedMarkerLayer;
+          if (data.multiSelectedMarkers && Array.isArray(data.multiSelectedMarkers)) this.multiSelectedMarkers = new Set(data.multiSelectedMarkers);
+          return true;
         }
-      } catch (e) {
-        try { h.logWarning('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e }); } catch (ignore) {}
-      }
+        return false;
+      } catch (e) { try { this.errorHandler.logWarning('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e }); } catch (ignore) {} return false; }
     }
 
     // State serialization for debugging/testing

@@ -15,6 +15,8 @@
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.tileset = 'sat'; // Default tileset
       this.grayscale = false;
+      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
+      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
     }
 
     // Tileset management
@@ -62,62 +64,31 @@
       }
     }
 
-    // State persistence (consent-gated)
+    // Unified persistence
     saveToStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = {
-            tileset: this.tileset,
-            grayscale: this.grayscale
-          };
-          window.storageService.set(this.config.STORAGE_KEYS.TILESET_STATE, state);
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const state = {
-              tileset: this.tileset,
-              grayscale: this.grayscale
-            };
-            localStorage.setItem('mp4_tileset_state', JSON.stringify(state));
-          }
-        }
-      } catch (e) {
-        try { h.logWarning('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e }); } catch (ignore) {}
-      }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.TILESET_STATE : 'mp4_tileset_state';
+        const payload = { tileset: this.tileset, grayscale: this.grayscale };
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'tileset' }); } catch (__) {}
+        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
+        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'tileset' }); } catch (__) {}
+      } catch (e) { try { this.errorHandler.logWarning('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e }); } catch (ignore) {} }
     }
 
     loadFromStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = window.storageService.get(this.config.STORAGE_KEYS.TILESET_STATE);
-          if (state) {
-            if (typeof state.tileset === 'string') {
-              this.tileset = state.tileset;
-            }
-            if (typeof state.grayscale === 'boolean') {
-              this.grayscale = state.grayscale;
-            }
-          }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const saved = localStorage.getItem('mp4_tileset_state');
-            if (saved) {
-              const state = JSON.parse(saved);
-              if (typeof state.tileset === 'string') {
-                this.tileset = state.tileset;
-              }
-              if (typeof state.grayscale === 'boolean') {
-                this.grayscale = state.grayscale;
-              }
-            }
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.TILESET_STATE : 'mp4_tileset_state';
+        let data = null;
+        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (data && typeof data === 'object') {
+          if (typeof data.tileset === 'string') this.tileset = data.tileset;
+          if (typeof data.grayscale === 'boolean') this.grayscale = data.grayscale;
+          return true;
         }
-      } catch (e) {
-        try { h.logWarning('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e }); } catch (ignore) {}
-      }
+        return false;
+      } catch (e) { try { this.errorHandler.logWarning('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e }); } catch (ignore) {} return false; }
     }
 
     // State serialization for debugging/testing

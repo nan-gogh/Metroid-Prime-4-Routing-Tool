@@ -17,6 +17,8 @@
       this.highlightConfig = {}; // layerKey -> { scale }
       this.highlightScaleMultiplier = 1.0;
       this._previousHighlights = new Map(); // layerKey -> wasHighlighted
+      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
+      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
     }
 
     // Layer highlighting management
@@ -133,70 +135,32 @@
       }
     }
 
-    // State persistence (consent-gated)
+    // Unified persistence
     saveToStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = {
-            highlightedLayers: Array.from(this.highlightedLayers),
-            highlightConfig: this.highlightConfig,
-            highlightScaleMultiplier: this.highlightScaleMultiplier
-          };
-          window.storageService.set(this.config.STORAGE_KEYS.HIGHLIGHT_STATE, state);
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const state = {
-              highlightedLayers: Array.from(this.highlightedLayers),
-              highlightConfig: this.highlightConfig,
-              highlightScaleMultiplier: this.highlightScaleMultiplier
-            };
-            localStorage.setItem('mp4_highlight_state', JSON.stringify(state));
-          }
-        }
-      } catch (e) {
-        try { h.logWarning('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e }); } catch (ignore) {}
-      }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.HIGHLIGHT_STATE : 'mp4_highlight_state';
+        const payload = { highlightedLayers: Array.from(this.highlightedLayers), highlightConfig: this.highlightConfig, highlightScaleMultiplier: this.highlightScaleMultiplier };
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'highlight' }); } catch (__) {}
+        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
+        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'highlight' }); } catch (__) {}
+      } catch (e) { try { this.errorHandler.logWarning('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e }); } catch (ignore) {} }
     }
 
     loadFromStorage() {
-      const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const state = window.storageService.get(this.config.STORAGE_KEYS.HIGHLIGHT_STATE);
-          if (state) {
-            if (state.highlightedLayers && Array.isArray(state.highlightedLayers)) {
-              this.highlightedLayers = new Set(state.highlightedLayers);
-            }
-            if (state.highlightConfig && typeof state.highlightConfig === 'object') {
-              this.highlightConfig = state.highlightConfig;
-            }
-            if (typeof state.highlightScaleMultiplier === 'number') {
-              this.highlightScaleMultiplier = state.highlightScaleMultiplier;
-            }
-          }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const saved = localStorage.getItem('mp4_highlight_state');
-            if (saved) {
-              const state = JSON.parse(saved);
-              if (state.highlightedLayers && Array.isArray(state.highlightedLayers)) {
-                this.highlightedLayers = new Set(state.highlightedLayers);
-              }
-              if (state.highlightConfig && typeof state.highlightConfig === 'object') {
-                this.highlightConfig = state.highlightConfig;
-              }
-              if (typeof state.highlightScaleMultiplier === 'number') {
-                this.highlightScaleMultiplier = state.highlightScaleMultiplier;
-              }
-            }
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.HIGHLIGHT_STATE : 'mp4_highlight_state';
+        let data = null;
+        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (data && typeof data === 'object') {
+          if (data.highlightedLayers && Array.isArray(data.highlightedLayers)) this.highlightedLayers = new Set(data.highlightedLayers);
+          if (data.highlightConfig && typeof data.highlightConfig === 'object') this.highlightConfig = data.highlightConfig;
+          if (typeof data.highlightScaleMultiplier === 'number') this.highlightScaleMultiplier = data.highlightScaleMultiplier;
+          return true;
         }
-      } catch (e) {
-        try { h.logWarning('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e }); } catch (ignore) {}
-      }
+        return false;
+      } catch (e) { try { this.errorHandler.logWarning('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e }); } catch (ignore) {} return false; }
     }
 
     // State serialization for debugging/testing

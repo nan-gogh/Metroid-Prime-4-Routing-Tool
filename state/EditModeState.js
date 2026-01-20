@@ -20,6 +20,9 @@
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.editMarkersMode = false;
       this.editRouteMode = false;
+      // Injected services
+      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
+      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
     }
 
     // Edit mode management
@@ -130,60 +133,31 @@
       }
     }
 
-    // State persistence (consent-gated)
+    // Unified persistence
     saveToStorage() {
       try {
-        if (window.storageService) {
-          const state = {
-            editMarkersMode: this.editMarkersMode,
-            editRouteMode: this.editRouteMode
-          };
-          window.storageService.set(this.config.STORAGE_KEYS.EDIT_MODE_STATE, state);
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const state = {
-              editMarkersMode: this.editMarkersMode,
-              editRouteMode: this.editRouteMode
-            };
-            localStorage.setItem('mp4_edit_mode_state', JSON.stringify(state));
-          }
-        }
-      } catch (e) {
-        try { this.errorHandler.logWarning('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e }); } catch (ignore) {}
-      }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.EDIT_MODE_STATE : 'mp4_edit_mode_state';
+        const payload = { editMarkersMode: this.editMarkersMode, editRouteMode: this.editRouteMode };
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'editMode' }); } catch (__) {}
+        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
+        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
+        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'editMode' }); } catch (__) {}
+      } catch (e) { this.errorHandler && this.errorHandler.logWarning('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e }); }
     }
 
     loadFromStorage() {
       try {
-        if (window.storageService) {
-          const state = window.storageService.get(this.config.STORAGE_KEYS.EDIT_MODE_STATE);
-          if (state) {
-            if (typeof state.editMarkersMode === 'boolean') {
-              this.editMarkersMode = state.editMarkersMode;
-            }
-            if (typeof state.editRouteMode === 'boolean') {
-              this.editRouteMode = state.editRouteMode;
-            }
-          }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const saved = localStorage.getItem('mp4_edit_mode_state');
-            if (saved) {
-              const state = JSON.parse(saved);
-              if (typeof state.editMarkersMode === 'boolean') {
-                this.editMarkersMode = state.editMarkersMode;
-              }
-              if (typeof state.editRouteMode === 'boolean') {
-                this.editRouteMode = state.editRouteMode;
-              }
-            }
-          }
+        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.EDIT_MODE_STATE : 'mp4_edit_mode_state';
+        let data = null;
+        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (data && typeof data === 'object') {
+          if (typeof data.editMarkersMode === 'boolean') this.editMarkersMode = data.editMarkersMode;
+          if (typeof data.editRouteMode === 'boolean') this.editRouteMode = data.editRouteMode;
+          return true;
         }
-      } catch (e) {
-        try { this.errorHandler.logWarning('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e }); } catch (ignore) {}
-      }
+        return false;
+      } catch (e) { this.errorHandler && this.errorHandler.logWarning('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e }); return false; }
     }
 
 
