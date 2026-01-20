@@ -1,6 +1,10 @@
 // controllers/RouteComputeController.js
 // Handles route computation UI interactions and delegates to RouteComputation module
 
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
+}
+
 class RouteComputeController {
     constructor(options) {
         // Required dependencies
@@ -19,7 +23,7 @@ class RouteComputeController {
         this.config = options.config || MP4Config;
         // Optional access to centralized route manager for consistent calculations
         this.routeManager = options.routeManager || null;
-        this.errorHandler = options.errorHandler || new ErrorHandler();
+        this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
         // For compatibility with extracted code
         this.moduleErrorHandler = this.errorHandler;
@@ -131,7 +135,7 @@ class RouteComputeController {
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.toggleRouteDirection.reverseRouteDirection'); }
                 // Emit route direction changed event for subscribers
-                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { this.errorHandler && this.errorHandler.logDebug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
+                try { this.eventBus.emit(this.eventTypes.ROUTE_DIRECTION_CHANGED, { triggeredBy: 'route-direction-toggle' }); } catch (e) { this.errorHandler.logDebug('RouteComputeController.emitRouteDirectionChanged failed', 'RouteComputeController.toggleRouteDirection', { error: e }); }
                 // Emit render requested event instead of direct render
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {
                     triggeredBy: 'route-direction-toggle'
@@ -195,11 +199,7 @@ class RouteComputeController {
         }
 
         if (typeof TSPEuclid === 'undefined' || typeof TSPEuclid.solveTSPAdvanced !== 'function') {
-            if (this.errorHandler) {
-                this.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
-            } else if (typeof console !== 'undefined' && console.debug) {
-                this.errorHandler && this.errorHandler.logDebug('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
-            }
+            this.errorHandler.logError('Advanced TSP solver not available.', 'RouteComputeController.computeImprovedRoute');
             return;
         }
 
@@ -220,7 +220,7 @@ class RouteComputeController {
                 }
             }
 
-            setTimeout(() => {
+            setTimeout(() => { const h = this.errorHandler;
                 try {
                     const points = sources.map(s => ({ x: s.marker.x, y: s.marker.y }));
 
@@ -260,7 +260,7 @@ class RouteComputeController {
                             }
                         } catch (e) {
                             length = (typeof result.length === 'number') ? result.length : 0;
-                            this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.getRouteLength');
+                            h.logError(e, 'RouteComputeController.computeImprovedRoute.getRouteLength');
                         }
                         this.routeManager.setRoute(finalTour, length, sources);
                         // Do not change looping preference when computing a route; looping is explicit via UI.
@@ -268,7 +268,7 @@ class RouteComputeController {
                         try {
                             this.selectionState.clearSelectedMarker();
                             this.eventBus.emit(EventTypes.TOOLTIP_HIDE_REQUESTED);
-                        } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.deselectMarker'); }
+                        } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.deselectMarker'); }
                         // Enter route edit mode automatically so user can refine the computed route
                         try {
                             const routeToggle = document.getElementById('editRouteToggle');
@@ -281,31 +281,23 @@ class RouteComputeController {
                                 this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
                                 try {
                                     const mini = document.getElementById('editRouteToggleMini');
-                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.setEditToggleColor'); } mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
-                                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.setupMiniRouteToggle'); }
+                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setEditToggleColor'); } mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
+                                    } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setupMiniRouteToggle'); }
                                 // Ensure route edit-mode visual state: enter route edit mode helper
-                                try { this.eventBus.emit(EventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'route', scale: 2.0 }); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditMode'); }
+                                try { this.eventBus.emit(EventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'route', scale: 2.0 }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditMode'); }
                                 // Disable markers edit mode (and properly exit it)
                                 this.editModeState.setEditMarkersMode(false);
-                                try { this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.exitCustomMarkersEditMode'); }
-                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.updateMarkersToggle'); }
-                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.setMiniMarkersToggleColor'); } miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.updateMiniMarkersToggle'); }
+                                try { this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.exitCustomMarkersEditMode'); }
+                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.updateMarkersToggle'); }
+                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setMiniMarkersToggleColor'); } miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.updateMiniMarkersToggle'); }
                             }
-                        } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditModeAfterComputation'); }
+                        } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditModeAfterComputation'); }
                         // log removed
                     } else {
-                        if (this.errorHandler) {
-                            this.errorHandler.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
-                        } else if (typeof console !== 'undefined' && console.debug) {
-                            this.errorHandler && this.errorHandler.logDebug('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
-                        }
+                        h.logError('Advanced solver returned no route.', 'RouteComputeController.computeImprovedRoute');
                     }
                 } catch (err) {
-                    if (this.errorHandler) {
-                        this.errorHandler.logError(err, 'RouteComputeController.computeImprovedRoute');
-                    } else if (typeof console !== 'undefined' && console.debug) {
-                        this.errorHandler && this.errorHandler.logDebug('RouteComputeController.computeImprovedRoute error', 'RouteComputeController.computeImprovedRoute', { error: err });
-                    }
+                    h.logError(err, 'RouteComputeController.computeImprovedRoute');
                 } finally {
                     if (computeImprovedBtn) {
                         computeImprovedBtn.disabled = false;
@@ -321,11 +313,7 @@ class RouteComputeController {
         if (typeof RouteComputation !== 'undefined') {
             RouteComputation.expandRouteNearby(this.map, beginRouteCompute, endRouteCompute, LAYERS, this.config.MAP_SIZE);
         } else {
-            if (this.errorHandler) {
-                this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
-            } else if (typeof console !== 'undefined' && console.debug) {
-                this.errorHandler && this.errorHandler.logDebug('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
-            }
+            this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
         }
     }
 

@@ -2,9 +2,17 @@
 // Manages layer visibility, display states, and layer configuration
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class LayerState extends BaseStateManager {
     constructor(layerKeys, config, options = {}) {
       super(config, options);
+      // default to shared NOOP handler when no ErrorHandler injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       this.layerVisibility = {};
       this.layerConfig = {};
@@ -20,6 +28,7 @@
     }
 
     _initializeLayers(layerKeys) {
+      const h = this.errorHandler;
       try {
         // Set all layers to visible by default
         layerKeys.forEach(key => {
@@ -32,7 +41,7 @@
         // Initialize grid visibility with default or stored value
         this._loadGridVisibility();
       } catch (e) {
-        console.debug('LayerState._initializeLayers failed', 'LayerState._initializeLayers', { error: e });
+        try { h.logWarning('LayerState._initializeLayers failed', 'LayerState._initializeLayers', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -45,11 +54,12 @@
           }
         };
       } catch (e) {
-        console.debug('LayerState._initializeLayerConfig failed', 'LayerState._initializeLayerConfig', { error: e });
+        try { this.errorHandler.logWarning('LayerState._initializeLayerConfig failed', 'LayerState._initializeLayerConfig', { error: e }); } catch (ignore) {}
       }
     }
 
     _loadGridVisibility() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const stored = window.storageService.get(this.config.STORAGE_KEYS.GRID_VISIBLE);
@@ -74,13 +84,14 @@
           this.layerVisibility.grid = false; // Default to hidden
         }
       } catch (e) {
-        console.debug('LayerState._loadGridVisibility failed', 'LayerState._loadGridVisibility', { error: e });
+        try { h.logWarning('LayerState._loadGridVisibility failed', 'LayerState._loadGridVisibility', { error: e }); } catch (ignore) {}
         this.layerVisibility.grid = false;
       }
     }
 
     // Layer visibility management
     setLayerVisible(layerKey, visible) {
+      const h = this.errorHandler;
       try {
         if (layerKey && typeof layerKey === 'string') {
           this.layerVisibility[layerKey] = !!visible;
@@ -92,11 +103,12 @@
           });
         }
       } catch (e) {
-        console.debug('LayerState.setLayerVisible failed', 'LayerState.setLayerVisible', { error: e });
+        try { h.logWarning('LayerState.setLayerVisible failed', 'LayerState.setLayerVisible', { error: e }); } catch (ignore) {}
       }
     }
 
     toggleLayer(layerKey) {
+      const h = this.errorHandler;
       try {
         if (layerKey && typeof layerKey === 'string') {
           const current = !!this.layerVisibility[layerKey];
@@ -109,7 +121,7 @@
           });
         }
       } catch (e) {
-        console.debug('LayerState.toggleLayer failed', 'LayerState.toggleLayer', { error: e });
+        try { h.logWarning('LayerState.toggleLayer failed', 'LayerState.toggleLayer', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -117,7 +129,7 @@
       try {
         return !!this.layerVisibility[layerKey];
       } catch (e) {
-        console.debug('LayerState.isLayerVisible failed', 'LayerState.isLayerVisible', { error: e });
+        try { this.errorHandler.logWarning('LayerState.isLayerVisible failed', 'LayerState.isLayerVisible', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -128,7 +140,7 @@
           this.layerVisibility[key] = true;
         });
       } catch (e) {
-        console.debug('LayerState.showAllLayers failed', 'LayerState.showAllLayers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.showAllLayers failed', 'LayerState.showAllLayers', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -141,7 +153,7 @@
           }
         });
       } catch (e) {
-        console.debug('LayerState.hideAllLayers failed', 'LayerState.hideAllLayers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.hideAllLayers failed', 'LayerState.hideAllLayers', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -149,7 +161,7 @@
       try {
         return Object.keys(this.layerVisibility).filter(key => this.layerVisibility[key]);
       } catch (e) {
-        console.debug('LayerState.getVisibleLayers failed', 'LayerState.getVisibleLayers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getVisibleLayers failed', 'LayerState.getVisibleLayers', { error: e }); } catch (ignore) {}
         return [];
       }
     }
@@ -158,7 +170,7 @@
       try {
         return Object.keys(this.layerVisibility).filter(key => !this.layerVisibility[key]);
       } catch (e) {
-        console.debug('LayerState.getHiddenLayers failed', 'LayerState.getHiddenLayers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getHiddenLayers failed', 'LayerState.getHiddenLayers', { error: e }); } catch (ignore) {}
         return [];
       }
     }
@@ -172,7 +184,7 @@
           heatmapVisible: this._showGridHeatmap
         });
       } catch (e) {
-        console.debug('LayerState.setGridVisible failed', 'LayerState.setGridVisible', { error: e });
+        try { this.errorHandler.logWarning('LayerState.setGridVisible failed', 'LayerState.setGridVisible', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -180,7 +192,7 @@
       try {
         return !!this.layerVisibility.grid;
       } catch (e) {
-        console.debug('LayerState.isGridVisible failed', 'LayerState.isGridVisible', { error: e });
+        try { this.errorHandler.logWarning('LayerState.isGridVisible failed', 'LayerState.isGridVisible', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -193,7 +205,7 @@
           heatmapVisible: !!visible
         });
       } catch (e) {
-        console.debug('LayerState.setHeatmapVisible failed', 'LayerState.setHeatmapVisible', { error: e });
+        try { this.errorHandler.logWarning('LayerState.setHeatmapVisible failed', 'LayerState.setHeatmapVisible', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -201,7 +213,7 @@
       try {
         return !!this._showGridHeatmap;
       } catch (e) {
-        console.debug('LayerState.isHeatmapVisible failed', 'LayerState.isHeatmapVisible', { error: e });
+        try { this.errorHandler.logWarning('LayerState.isHeatmapVisible failed', 'LayerState.isHeatmapVisible', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -211,7 +223,7 @@
       try {
         return Object.values(this.layerVisibility).filter(visible => visible).length;
       } catch (e) {
-        console.debug('LayerState.getVisibleCount failed', 'LayerState.getVisibleCount', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getVisibleCount failed', 'LayerState.getVisibleCount', { error: e }); } catch (ignore) {}
         return 0;
       }
     }
@@ -220,7 +232,7 @@
       try {
         return Object.keys(this.layerVisibility).length;
       } catch (e) {
-        console.debug('LayerState.getTotalCount failed', 'LayerState.getTotalCount', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getTotalCount failed', 'LayerState.getTotalCount', { error: e }); } catch (ignore) {}
         return 0;
       }
     }
@@ -229,7 +241,7 @@
       try {
         return this.getTotalCount() - this.getVisibleCount();
       } catch (e) {
-        console.debug('LayerState.getHiddenCount failed', 'LayerState.getHiddenCount', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getHiddenCount failed', 'LayerState.getHiddenCount', { error: e }); } catch (ignore) {}
         return 0;
       }
     }
@@ -239,7 +251,7 @@
       try {
         return this.layerConfig[layerKey] || {};
       } catch (e) {
-        console.debug('LayerState.getLayerConfig failed', 'LayerState.getLayerConfig', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getLayerConfig failed', 'LayerState.getLayerConfig', { error: e }); } catch (ignore) {}
         return {};
       }
     }
@@ -248,7 +260,7 @@
       try {
         this.layerConfig[layerKey] = { ...config };
       } catch (e) {
-        console.debug('LayerState.setLayerConfig failed', 'LayerState.setLayerConfig', { error: e });
+        try { this.errorHandler.logWarning('LayerState.setLayerConfig failed', 'LayerState.setLayerConfig', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -257,7 +269,7 @@
         const config = this.getLayerConfig(layerKey);
         return config.maxMarkers || 0;
       } catch (e) {
-        console.debug('LayerState.getMaxMarkers failed', 'LayerState.getMaxMarkers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.getMaxMarkers failed', 'LayerState.getMaxMarkers', { error: e }); } catch (ignore) {}
         return 0;
       }
     }
@@ -275,12 +287,13 @@
           triggeredBy: 'bulk-update'
         });
       } catch (e) {
-        console.debug('LayerState.setMultipleLayers failed', 'LayerState.setMultipleLayers', { error: e });
+        try { this.errorHandler.logWarning('LayerState.setMultipleLayers failed', 'LayerState.setMultipleLayers', { error: e }); } catch (ignore) {}
       }
     }
 
     // State persistence (consent-gated)
     saveToStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = {
@@ -299,11 +312,12 @@
           }
         }
       } catch (e) {
-        console.debug('LayerState.saveToStorage failed', 'LayerState.saveToStorage', { error: e });
+        try { h.logWarning('LayerState.saveToStorage failed', 'LayerState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
     loadFromStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = window.storageService.get(this.config.STORAGE_KEYS.LAYER_STATE);
@@ -331,7 +345,7 @@
           }
         }
       } catch (e) {
-        console.debug('LayerState.loadFromStorage failed', 'LayerState.loadFromStorage', { error: e });
+        try { h.logWarning('LayerState.loadFromStorage failed', 'LayerState.loadFromStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -359,7 +373,7 @@
         this._showGridHeatmap = false;
         this._initializeLayerConfig(); // Reset config
       } catch (e) {
-        console.debug('LayerState.reset failed', 'LayerState.reset', { error: e });
+        try { this.errorHandler.logWarning('LayerState.reset failed', 'LayerState.reset', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -368,7 +382,7 @@
       try {
         return layerKey in this.layerVisibility;
       } catch (e) {
-        console.debug('LayerState.hasLayer failed', 'LayerState.hasLayer', { error: e });
+        try { this.errorHandler.logWarning('LayerState.hasLayer failed', 'LayerState.hasLayer', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -379,7 +393,7 @@
           this.layerVisibility[layerKey] = !!visible;
         }
       } catch (e) {
-        console.debug('LayerState.addLayer failed', 'LayerState.addLayer', { error: e });
+        try { this.errorHandler.logWarning('LayerState.addLayer failed', 'LayerState.addLayer', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -388,7 +402,7 @@
         delete this.layerVisibility[layerKey];
         delete this.layerConfig[layerKey];
       } catch (e) {
-        console.debug('LayerState.removeLayer failed', 'LayerState.removeLayer', { error: e });
+        try { this.errorHandler.logWarning('LayerState.removeLayer failed', 'LayerState.removeLayer', { error: e }); } catch (ignore) {}
       }
     }
   }

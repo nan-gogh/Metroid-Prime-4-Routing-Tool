@@ -2,6 +2,11 @@
 // Minimal scaffold for marker drawing and hit-testing.
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class MarkerRenderer {
     /**
      * Creates a new MarkerRenderer instance for drawing markers and handling hit detection.
@@ -21,7 +26,7 @@
       this.highlightState = highlightState;
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       // No direct map reference needed - all access through state managers and renderContext
     }
 
@@ -45,6 +50,8 @@
      */
     render(renderContext) {
       if (!renderContext || !renderContext.ctxMarker) return;
+
+      const h = this.errorHandler;
 
       // Clear marker canvas at start of frame
       const markerCanvas = renderContext.canvasMarker;
@@ -100,7 +107,7 @@
               ctx.fillStyle = color;
               ctx.fill();
               ctx.restore();
-            } catch (e) { this.errorHandler && console.debug('MarkerRenderer: failed to draw selection halo', 'MarkerRenderer.render.selectionHalo', { error: e }); }
+            } catch (e) { h.logWarning('MarkerRenderer: failed to draw selection halo', 'MarkerRenderer.render.selectionHalo', { error: e }); }
           }
 
           try {
@@ -108,7 +115,7 @@
             ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
-          } catch (e) { this.errorHandler && console.debug('MarkerRenderer: failed to draw marker', 'MarkerRenderer.render.marker', { error: e }); }
+          } catch (e) { h.logWarning('MarkerRenderer: failed to draw marker', 'MarkerRenderer.render.marker', { error: e }); }
         }
       }
     }
@@ -164,7 +171,8 @@
         // Ensure minimum size
         return Math.max(size, 1);
       } catch (e) {
-        this.errorHandler && console.debug('MarkerRenderer.computeMarkerSize failed', 'MarkerRenderer.computeMarkerSize', { error: e });
+        const h = this.errorHandler;
+        h.logWarning('MarkerRenderer.computeMarkerSize failed', 'MarkerRenderer.computeMarkerSize', { error: e });
         return baseSize || 4;
       }
     }

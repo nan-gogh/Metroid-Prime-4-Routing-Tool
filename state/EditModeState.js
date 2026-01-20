@@ -2,6 +2,12 @@
 // Manages edit mode state (markers and route editing)
 
 (function (global) {
+  // Shared NOOP handler for guarded logging when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class EditModeState extends BaseStateManager {
     /**
      * Creates a new EditModeState for managing edit mode state
@@ -10,12 +16,15 @@
      */
     constructor(config, options = {}) {
       super(config, options);
+      // default to shared NOOP handler when no errorHandler is injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.editMarkersMode = false;
       this.editRouteMode = false;
     }
 
     // Edit mode management
     setEditMarkersMode(enabled) {
+      const h = this.errorHandler;
       try {
         if (enabled && this.editRouteMode) {
           // Exit route edit mode first
@@ -40,11 +49,12 @@
           });
         }
       } catch (e) {
-        console.debug('EditModeState.setEditMarkersMode failed', 'EditModeState.setEditMarkersMode', { error: e });
+        try { h.logWarning('EditModeState.setEditMarkersMode failed', 'EditModeState.setEditMarkersMode', { error: e }); } catch (ignore) {}
       }
     }
 
     setEditRouteMode(enabled) {
+      const h = this.errorHandler;
       try {
         if (enabled && this.editMarkersMode) {
           // Exit markers edit mode first
@@ -69,7 +79,7 @@
           });
         }
       } catch (e) {
-        console.debug('EditModeState.setEditRouteMode failed', 'EditModeState.setEditRouteMode', { error: e });
+        try { h.logWarning('EditModeState.setEditRouteMode failed', 'EditModeState.setEditRouteMode', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -99,7 +109,7 @@
           }
         }
       } catch (e) {
-        console.debug('EditModeState.enterEditMode failed', 'EditModeState.enterEditMode', { error: e });
+        try { this.errorHandler.logWarning('EditModeState.enterEditMode failed', 'EditModeState.enterEditMode', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -112,7 +122,7 @@
           row.style.removeProperty('--edit-mode-outline-color');
         }
       } catch (e) {
-        console.debug('EditModeState.exitEditMode failed', 'EditModeState.exitEditMode', { error: e });
+        try { this.errorHandler.logWarning('EditModeState.exitEditMode failed', 'EditModeState.exitEditMode', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -136,7 +146,7 @@
           }
         }
       } catch (e) {
-        console.debug('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e });
+        try { this.errorHandler.logWarning('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -168,7 +178,7 @@
           }
         }
       } catch (e) {
-        console.debug('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e });
+        try { this.errorHandler.logWarning('EditModeState.loadFromStorage failed', 'EditModeState.loadFromStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -188,7 +198,7 @@
         this.editMarkersMode = false;
         this.editRouteMode = false;
       } catch (e) {
-        console.debug('EditModeState.reset failed', 'EditModeState.reset', { error: e });
+        try { this.errorHandler.logWarning('EditModeState.reset failed', 'EditModeState.reset', { error: e }); } catch (ignore) {}
       }
     }
   }

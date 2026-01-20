@@ -5,12 +5,17 @@
 // `window.ErrorHandler` for convenience. Pools do not assume a global instance;
 // set a default handler for pre-allocated pools via `setObjectPoolDefaultErrorHandler(handler)`.
 
+// Ensure a single shared NOOP handler exists globally to avoid duplicate declarations
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function () {}, logWarning: function () {}, logError: function () {} };
+}
+
 class ObjectPool {
-    constructor(factory, reset, initialSize = 10, errorHandler = null) {
+    constructor(factory, reset, initialSize = 10, errorHandler = globalThis.__MP4_NOOP_ERROR_HANDLER) {
         this._factory = factory;
         this._reset = reset;
         this._pool = [];
-        this._errorHandler = errorHandler || null;
+        this._errorHandler = errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
         this._stats = {
             created: 0,
             acquired: 0,
@@ -26,7 +31,7 @@ class ObjectPool {
             }
             this._stats.peakSize = Math.max(this._stats.peakSize, this._pool.length);
         } catch (e) {
-            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.constructor.prePopulate', { initialSize });
+            this._errorHandler.logError(e, 'ObjectPool.constructor.prePopulate', { initialSize });
         }
     }
 
@@ -47,7 +52,7 @@ class ObjectPool {
             this._stats.peakSize = Math.max(this._stats.peakSize, this._pool.length + 1);
             return obj;
         } catch (e) {
-            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.acquire');
+            this._errorHandler.logError(e, 'ObjectPool.acquire');
             // Fallback: return a fresh object
             return this._factory();
         }
@@ -59,7 +64,7 @@ class ObjectPool {
      */
     release(obj) {
         if (!obj) {
-            if (this._errorHandler) this._errorHandler.logWarning('Attempted to release null/undefined object', 'ObjectPool.release');
+            this._errorHandler.logWarning('Attempted to release null/undefined object', 'ObjectPool.release');
             return;
         }
 
@@ -68,7 +73,7 @@ class ObjectPool {
             this._pool.push(obj);
             this._stats.released++;
         } catch (e) {
-            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.release', { error: e, obj });
+            this._errorHandler.logError(e, 'ObjectPool.release', { error: e, obj });
             // Don't add corrupted object back to pool
         }
     }
@@ -116,7 +121,7 @@ class ObjectPool {
                 this._pool.length = newSize;
             }
         } catch (e) {
-            if (this._errorHandler) this._errorHandler.logError(e, 'ObjectPool.resize', { newSize });
+            this._errorHandler.logError(e, 'ObjectPool.resize', { newSize });
         }
     }
 }
@@ -132,7 +137,7 @@ const markerPool = new ObjectPool(
         marker.y = 0;
     },
     50, // Pre-allocate 50 markers (matches max custom markers limit)
-    null
+    globalThis.__MP4_NOOP_ERROR_HANDLER
 );
 
 // Route source pool for temporary route sources
@@ -144,7 +149,7 @@ const routeSourcePool = new ObjectPool(
         source.layerIndex = -1;
     },
     50, // Pre-allocate 50 sources 
-    null
+    globalThis.__MP4_NOOP_ERROR_HANDLER
 );
 
 // Allow injection of default error handler for existing pools
@@ -156,8 +161,13 @@ function setObjectPoolDefaultErrorHandler(handler) {
 // Debug function to check pool stats (call from console: checkPoolStats())
 function checkPoolStats() {
     try {
-        console.debug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() });
-    } catch (e) { try { if (markerPool && markerPool._errorHandler && typeof markerPool._errorHandler.logError === 'function') markerPool._errorHandler.logError(e, 'ObjectPool.checkPoolStats'); else if (routeSourcePool && routeSourcePool._errorHandler && typeof routeSourcePool._errorHandler.logError === 'function') routeSourcePool._errorHandler.logError(e, 'ObjectPool.checkPoolStats'); else console.debug('checkPoolStats failed', e); } catch (ignore) {} }
+        // Use the pool's error handler for debug output; NOOP by default
+        markerPool._errorHandler.logDebug('=== Object Pool Statistics ===', 'ObjectPool', { markerPool: markerPool.getStats(), routeSourcePool: routeSourcePool.getStats() });
+    } catch (e) {
+        try {
+            markerPool._errorHandler.logError(e, 'ObjectPool.checkPoolStats');
+        } catch (ignore) {}
+    }
 }
 
 // Make debug function globally available

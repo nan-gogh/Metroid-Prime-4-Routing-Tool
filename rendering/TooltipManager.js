@@ -2,6 +2,14 @@
 // Centralized tooltip manager: handles DOM placement, rAF-batched updates, clamping and minimal DOM writes
 
 (function (global) {
+  // Ensure a single global NOOP error handler exists for guarded logging
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = {
+      logDebug: function () {},
+      logWarning: function () {},
+      logError: function () {}
+    };
+  }
   class TooltipManager {
     constructor() {
       this.container = null; // DOM element containing the map
@@ -13,9 +21,10 @@
     }
 
     init(container) {
-      // TooltipManager uses an injected errorHandler if available; do not use a global instance
-      this.errorHandler = this.errorHandler || null;
-      
+      // TooltipManager uses an injected errorHandler if available; default to global NOOP
+      this.errorHandler = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+      const h = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+
       try {
         this.container = container || document.body;
         // Try to adopt existing tooltip if present
@@ -31,10 +40,10 @@
           this.container.appendChild(this.tooltip);
         }
         // Ensure container is positioned
-        try { if (window.getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative'; } catch (e) { if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') { this.errorHandler.logDebug('TooltipManager: getComputedStyle failed', 'TooltipManager.init.getComputedStyle', { message: e.message }); } else if (typeof console !== 'undefined' && console.debug) { console.debug('TooltipManager: getComputedStyle failed', 'TooltipManager.init.getComputedStyle', { message: e.message }); } }
+        try { if (window.getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative'; } catch (e) { try { h.logDebug('TooltipManager: getComputedStyle failed', 'TooltipManager.init.getComputedStyle', { message: e.message }); } catch (__) { } }
         // Ensure tooltip is inside container
-        try { if (this.tooltip.parentElement !== this.container) this.container.appendChild(this.tooltip); } catch (e) { if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') { this.errorHandler.logDebug('TooltipManager: appendChild failed', 'TooltipManager.init.appendChild', { message: e.message }); } else if (typeof console !== 'undefined' && console.debug) { console.debug('TooltipManager: appendChild failed', 'TooltipManager.init.appendChild', { message: e.message }); } }
-      } catch (e) { if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') { this.errorHandler.logDebug('TooltipManager.init failed', 'TooltipManager.init', { error: e }); } else if (typeof console !== 'undefined' && console.debug) { console.debug('TooltipManager.init failed', 'TooltipManager.init', { error: e }); } }
+        try { if (this.tooltip.parentElement !== this.container) this.container.appendChild(this.tooltip); } catch (e) { try { h.logDebug('TooltipManager: appendChild failed', 'TooltipManager.init.appendChild', { message: e.message }); } catch (__) { } }
+      } catch (e) { try { h.logDebug('TooltipManager.init failed', 'TooltipManager.init', { error: e }); } catch (__) { } }
     }
 
     show(content, x, y) {
@@ -65,6 +74,7 @@
 
     _applyPending() {
       this._pending = false;
+      const h = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       try {
         const req = this._requested;
         const last = this._last;
@@ -83,10 +93,11 @@
           this._place(req.x, req.y);
           last.x = req.x; last.y = req.y;
         }
-      } catch (e) { if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') { this.errorHandler.logDebug('TooltipManager._applyPending failed', 'TooltipManager._applyPending', { error: e }); } else if (typeof console !== 'undefined' && console.debug) { console.debug('TooltipManager._applyPending failed', 'TooltipManager._applyPending', { error: e }); } }
+      } catch (e) { try { h.logDebug('TooltipManager._applyPending failed', 'TooltipManager._applyPending', { error: e }); } catch (__) { } }
     }
 
     _place(x, y) {
+      const h = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       try {
         if (typeof x !== 'number' || typeof y !== 'number') return;
         const parent = this.container;
@@ -104,7 +115,7 @@
         }
         this.tooltip.style.left = desiredLeft + 'px';
         this.tooltip.style.top = desiredTop + 'px';
-      } catch (e) { if (this.errorHandler && typeof this.errorHandler.logDebug === 'function') { this.errorHandler.logDebug('TooltipManager._place failed', 'TooltipManager._place', { error: e }); } else if (typeof console !== 'undefined' && console.debug) { console.debug('TooltipManager._place failed', 'TooltipManager._place', { error: e }); } }
+      } catch (e) { try { h.logDebug('TooltipManager._place failed', 'TooltipManager._place', { error: e }); } catch (__) { } }
     }
   }
 

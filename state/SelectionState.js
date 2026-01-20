@@ -2,9 +2,17 @@
 // Manages marker selection state
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class SelectionState extends BaseStateManager {
     constructor(config, options = {}) {
       super(config, options);
+      // default to shared NOOP handler when no ErrorHandler injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.selectedMarker = null;
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
@@ -27,11 +35,12 @@
           ]);
         }
       } catch (e) {
-        console.debug('SelectionState._setupEventListeners failed', 'SelectionState._setupEventListeners', { error: e });
+        try { this.errorHandler.logWarning('SelectionState._setupEventListeners failed', 'SelectionState._setupEventListeners', { error: e }); } catch (ignore) {}
       }
     }
 
     _handleLayerVisibilityChanged(data) {
+      const h = this.errorHandler;
       try {
         if (data && data.layerKey && data.visible === false) {
           // Layer is being turned off - check if we have a selected marker on this layer
@@ -64,7 +73,7 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState._handleLayerVisibilityChanged failed', 'SelectionState._handleLayerVisibilityChanged', { error: e });
+        try { h.logWarning('SelectionState._handleLayerVisibilityChanged failed', 'SelectionState._handleLayerVisibilityChanged', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -78,7 +87,7 @@
           layer: layerKey || null
         });
       } catch (e) {
-        console.debug('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.setSelectedMarker failed', 'SelectionState.setSelectedMarker', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -88,7 +97,7 @@
         this.selectedMarkerLayer = null;
         this._emitChange(window.EventTypes.SELECTION_CLEARED);
       } catch (e) {
-        console.debug('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.clearSelectedMarker failed', 'SelectionState.clearSelectedMarker', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -98,7 +107,7 @@
                this.selectedMarkerLayer === layerKey &&
                this.selectedMarker.uid === marker.uid;
       } catch (e) {
-        console.debug('SelectionState.isMarkerSelected failed', 'SelectionState.isMarkerSelected', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.isMarkerSelected failed', 'SelectionState.isMarkerSelected', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -117,7 +126,7 @@
           });
         }
       } catch (e) {
-        console.debug('SelectionState.addToMultiSelection failed', 'SelectionState.addToMultiSelection', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.addToMultiSelection failed', 'SelectionState.addToMultiSelection', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -134,7 +143,7 @@
           });
         }
       } catch (e) {
-        console.debug('SelectionState.removeFromMultiSelection failed', 'SelectionState.removeFromMultiSelection', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.removeFromMultiSelection failed', 'SelectionState.removeFromMultiSelection', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -149,7 +158,7 @@
           });
         }
       } catch (e) {
-        console.debug('SelectionState.clearMultiSelection failed', 'SelectionState.clearMultiSelection', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.clearMultiSelection failed', 'SelectionState.clearMultiSelection', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -161,7 +170,7 @@
         }
         return false;
       } catch (e) {
-        console.debug('SelectionState.isInMultiSelection failed', 'SelectionState.isInMultiSelection', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.isInMultiSelection failed', 'SelectionState.isInMultiSelection', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -172,6 +181,7 @@
 
     // State persistence (consent-gated)
     saveToStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = {
@@ -200,11 +210,12 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e });
+        try { h.logWarning('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
     loadFromStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = window.storageService.get(this.config.STORAGE_KEYS.SELECTION_STATE);
@@ -238,7 +249,7 @@
           }
         }
       } catch (e) {
-        console.debug('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e });
+        try { h.logWarning('SelectionState.loadFromStorage failed', 'SelectionState.loadFromStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -266,7 +277,7 @@
           this._eventManager.cleanup();
         }
       } catch (e) {
-        console.debug('SelectionState.reset failed', 'SelectionState.reset', { error: e });
+        try { this.errorHandler.logWarning('SelectionState.reset failed', 'SelectionState.reset', { error: e }); } catch (ignore) {}
       }
     }
   }

@@ -2,6 +2,10 @@
 // Handles sidebar layer visibility controls and show/hide all functionality
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class SidebarController {
     constructor(options) {
       // Required dependencies
@@ -12,7 +16,7 @@
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
-      this.errorHandler = options.errorHandler || null;
+      this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventTypes = window.EventTypes || {};
 
       // Keep map reference for UI operations (temporary)
@@ -46,7 +50,7 @@
           hideBtn.addEventListener('click', () => this._applyLayerToggle(false));
         }
       } catch (e) {
-        console.debug('SidebarController: Failed to bind show/hide all buttons', 'SidebarController._bindShowHideAllButtons', { error: e });
+        this.errorHandler.logWarning('SidebarController: Failed to bind show/hide all buttons', 'SidebarController._bindShowHideAllButtons', { error: e });
       }
     }
 
@@ -55,6 +59,7 @@
      * @param {boolean} show - Whether to show or hide all layers
      */
     _applyLayerToggle(show) {
+      const h = this.errorHandler;
       try {
         const rows = Array.from(document.querySelectorAll('#layerList .layer-toggle'));
         const newVisibility = {};
@@ -77,7 +82,7 @@
             row.classList.toggle('active', !!show);
             row.setAttribute('aria-pressed', !!show ? 'true' : 'false');
           } catch (e) {
-            if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to update layer row visual state');
+            h.logError(e, 'SidebarController: Failed to update layer row visual state');
           }
         });
 
@@ -110,7 +115,7 @@
         // Emit render requested event
         this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to apply layer toggle');
+        h.logError(e, 'SidebarController: Failed to apply layer toggle');
       }
     }
 
@@ -165,7 +170,7 @@
           }
         });
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to bind layer checkboxes');
+        this.errorHandler.logError(e, 'SidebarController: Failed to bind layer checkboxes');
       }
     }
 
@@ -204,7 +209,7 @@
           });
         }
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to handle layer checkbox change');
+        this.errorHandler.logError(e, 'SidebarController: Failed to handle layer checkbox change');
       }
     }
 
@@ -218,7 +223,7 @@
           triggeredBy: 'sidebar-controller'
         });
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to update layer counts');
+        this.errorHandler.logError(e, 'SidebarController: Failed to update layer counts');
       }
     }
 
@@ -237,7 +242,7 @@
             triggeredBy: 'sidebar-controller'
           });
         } catch (e) {
-          if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Scheduled render failed');
+          this.errorHandler.logError(e, 'SidebarController: Scheduled render failed');
         }
       });
     }
@@ -246,6 +251,7 @@
      * Update the visual state of layer checkboxes to match current visibility
      */
     updateLayerCheckboxStates() {
+      const h = this.errorHandler;
       try {
         const layerRows = document.querySelectorAll('#layerList .layer-toggle');
         layerRows.forEach(row => {
@@ -261,11 +267,11 @@
             row.classList.toggle('active', !!isVisible);
             row.setAttribute('aria-pressed', !!isVisible ? 'true' : 'false');
           } catch (e) {
-            if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to update layer row visual state');
+            h.logError(e, 'SidebarController: Failed to update layer row visual state');
           }
         });
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to update layer checkbox states');
+        h.logError(e, 'SidebarController: Failed to update layer checkbox states');
       }
     }
   }

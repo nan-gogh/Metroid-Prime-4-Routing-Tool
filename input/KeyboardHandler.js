@@ -2,6 +2,11 @@
 // Minimal scaffold for keyboard shortcuts and bindings
 
 (function (global) {
+  // Ensure a single shared NOOP handler exists globally to avoid duplicate declarations
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class KeyboardHandler {
     constructor(map, config, eventBus) {
       this.map = map;
@@ -22,8 +27,8 @@
     }
 
     init() {
-      // Initialize error handler from map reference
-      this.errorHandler = this.map ? this.map.errorHandler : (global.errorHandler);
+      // Initialize error handler from map reference with safe global NOOP fallback
+      this.errorHandler = (this.map && this.map.errorHandler) || global.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       
       if (this.bound) return;
       this._onKeyDown = this._onKeyDown.bind(this);
@@ -38,6 +43,7 @@
     }
 
     _onKeyDown(ev) {
+      const h = this.errorHandler; // hot-path alias
       try {
         // Global Escape: exit any edit mode
         if (ev.key === 'Escape' || ev.key === 'Esc') {
@@ -278,7 +284,7 @@
           return;
         }
 
-      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._onKeyDown failed', 'KeyboardHandler._onKeyDown', { error: e }); }
+      } catch (e) { h.logWarning('KeyboardHandler._onKeyDown failed', 'KeyboardHandler._onKeyDown', { error: e }); }
     }
 
     _updateEditModeUI(mode, enabled) {
@@ -308,7 +314,7 @@
             miniMarkers.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
           }
         }
-      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
+      } catch (e) { this.errorHandler && this.errorHandler.logWarning('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
     }
 
     _updateTilesetUI(tileset) {
@@ -330,7 +336,7 @@
           gbtn.classList.toggle('active', !!this.map.tilesetGrayscale); 
           gbtn.setAttribute('aria-pressed', this.map.tilesetGrayscale ? 'true' : 'false'); 
         }
-      } catch (e) { this.errorHandler && console.debug('KeyboardHandler._updateTilesetUI failed', 'KeyboardHandler._updateTilesetUI', { error: e }); }
+      } catch (e) { this.errorHandler && this.errorHandler.logWarning('KeyboardHandler._updateTilesetUI failed', 'KeyboardHandler._updateTilesetUI', { error: e }); }
     }
   }
 

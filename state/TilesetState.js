@@ -2,9 +2,17 @@
 // Manages tileset and display settings
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class TilesetState extends BaseStateManager {
     constructor(config, options = {}) {
       super(config, options);
+      // default to shared NOOP handler when no ErrorHandler injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.tileset = 'sat'; // Default tileset
       this.grayscale = false;
     }
@@ -21,7 +29,7 @@
           });
         }
       } catch (e) {
-        console.debug('TilesetState.setTileset failed', 'TilesetState.setTileset', { error: e });
+        try { this.errorHandler.logWarning('TilesetState.setTileset failed', 'TilesetState.setTileset', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -33,7 +41,7 @@
           triggeredBy: 'grayscale-state-change'
         });
       } catch (e) {
-        console.debug('TilesetState.setGrayscale failed', 'TilesetState.setGrayscale', { error: e });
+        try { this.errorHandler.logWarning('TilesetState.setGrayscale failed', 'TilesetState.setGrayscale', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -56,6 +64,7 @@
 
     // State persistence (consent-gated)
     saveToStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = {
@@ -74,11 +83,12 @@
           }
         }
       } catch (e) {
-        console.debug('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e });
+        try { h.logWarning('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
     loadFromStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = window.storageService.get(this.config.STORAGE_KEYS.TILESET_STATE);
@@ -106,7 +116,7 @@
           }
         }
       } catch (e) {
-        console.debug('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e });
+        try { h.logWarning('TilesetState.loadFromStorage failed', 'TilesetState.loadFromStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -124,7 +134,7 @@
         this.tileset = 'sat';
         this.grayscale = false;
       } catch (e) {
-        console.debug('TilesetState.reset failed', 'TilesetState.reset', { error: e });
+        try { this.errorHandler.logWarning('TilesetState.reset failed', 'TilesetState.reset', { error: e }); } catch (ignore) {}
       }
     }
   }

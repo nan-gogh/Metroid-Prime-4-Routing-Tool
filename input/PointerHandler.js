@@ -2,12 +2,15 @@
 // Minimal scaffold for unified pointer handling (mouse + touch + pen)
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
+  }
   class PointerHandler {
     constructor(map, config, eventBus) {
       this.map = map;
         this.markerManager = map.markerManager;
-      this.config = config || (global.MP4Config || {});
-      this.errorHandler = map.errorHandler || null;
+          this.config = config || (global.MP4Config || {});
+          this.errorHandler = map.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventBus = eventBus || window.eventBus;
       this.eventTypes = window.EventTypes || {};
       this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
@@ -54,6 +57,10 @@
       this.minClickDuration = 150; // ms
       this._cachedRect = null;
       this._panFrameScheduled = false;
+      
+      // Drag detection state for click/drag gating
+      this._pointerDownState = null; // {pointerId, downTime, downX, downY, maxDistSq, samples: [{x, y, time}], isTouch}
+      this._lastClickMeetsThreshold = true; // Store threshold result for _onClick to use
     }
 
     // Performance optimization: Create fast property accessors and method bindings
@@ -84,7 +91,7 @@
           this._findMarkerAt = this.map.markerRenderer.findMarkerAt.bind(this.map.markerRenderer);
         }
         
-      } catch (e) { console.debug('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
+      } catch (e) { this.errorHandler.logWarning('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
     }
 
     init() {
@@ -111,7 +118,7 @@
         window.addEventListener('beforeunload', this._onPageUnload);
         
         this.bound = true;
-      } catch (e) { console.debug('PointerHandler.init failed', 'PointerHandler.init', { error: e }); }
+      } catch (e) { this.errorHandler.logWarning('PointerHandler.init failed', 'PointerHandler.init', { error: e }); }
     }
 
     destroy() {
@@ -130,11 +137,12 @@
         window.removeEventListener('beforeunload', this._onPageUnload);
         
         this.bound = false;
-      } catch (e) { console.debug('PointerHandler.destroy failed', 'PointerHandler.destroy', { error: e }); }
+      } catch (e) { this.errorHandler.logWarning('PointerHandler.destroy failed', 'PointerHandler.destroy', { error: e }); }
     }
 
     _onWheel(ev) {
       try {
+        const h = this.errorHandler;
         ev.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = ev.clientX - rect.left;
@@ -164,19 +172,20 @@
         this._updateResolution();
         this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         // Update hover/cursor state after zoom so cursor matches visual marker size
-        try { this._checkMarkerHover(mouseX, mouseY); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._onWheel.checkMarkerHover'); }
+        try { this._checkMarkerHover(mouseX, mouseY); } catch (err) { h.logError(err, 'PointerHandler._onWheel.checkMarkerHover'); }
         // Debounce wheel until it stops, then save once
-        try { if (this._wheelSaveTimer) clearTimeout(this._wheelSaveTimer); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.clearTimer'); }
+        try { if (this._wheelSaveTimer) clearTimeout(this._wheelSaveTimer); } catch (e) { h.logError(e, 'PointerHandler._onWheel.clearTimer'); }
         try {
           this._wheelSaveTimer = setTimeout(() => {
-            try { this._saveViewToStorage(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
+            try { this._saveViewToStorage(); } catch (e) { h.logError(e, 'PointerHandler._onWheel.saveViewToStorage'); }
           }, 150);
-        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onWheel.setTimeout'); }
-      } catch (e) { console.debug('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
+        } catch (e) { h.logError(e, 'PointerHandler._onWheel.setTimeout'); }
+      } catch (e) { h.logWarning('PointerHandler._onWheel failed', 'PointerHandler._onWheel', { error: e }); }
     }
 
     _onPointerDown(ev) {
       try {
+        const h = this.errorHandler;
         // Cache canvas rect for the active pointer interaction to avoid layout thrash
         this._cachedRect = this.map.canvas.getBoundingClientRect();
         const rect = this._cachedRect;
@@ -185,22 +194,37 @@
         const downTime = Date.now();
         this.pointers.set(ev.pointerId, { x: localX, y: localY, clientX: ev.clientX, clientY: ev.clientY, downTime });
         
-        try { this._checkMarkerHover(localX, localY); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onPointerDown.checkMarkerHover'); }
+        // Initialize drag state for click/drag threshold validation
+        this._pointerDownState = {
+          pointerId: ev.pointerId,
+          downTime: downTime,
+          downX: localX,
+          downY: localY,
+          maxDistSq: 0,
+          samples: [],
+          isTouch: ev.pointerType === 'touch'
+        };
+        
+        try { this._checkMarkerHover(localX, localY); } catch (e) { h.logError(e, 'PointerHandler._onPointerDown.checkMarkerHover'); }
 
         if (this.pointers.size === 1) {
           // Single pointer - handle marker interaction and pan start
           this._handleSinglePointerDown(ev, localX, localY, downTime);
         } else if (this.pointers.size === 2) {
           // Two pointers - start pinch
+          // Disable click gating for multi-touch gestures and clear transient drag state
+          this._lastClickMeetsThreshold = false;
+          this._pointerDownState = null;
           if (this.gestureHandler) {
             this.gestureHandler.startPinch(Array.from(this.pointers.values()));
           }
         }
-      } catch (e) { console.debug('PointerHandler._onPointerDown failed', 'PointerHandler._onPointerDown', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._onPointerDown failed', 'PointerHandler._onPointerDown', { error: e }); }
     }
 
     _handleSinglePointerDown(ev, localX, localY, downTime) {
       try {
+        const h = this.errorHandler;
         // Determine whether pointerdown hit a marker
         const hit = this.map.markerRenderer ? this.map.markerRenderer.findMarkerAt(localX, localY) : null;
 
@@ -226,11 +250,11 @@
             });
             this.dragState.setDragging(false);
             this.pointerDownTime = downTime;
-            try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
+            try { this.canvas.style.cursor = 'grabbing'; } catch (err) { h.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           } else {
                 try { this.mapState && this.mapState._emitChange && this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy: 'wheel' }); } catch (e) {}
             this.pointerDownTime = downTime;
-            try { this.canvas.style.cursor = 'pointer'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
+            try { this.canvas.style.cursor = 'pointer'; } catch (err) { h.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
           }
         } else {
           // Start single-pointer pan
@@ -238,13 +262,35 @@
           this.lastMouseX = ev.clientX;
           this.lastMouseY = ev.clientY;
           this.pointerDownTime = downTime;
-          try { this.canvas.style.cursor = 'grabbing'; } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
+          try { this.canvas.style.cursor = 'grabbing'; } catch (err) { h.logError(err, 'PointerHandler._handleSinglePointerDown.setCursor'); }
         }
-      } catch (e) { console.debug('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._handleSinglePointerDown failed', 'PointerHandler._handleSinglePointerDown', { error: e }); }
     }
 
     _onPointerMove(ev) {
       try {
+        const h = this.errorHandler;
+        
+        // Update drag detection state
+        if (this._pointerDownState && this._pointerDownState.pointerId === ev.pointerId) {
+          const rect = this.canvas.getBoundingClientRect();
+          const clientX = ev.clientX - rect.left;
+          const clientY = ev.clientY - rect.top;
+          const dx = clientX - this._pointerDownState.downX;
+          const dy = clientY - this._pointerDownState.downY;
+          const distSq = dx * dx + dy * dy;
+          
+          if (distSq > this._pointerDownState.maxDistSq) {
+            this._pointerDownState.maxDistSq = distSq;
+          }
+          
+          // Keep a small ring buffer of samples for velocity calculation (last 3)
+          this._pointerDownState.samples.push({x: clientX, y: clientY, time: Date.now()});
+          if (this._pointerDownState.samples.length > 3) {
+            this._pointerDownState.samples.shift();
+          }
+        }
+        
         // Use cached rect during pointer interactions to avoid reflow/layout costs
         const rect = this._cachedRect || this.canvas.getBoundingClientRect();
         const localX = ev.clientX - rect.left;
@@ -301,7 +347,7 @@
             const midLocalX = (this.gestureHandler.pinch.lastMidX - rect.left);
             const midLocalY = (this.gestureHandler.pinch.lastMidY - rect.top);
             this._checkMarkerHover(midLocalX, midLocalY);
-          } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._onPointerMove.routeHandler'); }
+          } catch (err) { h.logError(err, 'PointerHandler._onPointerMove.routeHandler'); }
           return;
         }
 
@@ -331,11 +377,18 @@
           // Update hover state (only when not dragging anything)
           this._checkMarkerHover(localX, localY);
         }
-      } catch (e) { console.debug('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._onPointerMove failed', 'PointerHandler._onPointerMove', { error: e }); }
     }
 
     _onPointerUp(ev) {
       try {
+        const h = this.errorHandler;
+        
+        // Check if this click meets threshold before passing to handlers
+        // Store result so _onClick can access it
+        this._lastClickMeetsThreshold = this._isClickThresholdMet(this._pointerDownState);
+        this._pointerDownState = null; // Clear for next pointer
+        
         // Clear cached rect when interaction ends
         const rect = this._cachedRect || this.canvas.getBoundingClientRect();
         const localX = ev.clientX - rect.left;
@@ -359,7 +412,7 @@
           this._finalizeDrags(ev, localX, localY);
 
           // Save view state
-          try { this._saveViewToStorage(); } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'PointerHandler._onPointerUp.saveViewToStorage'); }
+          try { this._saveViewToStorage(); } catch (err) { h.logError(err, 'PointerHandler._onPointerUp.saveViewToStorage'); }
         }
 
         // Handle route insert finalization
@@ -367,11 +420,12 @@
           this.routeEditHandler.handlePointerUp(ev, localX, localY);
         }
         
-      } catch (e) { console.debug('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._onPointerUp failed', 'PointerHandler._onPointerUp', { error: e }); }
     }
 
     _scheduleEmitViewChange(triggeredBy) {
       if (this._panFrameScheduled) return;
+      const h = this.errorHandler;
       this._panFrameScheduled = true;
       requestAnimationFrame(() => {
         this._panFrameScheduled = false;
@@ -379,7 +433,7 @@
           if (this.mapState && this.mapState._emitChange) {
             this.mapState._emitChange(window.EventTypes.MAP_VIEW_CHANGED, { panX: this.mapState.panX, panY: this.mapState.panY, zoom: this.mapState.zoom, triggeredBy });
           }
-        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._scheduleEmitViewChange'); }
+        } catch (e) { h.logError(e, 'PointerHandler._scheduleEmitViewChange'); }
       });
     }
 
@@ -398,6 +452,7 @@
 
     _handleMarkerDrag(ev, localX, localY) {
       try {
+        const h = this.errorHandler;
         const centerX = localX - (this._draggingMarker.offsetX || 0);
         const centerY = localY - (this._draggingMarker.offsetY || 0);
         const worldX = (centerX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
@@ -412,35 +467,33 @@
         // Mark marker renderer dirty for immediate visual feedback
         try { this.eventBus.emit(this.eventTypes.RENDER_REQUESTED); } catch (e) {}
         
-        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._handleMarkerDrag.setCursor'); }
+        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { h.logError(e, 'PointerHandler._handleMarkerDrag.setCursor'); }
       } catch (err) {
-        if (this.errorHandler) {
-          this.errorHandler.logError(err, 'PointerHandler._handleMarkerDrag');
-        } else if (typeof console !== 'undefined' && console.debug) {
-          console.debug('PointerHandler._handleMarkerDrag error', err);
-        }
+        h.logError(err, 'PointerHandler._handleMarkerDrag');
       }
     }
 
     _promoteMarkerDrag(ev) {
       // Use DragState to promote the candidate to active drag
+      const h = this.errorHandler;
       if (this.dragState.promoteDraggingCandidate(ev)) {
         // Clear selection if dragging currently selected marker
         try {
           if (this.selectionState && this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === this._draggingMarker.uid &&
               this.selectionState.selectedMarkerLayer === this._draggingMarker.layerKey) {
             try { this.selectionState.clearSelectedMarker(); } catch (e) { /* ignore */ }
-            try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
+            try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
           }
-        } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
+        } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
 
         this.pointerDownTime = 0;
-        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
+        try { this.canvas.style.cursor = 'grabbing'; } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.setCursor'); }
       }
     }
 
     _finalizeDrags(ev, localX, localY) {
       // Use DragState to finalize all drags
+      const h = this.errorHandler;
       const hadDraggingMarker = this.dragState.hasDraggingMarker;
       this.dragState.finalizeAllDrags(ev);
       
@@ -451,18 +504,19 @@
             this.markerManager.saveToStorage();
           }
         } catch (e) {
-          this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._finalizeDrags.markerSave');
+          h.logError(e, 'PointerHandler._finalizeDrags.markerSave');
         }
       }
       
       const under = this._findMarkerAt ? this._findMarkerAt(localX, localY) : null;
-      try { this.canvas.style.cursor = under ? 'pointer' : 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._finalizeDrags.setCursor'); }
+      try { this.canvas.style.cursor = under ? 'pointer' : 'grab'; } catch (e) { h.logError(e, 'PointerHandler._finalizeDrags.setCursor'); }
     }
 
     _onMouseLeave(ev) {
       try {
+        const h = this.errorHandler;
         this.dragState.setDragging(false);
-        try { this.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.setCursor'); }
+        try { this.canvas.style.cursor = 'grab'; } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.setCursor'); }
         try {
           const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
           let enteredUi = false;
@@ -472,18 +526,46 @@
             }
           } catch (e) { enteredUi = false; }
           // If pointer left into the UI, keep tooltip visible; otherwise hide it.
-          if (!enteredUi) try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.hideTooltip'); }
-        } catch (e) { try { this.map.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
+          if (!enteredUi) try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.hideTooltip'); }
+        } catch (e) { try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
 
         // Handle route-specific mouse leave
         if (this.routeEditHandler) {
           this.routeEditHandler.handleMouseLeave(ev);
         }
-      } catch (e) { console.debug('PointerHandler._onMouseLeave failed', 'PointerHandler._onMouseLeave', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._onMouseLeave failed', 'PointerHandler._onMouseLeave', { error: e }); }
+    }
+
+    _isClickThresholdMet(state) {
+      if (!state) return false;
+      
+      const elapsedMs = Date.now() - state.downTime;
+      const config = this.config.INTERACTION || {};
+      const isTouch = state.isTouch;
+      
+      // Get thresholds based on pointer type
+      const maxTimeMs = isTouch ? (config.TOUCH_CLICK_TIME_MS || 300) : (config.CLICK_TIME_MS || 200);
+      const maxDistPx = isTouch ? (config.TOUCH_CLICK_DISTANCE_PX || 12) : (config.CLICK_DISTANCE_PX || 6);
+      const maxDistSq = maxDistPx * maxDistPx;
+      
+      // Check time
+      if (elapsedMs > maxTimeMs) {
+        // Duration exceeded - treat as non-click
+        return false;
+      }
+      
+      // Check distance
+      if (state.maxDistSq > maxDistSq) {
+        // Movement exceeded - treat as non-click
+        return false;
+      }
+      
+      return true;
     }
 
     _onClick(e) {
       try {
+        const h = this.errorHandler;
         // Check if this was a quick tap (not a held drag)
         // If pointer was held > minClickDuration, treat as pan, not a click to place/delete marker
         const holdDuration = Date.now() - this.pointerDownTime;
@@ -499,6 +581,11 @@
         const localX = e.clientX - rect.left;
         const localY = e.clientY - rect.top;
         const hit = this._findMarkerAt ? this._findMarkerAt(localX, localY) : null;
+        
+        // meetsThreshold is set by _onPointerUp before calling handlers
+        const meetsThreshold = this._lastClickMeetsThreshold ?? true; // Default to true if not set
+        // Clear stored threshold result to avoid stale reuse
+        this._lastClickMeetsThreshold = null;
 
         if (isQuickTap && hit) {
           const layerKey = hit.layerKey;
@@ -512,24 +599,25 @@
           }
 
           // Try marker-specific click handling
-          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit)) {
+          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit, meetsThreshold)) {
             return; // Marker handler handled it
           }
 
         } else if (e.button === 0 && isQuickTap && !hit) {
           // Try marker-specific empty space click handling (for deselection/placement)
-          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit)) {
+          if (this.markerEditHandler && this.markerEditHandler.handleClick(e, localX, localY, isQuickTap, hit, meetsThreshold)) {
             return; // Marker handler handled it
           }
         }
-      } catch (e) { console.debug('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }
+      } catch (e) { h.logWarning('PointerHandler._onClick failed', 'PointerHandler._onClick', { error: e }); }
     }
 
     // ===== PAGE UNLOAD CLEANUP =====
 
     _onPageUnload(ev) {
       try {
-        this.errorHandler && console.debug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
+        const h = this.errorHandler;
+        h.logDebug('PointerHandler: Cleaning up drag state on page unload', 'PointerHandler._onPageUnload.start', {});
         
         // Use DragState to cancel all drags (handles marker and route drag cleanup)
         this.dragState.cancelAllDrags('Page unload');
@@ -537,10 +625,10 @@
         // Clear remaining transient states
         this.pointers.clear();
         
-        this.errorHandler && console.debug('PointerHandler: Drag state cleanup complete', 'PointerHandler._onPageUnload.complete', {});
+        h.logDebug('PointerHandler: Drag state cleanup complete', 'PointerHandler._onPageUnload.complete', {});
         
       } catch (e) {
-        this.errorHandler && this.errorHandler.logWarning(e, 'PointerHandler._onPageUnload.failed', {});
+        h.logWarning(e, 'PointerHandler._onPageUnload.failed', {});
       }
     }
 

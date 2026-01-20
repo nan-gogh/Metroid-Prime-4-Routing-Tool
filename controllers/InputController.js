@@ -3,12 +3,16 @@
 // Extracts input handler creation and initialization from map.js constructor
 
 (function (global) {
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function () {}, logWarning: function () {}, logError: function () {} };
+  }
+
   class InputController {
     constructor(options) {
       // Required dependencies
       this.map = options.map; // Reference to InteractiveMap instance
       this.eventBus = options.eventBus || window.eventBus;
-      this.errorHandler = options.errorHandler;
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
@@ -37,13 +41,15 @@
      * @private
      */
     async _createHandlers() {
+      const h = this.errorHandler;
+
       // GestureHandler - handles touch gestures
       if (typeof GestureHandler !== 'undefined') {
         this.gestureHandler = new GestureHandler(this.map, this.config);
         try {
           await this.gestureHandler.init();
         } catch (e) {
-          console.debug('GestureHandler.init failed', 'InputController._createHandlers', { error: e });
+          try { h.logWarning('GestureHandler.init failed', 'InputController._createHandlers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -53,7 +59,7 @@
         try {
           await this.pointerHandler.init();
         } catch (e) {
-          console.debug('PointerHandler.init failed', 'InputController._createHandlers', { error: e });
+          try { h.logWarning('PointerHandler.init failed', 'InputController._createHandlers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -63,7 +69,7 @@
         try {
           await this.keyboardHandler.init();
         } catch (e) {
-          console.debug('KeyboardHandler.init failed', 'InputController._createHandlers', { error: e });
+          try { h.logWarning('KeyboardHandler.init failed', 'InputController._createHandlers', { error: e }); } catch (ignore) {}
         }
       }
     }
@@ -101,7 +107,7 @@
           try {
             handler.destroy();
           } catch (e) {
-            console.debug(`Failed to destroy ${handler.constructor.name}`, 'InputController.destroy', { error: e });
+            try { this.errorHandler.logWarning(`Failed to destroy ${handler.constructor.name}`, 'InputController.destroy', { error: e }); } catch (ignore) {}
           }
         }
       });

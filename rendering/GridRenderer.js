@@ -2,6 +2,11 @@
 // Minimal scaffold for grid overlay / quadrant label rendering.
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class GridRenderer {
     /**
      * Creates a new GridRenderer instance for rendering grid overlays and quadrant labels.
@@ -21,7 +26,7 @@
       this.layers = layers || (global.LAYERS || {});
       this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
       this.showGridHeatmap = showGridHeatmap;
-      this.errorHandler = options && options.errorHandler ? options.errorHandler : null;
+      this.errorHandler = options && options.errorHandler ? options.errorHandler : globalThis.NOOP_ERROR_HANDLER;
     }
 
     /**
@@ -71,7 +76,7 @@
         }
         container.style.display = 'none';
         this._labelsContainer = container;
-      } catch (e) { console.debug('GridRenderer.init failed', 'GridRenderer.init', { error: e }); }
+      } catch (e) { this.errorHandler.logWarning('GridRenderer.init failed', 'GridRenderer.init', { error: e }); }
     }
 
     /**
@@ -81,13 +86,14 @@
      * @param {ViewportContext} [viewportContext] - Optional viewport context; falls back to this.mapState
      */
     render(renderContext, viewportContext) {
+      const h = this.errorHandler;
       try {
         // Sub-canvas architecture: GridRenderer renders to its own canvas (gridCanvas)
         // This allows selective rendering without forcing other overlay renderers to redraw
         const gridCtx = renderContext.ctxGrid;
         if (!gridCtx || !renderContext.canvasGrid) return;
         if (!viewportContext) {
-          console.warn('GridRenderer.render called without viewportContext');
+          try { h.logWarning('GridRenderer.render called without viewportContext', 'GridRenderer.render'); } catch (ignore) {}
           return;
         }
 
@@ -98,13 +104,13 @@
         gridCtx.clearRect(0, 0, canvasSize.width, canvasSize.height);
 
         // Always update DOM labels to ensure they reflect current grid visibility state
-        try { this.updateQuadLabels(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
+        try { this.updateQuadLabels(renderContext, viewport); } catch (e) { h.logWarning('GridRenderer.render: updateQuadLabels failed', 'GridRenderer.render.updateQuadLabels', { error: e }); }
 
         // Only render the grid when the runtime grid layer is enabled
         if (!this.layerState.isLayerVisible('grid')) return;
-        try { this.renderQuadrantGrid(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
-        try { this.renderDetailGrid(renderContext, viewport); } catch (e) { console.debug('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
-      } catch (e) { console.debug('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
+        try { this.renderQuadrantGrid(renderContext, viewport); } catch (e) { h.logWarning('GridRenderer.render: renderQuadrantGrid failed', 'GridRenderer.render.renderQuadrantGrid', { error: e }); }
+        try { this.renderDetailGrid(renderContext, viewport); } catch (e) { h.logWarning('GridRenderer.render: renderDetailGrid failed', 'GridRenderer.render.renderDetailGrid', { error: e }); }
+      } catch (e) { h.logWarning('GridRenderer.render: non-fatal error', 'GridRenderer.render', { error: e }); }
     }
 
     /**
@@ -114,6 +120,7 @@
      * @param {ViewportContext} [viewport] - Optional viewport context; falls back to this.mapState
      */
     renderQuadrantGrid(renderContext, viewport = null) {
+      const h = this.errorHandler;
       try {
         // Use viewport if available, otherwise fall back to this.mapState
         const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
@@ -157,7 +164,7 @@
 
             ctx.restore();
         }
-      } catch (e) { console.debug('GridRenderer.renderQuadrantGrid failed', 'GridRenderer.renderQuadrantGrid', { error: e }); }
+      } catch (e) { h.logWarning('GridRenderer.renderQuadrantGrid failed', 'GridRenderer.renderQuadrantGrid', { error: e }); }
     }
 
     /**
@@ -168,6 +175,7 @@
      * @param {ViewportContext} [viewport] - Optional viewport context; falls back to this.mapState
      */
     renderDetailGrid(renderContext, viewport = null) {
+      const h = this.errorHandler;
       try {
         // Use viewport if available, otherwise fall back to this.mapState
         const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
@@ -225,7 +233,7 @@
         
         this.renderAxisLabels(renderContext, viewport);
         ctx.restore();
-      } catch (e) { console.debug('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
+      } catch (e) { h.logWarning('GridRenderer.renderDetailGrid failed', 'GridRenderer.renderDetailGrid', { error: e }); }
     }
 
     /**
@@ -236,6 +244,7 @@
      * @param {Object} viewport - Optional viewport context with zoom/pan values
      */
     renderAxisLabels(renderContext, viewport = null) {
+      const h = this.errorHandler;
       try {
         const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
         const ctx = renderContext.ctxGrid;
@@ -308,7 +317,7 @@
         }
 
         ctx.restore();
-      } catch (e) { console.debug('GridRenderer.renderAxisLabels failed', 'GridRenderer.renderAxisLabels', { error: e }); }
+      } catch (e) { h.logWarning('GridRenderer.renderAxisLabels failed', 'GridRenderer.renderAxisLabels', { error: e }); }
     }
 
     /**
@@ -319,6 +328,7 @@
      * @param {Object} viewport - Optional viewport context with zoom/pan values
      */
     updateQuadLabels(renderContext, viewport = null) {
+      const h = this.errorHandler;
       try {
         const vp = viewport || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
         // Use the stored container reference, or find it if not available
@@ -366,7 +376,7 @@
                     });
                 }
             });
-        } catch (e) { console.debug('GridRenderer.updateQuadLabels: failed to compute counts', 'GridRenderer.updateQuadLabels.computeCounts', { error: e }); }
+        } catch (e) { h.logWarning('GridRenderer.updateQuadLabels: failed to compute counts', 'GridRenderer.updateQuadLabels.computeCounts', { error: e }); }
 
         for (let i = 0; i < labels.length; i++) {
           const el = labels[i];
@@ -403,7 +413,7 @@
             }
           }
         }
-      } catch (e) { console.debug('GridRenderer.updateQuadLabels: non-fatal error', 'GridRenderer.updateQuadLabels', { error: e }); }
+      } catch (e) { h.logWarning('GridRenderer.updateQuadLabels: non-fatal error', 'GridRenderer.updateQuadLabels', { error: e }); }
     }
   }
 

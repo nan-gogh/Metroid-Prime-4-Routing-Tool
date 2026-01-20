@@ -3,6 +3,14 @@
 // Enhanced with edge-case handling and micro-optimizations.
 
 (function (global) {
+  // Ensure global NOOP error handler exists for guarded logging
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = {
+      logDebug: function () {},
+      logWarning: function () {},
+      logError: function () {}
+    };
+  }
   /**
    * RouteRenderer handles rendering of route paths with performance optimizations.
    * Features include caching, edge-case validation, and performance monitoring.
@@ -28,7 +36,7 @@
       this.highlightState = highlightState;
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
-      this.errorHandler = options && options.errorHandler ? options.errorHandler : null;
+      this.errorHandler = options && options.errorHandler ? options.errorHandler : globalThis.NOOP_ERROR_HANDLER;
       this._lastRenderTime = 0;
       this._renderCount = 0;
       this._cachedPath = null;
@@ -68,7 +76,7 @@
           const alpha = (typeof a === 'number') ? (a * alphaFromHex) : alphaFromHex;
           return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         } catch (e) {
-          console.debug('RouteRenderer._hexToRgba fallback failed', 'RouteRenderer._hexToRgba', { error: e });
+          try { this.errorHandler.logWarning('RouteRenderer._hexToRgba fallback failed', 'RouteRenderer._hexToRgba', { error: e }); } catch (__) { }
           return null;
         }
       };
@@ -112,13 +120,10 @@
 
       // Validate route indices are within bounds
       const maxIndex = this.routeManager.routeSources.length - 1;
+      const h = this.errorHandler;
       for (const idx of currentRoute) {
         if (typeof idx !== 'number' || idx < 0 || idx > maxIndex) {
-          if (this.errorHandler && typeof this.errorHandler.logWarning === 'function') {
-            this.errorHandler.logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
-          } else if (typeof console !== 'undefined' && console.debug) {
-            console.debug('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex);
-          }
+          try { h.logWarning('RouteRenderer: Invalid route index', idx, 'max allowed:', maxIndex); } catch (__) { }
           return false;
         }
       }
@@ -155,17 +160,14 @@
       };
 
       const n = currentRoute.length;
+      const h = this.errorHandler;
       for (let i = 0; i < n; i++) {
         const idx = currentRoute[i];
         const src = this.routeManager.routeSources[idx];
         const m = src && src.marker;
 
         if (!m || typeof m.x !== 'number' || typeof m.y !== 'number') {
-          if (this.errorHandler && typeof this.errorHandler.logWarning === 'function') {
-            this.errorHandler.logWarning('RouteRenderer: Invalid marker at index', idx);
-          } else if (typeof console !== 'undefined' && console.debug) {
-            console.debug('RouteRenderer: Invalid marker at index', idx);
-          }
+          try { h.logWarning('RouteRenderer: Invalid marker at index', idx); } catch (__) { }
           pathData.valid = false;
           continue;
         }
@@ -180,7 +182,7 @@
       // Handle route looping: close the route by connecting the last waypoint back to the first
       // Only when BOTH conditions are met: route looping is enabled AND route has at least 3 waypoints
       const routeLooping = this.routeManager && this.routeManager.routeLooping;
-      if (routeLooping && pathData.points.length >= 3) {
+        if (routeLooping && pathData.points.length >= 3) {
         pathData.points.push({ ...pathData.points[0] });
       }
 
@@ -236,8 +238,10 @@
       const startTime = performance.now();
       this._renderCount++;
 
+      const h = this.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+
       if (!viewportContext) {
-        console.warn('RouteRenderer.render called without viewportContext');
+        try { h.logWarning('RouteRenderer.render called without viewportContext', 'RouteRenderer.render'); } catch (ignore) {}
         return;
       }
 
@@ -293,11 +297,11 @@
 
         // Log performance warnings for slow renders
         if (renderTime > 16.67) { // Slower than 60fps
-          console.debug(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`, 'RouteRenderer.render.performance', { renderTime, pointCount: pathData.points.length });
+          try { this.errorHandler.logWarning(`RouteRenderer: Slow render (${renderTime.toFixed(2)}ms) for ${pathData.points.length} points`, 'RouteRenderer.render.performance', { renderTime, pointCount: pathData.points.length }); } catch (__) { }
         }
 
       } catch (e) {
-        console.debug('RouteRenderer.render failed', 'RouteRenderer.render', { error: e });
+        try { this.errorHandler.logError(e, 'RouteRenderer.render'); } catch (__) { }
       }
     }
 
@@ -338,6 +342,7 @@
 
       const pathData = this._computeGlowPathData(viewport);
 
+      const h = this.errorHandler;
       try {
         const glowAlpha = 0.85;
         const routeHex = this.routeColor;
@@ -368,7 +373,7 @@
         ctx.restore();
 
       } catch (e) {
-        console.debug('RouteRenderer: Glow render failed', 'RouteRenderer._renderGlow', { error: e });
+        try { h.logWarning('RouteRenderer: Glow render failed', 'RouteRenderer._renderGlow', { error: e }); } catch (__) { }
       }
     }
 
@@ -480,7 +485,7 @@
         try {
           nodeFill = this._hexToRgba(routeHex, 0.95);
         } catch (e) {
-          this.errorHandler && console.debug('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e });
+          try { this.errorHandler.logWarning('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e }); } catch (__) { }
         }
 
         const dotSize = (global.map && global.map.getRouteNodeSize && typeof global.map.getRouteNodeSize === 'function') ?
@@ -494,7 +499,7 @@
         ctx.restore();
 
       } catch (e) {
-        this.errorHandler && console.debug('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e });
+        try { this.errorHandler.logWarning('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e }); } catch (__) { }
       }
     }
 

@@ -2,9 +2,17 @@
 // Complete view/pan/zoom state management for the map
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class MapState extends BaseStateManager {
     constructor(config, options = {}) {
       super(config, options);
+      // default to shared NOOP handler when no ErrorHandler injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       // View state
       this.panX = 0;
@@ -188,7 +196,8 @@
           triggeredBy: triggeredBy || null
         });
       } catch (e) {
-        this.errorHandler && console.debug('MapState.emitViewChange failed', 'MapState.emitViewChange', { error: e });
+        const h = this.errorHandler;
+        try { h.logWarning('MapState.emitViewChange failed', 'MapState.emitViewChange', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -263,6 +272,7 @@
 
     // State persistence (consent-gated)
     saveToStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const viewData = { panX: this.panX, panY: this.panY, zoom: this.zoom };
@@ -272,11 +282,12 @@
           StorageUtils.saveMapView(viewData);
         }
       } catch (e) {
-        console.debug('MapState.saveToStorage failed', 'MapState.saveToStorage', { error: e });
+        try { h.logWarning('MapState.saveToStorage failed', 'MapState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
     loadFromStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const viewData = window.storageService.get(this.config.STORAGE_KEYS.MAP_VIEW);
@@ -317,7 +328,7 @@
         }
         return false;
       } catch (e) {
-        console.debug('MapState.loadFromStorage failed', 'MapState.loadFromStorage', { error: e });
+        try { h.logWarning('MapState.loadFromStorage failed', 'MapState.loadFromStorage', { error: e }); } catch (ignore) {}
         return false;
       }
     }

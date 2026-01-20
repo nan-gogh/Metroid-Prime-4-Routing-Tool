@@ -1,9 +1,15 @@
 // Route animation utilities for managing route dash animations
 // Extracted from map.js to improve modularity and testability
 
+
+// Ensure a single shared NOOP handler exists globally to avoid duplicate declarations
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function () {}, logWarning: function () {}, logError: function () {} };
+}
+
 const RouteAnimation = {
-    _errorHandler: null,
-    setErrorHandler(handler) { this._errorHandler = handler; },
+    _errorHandler: globalThis.__MP4_NOOP_ERROR_HANDLER,
+    setErrorHandler(handler) { this._errorHandler = handler || globalThis.__MP4_NOOP_ERROR_HANDLER; },
     
     // Configuration constants for route animation
     get CONFIG() {
@@ -76,12 +82,21 @@ const RouteAnimation = {
                 if (map.markRendererDirty) {
                     map.markRendererDirty('RouteRenderer');
                 } else if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
-                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] }); } catch (e) { try { RouteAnimation._errorHandler && RouteAnimation._errorHandler.logError && RouteAnimation._errorHandler.logError(e, 'RouteAnimation.emitRenderIntent'); } catch (logErr) { try { console.debug('RouteAnimation emit failed', logErr); } catch (ignore) {} } }
+                    try {
+                        window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] });
+                    } catch (e) {
+                        try {
+                            RouteAnimation._errorHandler.logError(e, 'RouteAnimation.emitRenderIntent');
+                        } catch (logErr) {
+                            try { globalThis.__MP4_NOOP_ERROR_HANDLER.logWarning('RouteAnimation emit failed', 'RouteAnimation.emitRenderIntent', { error: logErr }); } catch (ignore) {}
+                        }
+                    }
                 } else if (map.render) {
                     map.render(); // Fallback for compatibility
                 }
             } catch (e) {
-                console.debug('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
+                const h = RouteAnimation._errorHandler;
+                h.logWarning('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
             }
 
             // Schedule next frame and store RAF ID properly

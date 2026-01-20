@@ -2,6 +2,11 @@
 // Orchestrates rendering order across renderers with staged control and profiling hooks.
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class RenderPipeline {
     /**
      * Creates a new RenderPipeline instance for orchestrating multiple rendering stages.
@@ -10,7 +15,7 @@
      * @param {MapState} [mapState] - Optional MapState for creating ViewportContext
      */
     constructor(stages, renderContext, mapState) {
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.stages = stages || [];
       this.renderContext = renderContext; // Store render context for passing to renderers
       this.mapState = mapState; // Store mapState for creating ViewportContext during render
@@ -206,6 +211,7 @@
      * @returns {Array} Array of stage names that were successfully rendered
      */
     render(dirtyOnly = null) {
+      const h = this.errorHandler;
       const startTime = performance.now();
       this._renderCount++;
 
@@ -250,7 +256,7 @@
           }
         } catch (e) {
           const stageName = stage.constructor.name || 'UnknownStage';
-          this.errorHandler && console.debug(`RenderPipeline: ${stageName} failed`, 'RenderPipeline.render.stage', { stageName, error: e });
+          h.logError(e, 'RenderPipeline.render.stage', { stageName });
 
           if (this._profilingEnabled) {
             this._recordStageError(stage, e);
@@ -270,7 +276,7 @@
 
       // Log performance warnings
       if (totalTime > 16.67 && this._profilingEnabled) { // Slower than 60fps
-        this.errorHandler && console.debug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
+        h.logWarning(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
       }
 
       return renderedStages; // Return for debugging/analysis

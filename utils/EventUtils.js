@@ -2,6 +2,12 @@
 // Utilities for standardized event handling patterns across the application
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   // EventUtils relies on an injected ErrorHandler passed to its methods.
   // It no longer creates or uses a global `errorHandler` fallback.
   class EventUtils {
@@ -14,16 +20,14 @@
      * @returns {Function} Wrapped event handler with error handling
      */
     static createEventHandler(handler, context = null, eventName = '', errorHandler = null) {
-      const eh = errorHandler || null;
+      const h = errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       return function(data) {
         try {
           return handler.call(context || this, data);
         } catch (e) {
           const errorContext = context ? `${context.constructor.name || 'Unknown'}.${eventName}` : eventName;
-          if (eh && typeof eh.logError === 'function') {
-            eh.logError(e, `EventHandler.${errorContext}`, { eventData: data });
-          }
+          try { h.logError(e, `EventHandler.${errorContext}`, { eventData: data }); } catch (ignore) {}
         }
       };
     }
@@ -44,16 +48,12 @@
         return [];
       }
 
+      const h = errorHandler || globalThis.NOOP_ERROR_HANDLER;
       const unsubscribers = [];
 
       listeners.forEach(config => {
         if (!config.event || typeof config.handler !== 'function') {
-          const eh = errorHandler || null;
-          if (eh && typeof eh.logWarning === 'function') {
-            try { eh.logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (e) { /* best-effort */ }
-          } else if (typeof console !== 'undefined' && console.debug) {
-            try { console.debug('EventUtils.setupEventListeners - invalid listener config', config); } catch (e) { /* best-effort */ }
-          }
+          try { h.logWarning('Invalid listener configuration', 'EventUtils.setupEventListeners', { config }); } catch (ignore) {}
           return;
         }
 
@@ -83,16 +83,14 @@
         return;
       }
 
+      const h = globalThis.NOOP_ERROR_HANDLER;
+
       unsubscribers.forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           try {
             unsubscribe();
           } catch (e) {
-            if (errorHandler && typeof errorHandler.logWarning === 'function') {
-              try { errorHandler.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (logErr) { /* best-effort */ }
-            } else if (typeof console !== 'undefined' && console.debug) {
-              try { console.debug('Error during event listener cleanup', e); } catch (logErr) { /* best-effort */ }
-            }
+            try { h.logWarning('Error during event listener cleanup', 'EventUtils.cleanupEventListeners', { error: e }); } catch (ignore) {}
           }
         }
       });

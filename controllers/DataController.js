@@ -3,6 +3,10 @@
 // Extracts manager creation and initialization from map.js constructor
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
+  }
+
   class DataController {
     constructor(options) {
       // Required dependencies
@@ -10,7 +14,7 @@
       this.markerManager = options.markerManager;
       this.routeManager = options.routeManager;
       this.eventBus = options.eventBus || window.eventBus;
-      this.errorHandler = options.errorHandler;
+      this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
@@ -99,12 +103,12 @@
     _setupManagerCallbacks() {
       if (this._markerManager) {
         // When markers are deleted, clean up route references
-        this._markerManager.setOnCleanupRouteReferences((deletedMarkerUid) => {
+            this._markerManager.setOnCleanupRouteReferences((deletedMarkerUid) => {
           if (this._routeManager) {
             try {
               this._routeManager.cleanupRouteReferences(deletedMarkerUid);
             } catch (e) {
-              console.debug('Route cleanup failed', 'DataController._setupManagerCallbacks', { error: e });
+              this.errorHandler.logWarning(e, 'DataController._setupManagerCallbacks.routeCleanupFailed', { message: 'Route cleanup failed' });
             }
           }
         });
@@ -116,7 +120,7 @@
           try {
             this.eventBus.emit('route:updated');
           } catch (e) {
-            console.debug('Route callback failed', 'DataController._setupManagerCallbacks', { error: e });
+            this.errorHandler.logWarning(e, 'DataController._setupManagerCallbacks.routeCallbackFailed', { message: 'Route callback failed' });
           }
         });
       }
@@ -137,7 +141,7 @@
           }
         }
       } catch (e) {
-        console.debug('Failed to load marker scaling config', 'DataController._loadStoredData', { error: e });
+        this.errorHandler.logWarning(e, 'DataController._loadStoredData.markerScaling', { message: 'Failed to load marker scaling config' });
       }
 
       // Additional storage loading can be added here
@@ -166,7 +170,7 @@
         try {
           unsubscribe();
         } catch (e) {
-          console.debug('Failed to unsubscribe event listener', 'DataController.destroy', { error: e });
+          this.errorHandler.logWarning(e, 'DataController.destroy.unsubscribe', { message: 'Failed to unsubscribe event listener' });
         }
       });
       this._eventUnsubscribers = [];
@@ -176,7 +180,7 @@
         try {
           this._routeManager.destroy();
         } catch (e) {
-          console.debug('Failed to destroy routeManager', 'DataController.destroy', { error: e });
+          this.errorHandler.logWarning(e, 'DataController.destroy.routeManager', { message: 'Failed to destroy routeManager' });
         }
       }
 
@@ -184,7 +188,7 @@
         try {
           this._markerManager.destroy();
         } catch (e) {
-          console.debug('Failed to destroy markerManager', 'DataController.destroy', { error: e });
+          this.errorHandler.logWarning(e, 'DataController.destroy.markerManager', { message: 'Failed to destroy markerManager' });
         }
       }
 

@@ -1,17 +1,18 @@
 // Notification interface for abstracting user feedback operations
 // Provides a clean API for notifications without direct NotificationUtils coupling
 
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+}
+
 const NotificationInterface = {
     // Error notifications
     showError: function(message) {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showLoadError) {
             NotificationUtils.showLoadError(message);
         } else {
-            if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError(message, 'NotificationInterface.showError');
-            } else {
-                console.error('NotificationInterface.showError:', message);
-            }
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logError(message, 'NotificationInterface.showError');
             // Fallback: try to show alert for critical errors
             try {
                 alert('Error: ' + message);
@@ -31,11 +32,8 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showSuccess) {
             NotificationUtils.showSuccess(message);
         } else {
-            if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError('Notification success: ' + message, 'NotificationInterface.showSuccess');
-            } else {
-                console.debug('NotificationInterface.showSuccess:', message);
-            }
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logDebug('NotificationInterface.showSuccess: ' + message, 'NotificationInterface.showSuccess');
             try {
                 const statusEl = document.getElementById('status') || document.getElementById('notification-area');
                 if (statusEl) {
@@ -54,11 +52,8 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showUpgradeNotification) {
             NotificationUtils.showUpgradeNotification(message);
         } else {
-            if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError('Notification upgrade: ' + message, 'NotificationInterface.showUpgradeNotification');
-            } else {
-                console.debug('NotificationInterface.showUpgradeNotification:', message);
-            }
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logDebug('NotificationInterface.showUpgradeNotification: ' + message, 'NotificationInterface.showUpgradeNotification');
             try {
                 const statusEl = document.getElementById('status') || document.getElementById('notification-area');
                 if (statusEl) {
@@ -77,11 +72,8 @@ const NotificationInterface = {
         if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showLoadError) {
             NotificationUtils.showLoadError(message);
         } else {
-            if (typeof window !== 'undefined' && window.errorHandler) {
-                window.errorHandler.logError('Load error: ' + message, 'NotificationInterface.showLoadError');
-            } else {
-                console.error('NotificationInterface.showLoadError:', message);
-            }
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logError('Load error: ' + message, 'NotificationInterface.showLoadError');
             try {
                 alert('Load Error: ' + message);
             } catch (e) {

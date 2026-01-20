@@ -3,6 +3,11 @@
 // Extracted from PointerHandler to improve modularity and maintainability
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class MarkerEditHandler {
     constructor(mapState, selectionState, editModeState, markerManager, layerVisibility, layerConfig, showTooltip, hideTooltip, checkMarkerHover, config, eventBus, errorHandler) {
       this.mapState = mapState;
@@ -16,7 +21,7 @@
       this.config = config || (global.MP4Config || {});
       this.eventBus = eventBus || window.eventBus;
       this.eventTypes = window.EventTypes || {};
-      this.errorHandler = errorHandler;
+      this.errorHandler = errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       // Bind helper methods
       this._checkMarkerHover = checkMarkerHover ? checkMarkerHover.bind(this) : null;
@@ -45,16 +50,23 @@
           }
         });
       } catch (e) {
-        this.errorHandler && console.debug('MarkerEditHandler fast accessors failed', 'MarkerEditHandler.constructor.fastAccessors', { error: e });
+        this.errorHandler && this.errorHandler.logWarning('MarkerEditHandler fast accessors failed', 'MarkerEditHandler.constructor.fastAccessors', { error: e });
       }
     }
 
     // ===== MARKER-SPECIFIC POINTER HANDLING =====
 
-    handleClick(ev, localX, localY, isQuickTap, hit) {
+    handleClick(ev, localX, localY, isQuickTap, hit, meetsThreshold = true) {
+      const h = this.errorHandler;
       try {
         // Only handle quick taps
         if (!isQuickTap) return false;
+
+        // Gate on click threshold to prevent micro-drags placing markers
+        if (!meetsThreshold) {
+          // Click rejected due to micro-drag; do not handle
+          return false;
+        }
 
         // Handle marker hit (selection/deletion)
         if (hit) {
@@ -65,7 +77,7 @@
         return this._handleEmptySpaceClick(ev, localX, localY);
 
       } catch (e) {
-        console.debug('MarkerEditHandler.handleClick failed', 'MarkerEditHandler.handleClick', { error: e });
+        h.logWarning('MarkerEditHandler.handleClick failed', 'MarkerEditHandler.handleClick', { error: e });
         return false;
       }
     }
@@ -73,6 +85,7 @@
     // ===== MARKER-SPECIFIC METHODS =====
 
     _handleMarkerClick(hit, localX, localY) {
+      const h = this.errorHandler;
       const layerKey = hit.layerKey;
 
       // Helper determination: deletable layers (custom markers) vs selectable layers
@@ -93,11 +106,11 @@
         // Normal mode: selection and tooltip behavior
         if (isSelectable) {
           const uid = hit.marker.uid;
-          if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
+            if (this.selectedMarker && this.selectedMarker.uid === uid && this.selectedMarkerLayer === layerKey) {
             // Deselect
             this.selectedMarker = null;
             this.selectedMarkerLayer = null;
-            try { this.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'MarkerEditHandler._handleMarkerClick.hideTooltip'); }
+            try { this.hideTooltip(); } catch (e) { h.logError(e, 'MarkerEditHandler._handleMarkerClick.hideTooltip'); }
             this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
           } else {
             // Select
@@ -117,13 +130,14 @@
     }
 
     _handleEmptySpaceClick(ev, localX, localY) {
+      const h = this.errorHandler;
       // If a marker is currently selected, a quick tap anywhere on the
       // map should deselect it (not start a placement). This avoids
       // accidental placement while the user intends to dismiss selection.
       if (this.selectedMarker) {
         this.selectedMarker = null;
         this.selectedMarkerLayer = null;
-        try { this.hideTooltip(); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'MarkerEditHandler._handleEmptySpaceClick.hideTooltip'); }
+        try { this.hideTooltip(); } catch (e) { h.logError(e, 'MarkerEditHandler._handleEmptySpaceClick.hideTooltip'); }
         this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
         return true; // Handled (deselection)
       }

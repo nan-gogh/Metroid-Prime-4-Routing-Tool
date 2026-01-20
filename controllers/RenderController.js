@@ -3,6 +3,10 @@
 // Extracts renderer creation and pipeline setup from map.js constructor
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
+  }
+
   class RenderController {
     constructor(options) {
       // Required dependencies
@@ -10,7 +14,7 @@
       this.tilesetState = options.tilesetState;
       this.imageState = options.imageState;
       this.eventBus = options.eventBus || window.eventBus;
-      this.errorHandler = options.errorHandler;
+      this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
@@ -52,6 +56,7 @@
      * Initialize rendering system: create renderers, pipeline, and event subscriptions
      */
     async init() {
+      const h = this.errorHandler;
       try {
         // Set up ImageState callback for renderer dirty marking
         if (this.imageState) {
@@ -73,7 +78,7 @@
         this._requestRender();
 
       } catch (e) {
-        this.errorHandler.logError(e, 'RenderController.init failed');
+        h.logError(e, 'RenderController.init failed');
         throw e;
       }
     }
@@ -83,6 +88,7 @@
      * @private
      */
     async _createRenderers() {
+      const h = this.errorHandler;
       // TileRenderer
       if (typeof TileRenderer !== 'undefined') {
         this.tileRenderer = new TileRenderer(
@@ -95,7 +101,7 @@
         try {
           await this.tileRenderer.init();
         } catch (e) {
-          console.debug('TileRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          try { h.logWarning('TileRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -117,7 +123,7 @@
         try {
           await this.heatmapRenderer.init();
         } catch (e) {
-          console.debug('HeatmapRenderer.init failed', 'RenderController._createRenderers', { error: e });
+          try { h.logWarning('HeatmapRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -142,7 +148,7 @@
         try {
           await this.gridRenderer.init(this.containerNode);
         } catch (e) {
-          console.debug('GridRenderer.init failed', 'RenderController._createRenderers', { error: e });
+           try { h.logWarning('GridRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -169,7 +175,7 @@
         try {
           await this.markerRenderer.init();
         } catch (e) {
-          console.debug('MarkerRenderer.init failed', 'RenderController._createRenderers', { error: e });
+           try { h.logWarning('MarkerRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -190,7 +196,7 @@
         try {
           await this.routeRenderer.init();
         } catch (e) {
-          console.debug('RouteRenderer.init failed', 'RenderController._createRenderers', { error: e });
+           try { h.logWarning('RouteRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
 
@@ -208,7 +214,7 @@
         try {
           await this.overlayRenderer.init();
         } catch (e) {
-          console.debug('OverlayRenderer.init failed', 'RenderController._createRenderers', { error: e });
+           try { h.logWarning('OverlayRenderer.init failed', 'RenderController._createRenderers', { error: e }); } catch (ignore) {}
         }
       }
     }
@@ -253,6 +259,8 @@
       // listens for render intent events and executes the pipeline.
       if (!this.eventBus) return;
 
+      const h = this.errorHandler;
+
       try {
         // Full render requested
         const unsubFull = this.eventBus.on(window.EventTypes.RENDER_REQUESTED, (data) => {
@@ -262,7 +270,7 @@
             try {
               data.renderers.forEach(r => this.markRendererDirty(r));
             } catch (e) {
-              try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} }
+              try { h.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (err) { /* swallow */ }
             }
           } else {
             // Mark all known renderers dirty so pipeline performs full render
@@ -270,7 +278,7 @@
               const all = ['TileRenderer', 'HeatmapRenderer', 'GridRenderer', 'MarkerRenderer', 'RouteRenderer', 'OverlayRenderer', 'CompositeStage'];
               all.forEach(name => this.markRendererDirty(name));
             } catch (e) {
-              try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.markAll'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} }
+              try { h.logError(e, 'RenderController._setupEventSubscriptions.markAll'); } catch (err) { /* swallow */ }
             }
           }
           this._requestRender();
@@ -280,7 +288,7 @@
         // Selective render requested (explicit renderer list)
         const unsubSelective = this.eventBus.on(window.EventTypes.RENDER_SELECTIVE_REQUESTED, (data) => {
           if (data && data.renderers && Array.isArray(data.renderers)) {
-            try { data.renderers.forEach(r => this.markRendererDirty(r)); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+            try { data.renderers.forEach(r => this.markRendererDirty(r)); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.renderers.forEach'); } catch (err) { /* swallow */ } }
             this._requestRender();
           }
         });
@@ -293,17 +301,17 @@
             this.markRendererDirty('RouteRenderer');
             this.markRendererDirty('OverlayRenderer');
             this._requestRender();
-          } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.LAYER_VISIBILITY_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.LAYER_VISIBILITY_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubLayerVis);
 
         const unsubTileset = this.eventBus.on(window.EventTypes.TILESET_CHANGED, (data) => {
-          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.TILESET_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.TILESET_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubTileset);
 
         const unsubTilesetGray = this.eventBus.on(window.EventTypes.TILESET_GRAYSCALE_CHANGED, (data) => {
-          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.TILESET_GRAYSCALE_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('TileRenderer'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.TILESET_GRAYSCALE_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubTilesetGray);
 
@@ -312,36 +320,36 @@
             if (data && typeof data.gridVisible === 'boolean') this.markRendererDirty('GridRenderer');
             if (data && typeof data.heatmapVisible === 'boolean') this.markRendererDirty('HeatmapRenderer');
             this._requestRender();
-          } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.DISPLAY_SETTINGS_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.DISPLAY_SETTINGS_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubDisplay);
 
         const unsubHeatmapVis = this.eventBus.on(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, (data) => {
-          try { this.markRendererDirty('HeatmapRenderer'); this.markRendererDirty('CompositeStage'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.HEATMAP_VISIBILITY_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('HeatmapRenderer'); this.markRendererDirty('CompositeStage'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.HEATMAP_VISIBILITY_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubHeatmapVis);
 
         const unsubLayerHighlight = this.eventBus.on(window.EventTypes.LAYER_HIGHLIGHT_CHANGED, (data) => {
-          try { this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.LAYER_HIGHLIGHT_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.LAYER_HIGHLIGHT_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubLayerHighlight);
 
         const unsubSelectionCleared = this.eventBus.on(window.EventTypes.SELECTION_CLEARED, (data) => {
-          try { this.markRendererDirty('MarkerRenderer'); this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CLEARED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('MarkerRenderer'); this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CLEARED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubSelectionCleared);
 
         const unsubSelectionChanged = this.eventBus.on(window.EventTypes.SELECTION_CHANGED, (data) => {
-          try { this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CHANGED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('OverlayRenderer'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.SELECTION_CHANGED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubSelectionChanged);
 
         const unsubRouteUpdated = this.eventBus.on(window.EventTypes.ROUTE_UPDATED, (data) => {
-          try { this.markRendererDirty('RouteRenderer'); this._requestRender(); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions.ROUTE_UPDATED'); } catch (logErr) { try { console.debug('RenderController handler log failed', logErr); } catch (ignore) {} } }
+          try { this.markRendererDirty('RouteRenderer'); this._requestRender(); } catch (e) { try { h.logError(e, 'RenderController._setupEventSubscriptions.ROUTE_UPDATED'); } catch (err) { /* swallow */ } }
         });
         this._eventUnsubscribers.push(unsubRouteUpdated);
       } catch (e) {
-        try { this.errorHandler && this.errorHandler.logError(e, 'RenderController._setupEventSubscriptions'); } catch (err) { /* swallow */ }
+        try { h.logError(e, 'RenderController._setupEventSubscriptions'); } catch (err) { /* swallow */ }
       }
     }
 
@@ -369,6 +377,8 @@
     _render() {
       if (this.isDestroyed) return;
 
+      const h = this.errorHandler;
+
       try {
         if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
           this.renderPipeline.render();
@@ -377,7 +387,7 @@
           this._renderFallback();
         }
       } catch (e) {
-        console.debug('Render failed', 'RenderController._render', { error: e });
+        h.logWarning('Render failed', 'RenderController._render', { error: e });
       }
     }
 
@@ -400,7 +410,8 @@
           try {
             renderer.render();
           } catch (e) {
-            console.debug(`Fallback render failed for ${renderer.constructor.name}`, 'RenderController._renderFallback', { error: e });
+            const h = this.errorHandler;
+            h.logWarning(`Fallback render failed for ${renderer.constructor.name}`, 'RenderController._renderFallback', { error: e });
           }
         }
       });
@@ -459,7 +470,7 @@
         try {
           unsubscribe();
         } catch (e) {
-          console.debug('Failed to unsubscribe event listener', 'RenderController.destroy', { error: e });
+          this.errorHandler.logWarning('Failed to unsubscribe event listener', 'RenderController.destroy', { error: e });
         }
       });
       this._eventUnsubscribers = [];
@@ -479,7 +490,7 @@
           try {
             renderer.destroy();
           } catch (e) {
-            console.debug(`Failed to destroy ${renderer.constructor.name}`, 'RenderController.destroy', { error: e });
+            this.errorHandler.logWarning(`Failed to destroy ${renderer.constructor.name}`, 'RenderController.destroy', { error: e });
           }
         }
       });
@@ -489,7 +500,7 @@
         try {
           this.renderPipeline.destroy();
         } catch (e) {
-          console.debug('Failed to destroy renderPipeline', 'RenderController.destroy', { error: e });
+          this.errorHandler.logWarning('Failed to destroy renderPipeline', 'RenderController.destroy', { error: e });
         }
       }
 

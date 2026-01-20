@@ -3,9 +3,17 @@
 // Single source of truth for drag state across the application
 
 (function (global) {
+  // Shared NOOP handler for guarded logging when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class DragState extends BaseStateManager {
     constructor(config, options = {}) {
       super(config, options);
+      // Default to shared NOOP handler when no errorHandler injected
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       // Core dragging states
       this.isDragging = false; // Basic panning
@@ -40,7 +48,9 @@
           hasActiveDrag: { get: () => this.isDragging || this.hasDraggingMarker || this.hasDraggingCandidate || this.hasRouteInsert || this.hasRouteNodeCandidate || this.hasWaypointDrag }
         });
       } catch (e) {
-        this.errorHandler && console.debug('DragState fast accessors failed', 'DragState.constructor.fastAccessors', { error: e });
+        try {
+          this.errorHandler.logWarning('DragState fast accessors failed', 'DragState.constructor.fastAccessors', { error: e });
+        } catch (ignore) {}
       }
     }
 
@@ -64,7 +74,9 @@
           }
         }
       } catch (e) {
-        this.errorHandler && console.debug('Failed to find marker object for drag promotion', 'DragState.promoteDraggingCandidate', { error: e });
+        try {
+          this.errorHandler.logWarning('Failed to find marker object for drag promotion', 'DragState.promoteDraggingCandidate', { error: e });
+        } catch (ignore) {}
       }
 
       this.draggingMarker = {
@@ -107,11 +119,13 @@
       if (!this.draggingMarker) return;
 
       // Restore original position if available
-      if (this.draggingMarker.originalX !== undefined && this.draggingMarker.originalY !== undefined) {
+        if (this.draggingMarker.originalX !== undefined && this.draggingMarker.originalY !== undefined) {
         this.updateDraggingMarkerPosition(this.draggingMarker.originalX, this.draggingMarker.originalY);
-        this.errorHandler && console.debug('Restored marker to original position', 'DragState.cancelDraggingMarker', {
-          markerUid: this.draggingMarker.uid, originalX: this.draggingMarker.originalX, originalY: this.draggingMarker.originalY
-        });
+        try {
+          this.errorHandler.logDebug('Restored marker to original position', 'DragState.cancelDraggingMarker', {
+            markerUid: this.draggingMarker.uid, originalX: this.draggingMarker.originalX, originalY: this.draggingMarker.originalY
+          });
+        } catch (ignore) {}
       }
 
       this.finalizeDraggingMarker();
@@ -165,7 +179,9 @@
     cancelRouteInsert(reason = 'Operation cancelled') {
       if (!this.routeInsert) return;
 
-      this.errorHandler && console.debug('Cancelling route insert', 'DragState.cancelRouteInsert', { reason });
+      try {
+        this.errorHandler.logWarning('Cancelling route insert', 'DragState.cancelRouteInsert', { reason });
+      } catch (ignore) {}
 
       // Release pooled objects
       if (this.routeInsert.tempMarker && typeof markerPool !== 'undefined') {

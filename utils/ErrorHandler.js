@@ -18,6 +18,12 @@ class ErrorHandler {
      */
     logError(error, context = '', additionalData = {}) {
         try {
+            // Honor runtime ERRORS flag if available
+            try {
+                if (typeof window !== 'undefined' && window.MP4Config && window.MP4Config.ERRORS === false) return;
+            } catch (flagErr) {
+                // ignore and continue to best-effort log
+            }
             const isErr = error instanceof Error;
             const errorMessage = isErr ? error.message : (error && typeof error === 'object' && error.message) ? error.message : String(error);
             const errorStack = isErr ? error.stack : (error && error.stack) ? error.stack : '';
@@ -53,6 +59,13 @@ class ErrorHandler {
      */
     logWarning(message, context = '', additionalData = {}) {
         try {
+            // Honor runtime WARNINGS flag if available
+            try {
+                if (typeof window !== 'undefined' && window.MP4Config && window.MP4Config.WARNINGS === false) return;
+            } catch (flagErr) {
+                // ignore and continue to best-effort log
+            }
+
             this._writeConsole('warn', `[${context}] ${message}`, {
                 timestamp: new Date().toISOString(),
                 context,
@@ -87,7 +100,7 @@ class ErrorHandler {
             });
         } catch (inner) {
             try {
-                if (typeof console !== 'undefined' && console.debug) console.debug('ErrorHandler.logDebug internal failure', inner);
+                if (typeof console !== 'undefined' && console.error) console.error('ErrorHandler.logDebug internal failure', inner);
             } catch (ignore) {}
         }
     }

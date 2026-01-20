@@ -2,6 +2,10 @@
 // Handles toolbar controls: zoom buttons, edit mode toggles, export/import buttons
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class ToolbarController {
     constructor(options) {
       // Required dependencies
@@ -13,7 +17,7 @@
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
-      this.errorHandler = options.errorHandler || null;
+      this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventTypes = window.EventTypes || {};
 
       // NO map reference needed anymore
@@ -227,11 +231,7 @@
                 this.markerManager.exportMarkers();
               } else {
                 // Marker manager missing is an internal condition — log it, don't show a user notification
-                if (this.errorHandler) {
-                  this.errorHandler.logError('Marker manager not available', 'ToolbarController.exportMarkers');
-                } else if (typeof console !== 'undefined' && console.debug) {
-                  console.debug('Marker manager not available');
-                }
+                this.errorHandler.logDebug('Marker manager not available', 'ToolbarController.exportMarkers');
               }
             } catch (err) {
               if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {

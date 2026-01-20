@@ -2,6 +2,7 @@
 // Abstract base class for all state managers providing common patterns and utilities
 
 (function (global) {
+  
   class BaseStateManager {
     /**
      * Base constructor for all state managers
@@ -28,7 +29,10 @@
           this.eventBus.emit(event, data);
         }
       } catch (e) {
-        console.debug(`${this.constructor.name}._emitChange failed`, `${this.constructor.name}._emitChange`, { error: e, event });
+        try {
+          // Single guarded logging call; ignore if logging fails
+          this.errorHandler.logWarning(`${this.constructor.name}._emitChange failed`, `${this.constructor.name}._emitChange`, { error: e, event });
+        } catch (ignore) {}
       }
     }
 

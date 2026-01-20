@@ -4,6 +4,11 @@
 const MP4Config = {
     // Global debug toggle for development; set true to enable debug logging
     DEBUG: false,
+
+    // Runtime logging toggles: allow gating different severity levels
+    // Errors should generally remain enabled; warnings are optional.
+    WARNINGS: true,
+    ERRORS: true,
     
     MAP_SIZE: 8192,
     TILE_RESOLUTIONS: [256, 512, 1024, 2048, 4096, 8192],
@@ -31,6 +36,20 @@ const MP4Config = {
 
     CUSTOM_MARKERS: {
         MAX_COUNT: 50
+    },
+
+    // Click/drag threshold detection for preventing accidental markers during edit mode
+    INTERACTION: {
+        // Desktop thresholds
+        CLICK_TIME_MS: 200,              // Max duration (ms) to treat as click
+        CLICK_DISTANCE_PX: 8,            // Max distance (CSS px) from pointerdown to treat as click
+        
+        // Touch-specific thresholds (more lenient)
+        TOUCH_CLICK_TIME_MS: 300,        // Touch click timeout (ms)
+        TOUCH_CLICK_DISTANCE_PX: 12,     // Touch click distance (CSS px)
+        
+        // Velocity detection for quick swipes (optional)
+        VELOCITY_PX_PER_MS: 0.06         // Threshold for fast movement (px/ms) that overrides distance
     },
 
     STORAGE_KEYS: {

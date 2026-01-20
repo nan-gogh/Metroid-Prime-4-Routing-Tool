@@ -3,6 +3,11 @@
 // This replaces the old OverlayClearStage concept and enables independent sub-canvas rendering
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class CompositeStage {
     /**
      * Creates a new CompositeStage for layering sub-canvases onto the main display.
@@ -10,7 +15,7 @@
      */
     constructor(config) {
       this.config = config || {};
-      this.errorHandler = null;
+      this.errorHandler = (this.config && this.config.errorHandler) || globalThis.NOOP_ERROR_HANDLER;
     }
 
     /**
@@ -42,6 +47,7 @@
           { canvas: renderContext.canvasOverlay, name: 'Overlay' }
         ];
 
+        const h = this.errorHandler;
         for (let layer of layers) {
           if (!layer.canvas) continue;
           try {
@@ -49,7 +55,7 @@
             // drawImage is GPU-accelerated and very efficient
             ctx.drawImage(layer.canvas, 0, 0);
           } catch (e) {
-            this.errorHandler && console.debug(
+            h.logWarning && h.logWarning(
               `CompositeStage: Failed to composite ${layer.name} layer`,
               'CompositeStage.render.composite',
               { error: e, layerName: layer.name }
@@ -57,7 +63,8 @@
           }
         }
       } catch (e) {
-        this.errorHandler && console.debug(
+        const h = this.errorHandler;
+        h.logWarning && h.logWarning(
           'CompositeStage: Failed to render',
           'CompositeStage.render',
           { error: e }

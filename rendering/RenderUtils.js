@@ -2,10 +2,23 @@
 // Shared rendering utilities: color conversion, coordinate helpers, and common shapes
 
 (function (global) {
+  // Ensure a single global NOOP error handler exists for guarded logging
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = {
+      logDebug: function () {},
+      logWarning: function () {},
+      logError: function () {}
+    };
+  }
+
+  // Module-level handler (falls back to the global NOOP)
+  const moduleErrorHandler = (typeof global !== 'undefined' && global.moduleErrorHandler) || globalThis.NOOP_ERROR_HANDLER;
+
   const RenderUtils = {
     // Convert hex string (#RRGGBB, #RRGGBBAA, #RGB) to rgba(...) string.
     // Delegates to existing ColorUtils if available.
     hexToRgba(hex, alpha = 1) {
+      const h = moduleErrorHandler;
       try {
         if (typeof global.ColorUtils !== 'undefined' && typeof global.ColorUtils.hexToRgba === 'function') {
           return global.ColorUtils.hexToRgba(hex, alpha);
@@ -33,7 +46,7 @@
         const a = (typeof alpha === 'number') ? (alpha * alphaFromHex) : alphaFromHex;
         return `rgba(${r}, ${g}, ${b}, ${a})`;
       } catch (e) {
-        try { console.debug('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha }); } catch (__) { }
+        try { h.logWarning('RenderUtils.hexToRgba failed', 'RenderUtils.hexToRgba', { error: e, hex, alpha }); } catch (__) { }
         return null;
       }
     },
@@ -41,6 +54,7 @@
     // Draw a filled circle
     drawCircle(ctx, x, y, radius, fillStyle = null, strokeStyle = null) {
       if (!ctx) return;
+      const h = moduleErrorHandler;
       try {
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -53,13 +67,14 @@
           ctx.stroke();
         }
       } catch (e) {
-        try { console.debug('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e }); } catch (__) { }
+        try { h.logWarning('RenderUtils.drawCircle failed', 'RenderUtils.drawCircle', { error: e }); } catch (__) { }
       }
     },
 
     // Draw a rounded rectangle
     drawRoundedRect(ctx, x, y, w, h, r = 6, fillStyle = null, strokeStyle = null) {
       if (!ctx) return;
+      const h = moduleErrorHandler;
       try {
         const radius = Math.min(r, w / 2, h / 2);
         ctx.beginPath();
@@ -78,12 +93,13 @@
           ctx.stroke();
         }
       } catch (e) {
-        try { console.debug('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e }); } catch (__) { }
+        try { h.logWarning('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e }); } catch (__) { }
       }
     },
 
     // Safe wrapper for transforming world coordinates to screen using mapState
     worldToScreen(mapState, worldX, worldY, mapSize) {
+      const h = moduleErrorHandler;
       try {
         const MAP_SIZE = mapSize || (typeof window !== 'undefined' && window.MAP_SIZE) || (mapState && mapState.MAP_SIZE) || 8192;
         if (!mapState) return null;
@@ -91,7 +107,7 @@
         const y = worldY * MAP_SIZE * (mapState.zoom || 1) + (mapState.panY || 0);
         return { x, y };
       } catch (e) {
-        try { console.debug('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e }); } catch (__) { }
+        try { h.logWarning('RenderUtils.worldToScreen failed', 'RenderUtils.worldToScreen', { error: e }); } catch (__) { }
         return null;
       }
     }

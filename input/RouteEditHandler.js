@@ -3,11 +3,15 @@
 // Extracted from PointerHandler to reduce complexity
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
   class RouteEditHandler {
     constructor(map, config, eventBus, editModeState, dragState) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
-      this.errorHandler = map.errorHandler || null;
+      this.errorHandler = map.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.eventBus = eventBus || window.eventBus;
       this.dragState = dragState;
 
@@ -174,6 +178,7 @@
     // ===== ROUTE-SPECIFIC POINTER HANDLING =====
 
     handlePointerDown(ev, localX, localY, downTime) {
+      const h = this.errorHandler;
       try {
         // Route node drag start - check regular markers first
         const hit = this._checkMarkerHover ? this._checkMarkerHover(localX, localY) : null;
@@ -224,13 +229,14 @@
 
         return false; // Not handled
       } catch (e) {
-        this.errorHandler.logError('RouteEditHandler.handlePointerDown failed:', 'interactions', e);
-        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
+        h.logError('RouteEditHandler.handlePointerDown failed:', 'interactions', e);
+        h.logDebug('RouteEditHandler.handlePointerDown failed', 'RouteEditHandler.handlePointerDown', { error: e });
         return false;
       }
     }
 
     handlePointerMove(ev, localX, localY) {
+      const h = this.errorHandler;
       try {
         // Handle route node drag promotion
         this._handleRouteNodePromotion(ev, localX, localY);
@@ -252,13 +258,14 @@
 
         return false; // Not handled
       } catch (e) {
-        this.errorHandler.logError('RouteEditHandler.handlePointerMove failed:', 'interactions', e);
-        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
+        h.logError('RouteEditHandler.handlePointerMove failed:', 'interactions', e);
+        h.logDebug('RouteEditHandler.handlePointerMove failed', 'RouteEditHandler.handlePointerMove', { error: e });
         return false;
       }
     }
 
     handlePointerUp(ev, localX, localY) {
+      const h = this.errorHandler;
       try {
         // Clear route node candidate if active
         if (this.dragState.routeNodeCandidate && ev.pointerId === this.dragState.routeNodeCandidate.pointerId) {
@@ -272,12 +279,13 @@
         this._finalizeRouteInsert(ev);
         return false; // Continue with other handlers
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handlePointerUp failed', 'RouteEditHandler.handlePointerUp', { error: e });
+        h.logDebug('RouteEditHandler.handlePointerUp failed', 'RouteEditHandler.handlePointerUp', { error: e });
         return false;
       }
     }
 
     handleClick(ev, localX, localY, isQuickTap, hit) {
+      const h = this.errorHandler;
       try {
         const shouldReturn = !isQuickTap || !this.editRouteMode;
         if (shouldReturn) {
@@ -294,12 +302,13 @@
         return true; // Handled
 
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handleClick failed', 'RouteEditHandler.handleClick', { error: e });
+        h.logDebug('RouteEditHandler.handleClick failed', 'RouteEditHandler.handleClick', { error: e });
         return false;
       }
     }
 
     handleMouseLeave(ev) {
+      const h = this.errorHandler;
       try {
         // Clear hover preview
         this.dragState.setRoutePreview(null);
@@ -321,7 +330,7 @@
 
         return false; // Continue with other handlers
       } catch (e) {
-        this.errorHandler && this.errorHandler.logDebug('RouteEditHandler.handleMouseLeave failed', 'RouteEditHandler.handleMouseLeave', { error: e });
+        h.logDebug('RouteEditHandler.handleMouseLeave failed', 'RouteEditHandler.handleMouseLeave', { error: e });
         return false;
       }
     }
@@ -340,6 +349,7 @@
     }
 
     _handleWaypointDrag(ev, localX, localY) {
+      const h = this.errorHandler;
       try {
         if (!this.dragState.waypointDrag) return; // Safety check
         
@@ -360,12 +370,13 @@
         try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED); } catch (e) {}
 
       } catch (e) {
-        this.errorHandler.logError('Error in _handleWaypointDrag:', 'interactions', e);
-        this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._handleWaypointDrag');
+        h.logError('Error in _handleWaypointDrag:', 'interactions', e);
+        h.logError(e, 'RouteEditHandler._handleWaypointDrag');
       }
     }
 
     _handleRouteInsertDrag(ev, localX, localY) {
+      const h = this.errorHandler;
       try {
         const tempIdx = this._routeInsert.tempIndex;
         if (this._routeSources && this._routeSources[tempIdx]) {
@@ -429,7 +440,7 @@
             }
           } catch (e) { this.errorHandler && this.errorHandler.logDebug('Failed to update route length display on route modification', 'RouteEditHandler.handlePointerUp.updateRouteLengthDisplay', { error: e }); }
         } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerUp.updateRouteLength'); }
-      } catch (err) { this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
+      } catch (err) { h.logError(err, 'RouteEditHandler.handlePointerUp.finalizeRouteInsert'); }
     }
 
     _handleRoutePreview(localX, localY) {
@@ -691,12 +702,8 @@
           sources: newSources
         });
         } catch (err) {
-        if (this.errorHandler) {
-          this.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
-        } else if (typeof console !== 'undefined' && console.debug) {
-          this.errorHandler && this.errorHandler.logDebug('RouteEditHandler._handleRouteEditClick error', 'RouteEditHandler._handleRouteEditClick', { error: err });
+          this.errorHandler && this.errorHandler.logError(err, 'RouteEditHandler._handleRouteEditClick');
         }
-      }
     }
 
     _cancelRouteInsert(reason = 'Route modification cancelled') {

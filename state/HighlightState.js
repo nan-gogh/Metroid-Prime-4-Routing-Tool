@@ -2,9 +2,17 @@
 // Manages layer highlighting state and configuration
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   class HighlightState extends BaseStateManager {
     constructor(config, options = {}) {
       super(config, options);
+      // Default to shared NOOP error handler when none provided
+      this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.highlightedLayers = new Set();
       this.highlightConfig = {}; // layerKey -> { scale }
       this.highlightScaleMultiplier = 1.0;
@@ -13,6 +21,7 @@
 
     // Layer highlighting management
     setLayerHighlight(layerKey, scale) {
+      const h = this.errorHandler;
       try {
         const wasHighlighted = this.highlightedLayers.has(layerKey);
         this.highlightedLayers.add(layerKey);
@@ -27,11 +36,12 @@
           });
         }
       } catch (e) {
-        console.debug('HighlightState.setLayerHighlight failed', 'HighlightState.setLayerHighlight', { error: e });
+        try { h.logWarning('HighlightState.setLayerHighlight failed', 'HighlightState.setLayerHighlight', { error: e }); } catch (ignore) {}
       }
     }
 
     clearLayerHighlight(layerKey) {
+      const h = this.errorHandler;
       try {
         const wasHighlighted = this.highlightedLayers.has(layerKey);
         this.highlightedLayers.delete(layerKey);
@@ -45,11 +55,12 @@
           });
         }
       } catch (e) {
-        console.debug('HighlightState.clearLayerHighlight failed', 'HighlightState.clearLayerHighlight', { error: e });
+        try { h.logWarning('HighlightState.clearLayerHighlight failed', 'HighlightState.clearLayerHighlight', { error: e }); } catch (ignore) {}
       }
     }
 
     toggleLayerHighlight(layerKey) {
+      const h = this.errorHandler;
       try {
         if (this.highlightedLayers.has(layerKey)) {
           this.clearLayerHighlight(layerKey);
@@ -65,10 +76,10 @@
             highlightedLayers: Array.from(this.highlightedLayers)
           });
         } catch (e) {
-          console.debug('HighlightState.emitToggleChange failed', 'HighlightState.toggleLayerHighlight', { error: e });
+          try { h.logWarning('HighlightState.emitToggleChange failed', 'HighlightState.toggleLayerHighlight', { error: e }); } catch (ignore) {}
         }
       } catch (e) {
-        console.debug('HighlightState.toggleLayerHighlight failed', 'HighlightState.toggleLayerHighlight', { error: e });
+        try { h.logWarning('HighlightState.toggleLayerHighlight failed', 'HighlightState.toggleLayerHighlight', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -76,7 +87,7 @@
       try {
         return this.highlightedLayers.has(layerKey);
       } catch (e) {
-        console.debug('HighlightState.isLayerHighlighted failed', 'HighlightState.isLayerHighlighted', { error: e });
+        try { this.errorHandler.logWarning('HighlightState.isLayerHighlighted failed', 'HighlightState.isLayerHighlighted', { error: e }); } catch (ignore) {}
         return false;
       }
     }
@@ -86,23 +97,25 @@
         const config = this.highlightConfig[layerKey];
         return (config ? config.scale : 1.0) * this.highlightScaleMultiplier;
       } catch (e) {
-        console.debug('HighlightState.getHighlightScale failed', 'HighlightState.getHighlightScale', { error: e });
+        try { this.errorHandler.logWarning('HighlightState.getHighlightScale failed', 'HighlightState.getHighlightScale', { error: e }); } catch (ignore) {}
         return 1.0;
       }
     }
 
     setHighlightScaleMultiplier(multiplier) {
+      const h = this.errorHandler;
       try {
         this.highlightScaleMultiplier = Math.max(0.1, Math.min(5.0, multiplier)); // Clamp between 0.1 and 5.0
         this._emitChange(window.EventTypes.LAYER_HIGHLIGHT_MULTIPLIER_CHANGED, {
           multiplier: this.highlightScaleMultiplier
         });
       } catch (e) {
-        console.debug('HighlightState.setHighlightScaleMultiplier failed', 'HighlightState.setHighlightScaleMultiplier', { error: e });
+        try { h.logWarning('HighlightState.setHighlightScaleMultiplier failed', 'HighlightState.setHighlightScaleMultiplier', { error: e }); } catch (ignore) {}
       }
     }
 
     clearAllHighlights() {
+      const h = this.errorHandler;
       try {
         const hadHighlights = this.highlightedLayers.size > 0;
         this.highlightedLayers.clear();
@@ -116,12 +129,13 @@
           });
         }
       } catch (e) {
-        console.debug('HighlightState.clearAllHighlights failed', 'HighlightState.clearAllHighlights', { error: e });
+        try { h.logWarning('HighlightState.clearAllHighlights failed', 'HighlightState.clearAllHighlights', { error: e }); } catch (ignore) {}
       }
     }
 
     // State persistence (consent-gated)
     saveToStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = {
@@ -142,11 +156,12 @@
           }
         }
       } catch (e) {
-        console.debug('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e });
+        try { h.logWarning('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e }); } catch (ignore) {}
       }
     }
 
     loadFromStorage() {
+      const h = this.errorHandler;
       try {
         if (window.storageService) {
           const state = window.storageService.get(this.config.STORAGE_KEYS.HIGHLIGHT_STATE);
@@ -180,7 +195,7 @@
           }
         }
       } catch (e) {
-        console.debug('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e });
+        try { h.logWarning('HighlightState.loadFromStorage failed', 'HighlightState.loadFromStorage', { error: e }); } catch (ignore) {}
       }
     }
 
@@ -201,7 +216,7 @@
         this.highlightScaleMultiplier = 1.0;
         this._previousHighlights.clear();
       } catch (e) {
-        console.debug('HighlightState.reset failed', 'HighlightState.reset', { error: e });
+        try { this.errorHandler.logWarning('HighlightState.reset failed', 'HighlightState.reset', { error: e }); } catch (ignore) {}
       }
     }
   }

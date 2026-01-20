@@ -2,16 +2,23 @@
 // Centralized event bus for cross-module communication
 
 (function (global) {
+  // Shared NOOP handler used when no ErrorHandler is injected
+  globalThis.NOOP_ERROR_HANDLER = globalThis.NOOP_ERROR_HANDLER || {
+    logDebug: function () {},
+    logWarning: function () {},
+    logError: function () {}
+  };
   // EventBus uses an injected ErrorHandler via `setErrorHandler()`.
   // It no longer creates or depends on a global `errorHandler`.
   class EventBus {
     constructor() {
       this._listeners = new Map();
-      this._errorHandler = null;
+      // default to shared NOOP handler until a real handler is injected
+      this._errorHandler = globalThis.NOOP_ERROR_HANDLER;
     }
 
     setErrorHandler(errorHandler) {
-      this._errorHandler = errorHandler;
+      this._errorHandler = errorHandler || globalThis.NOOP_ERROR_HANDLER;
     }
 
     on(event, callback, context = null) {
@@ -44,11 +51,15 @@
           try {
             listener(data);
           } catch (e) {
-            const eh = this._errorHandler;
-            if (eh && typeof eh.logError === 'function') {
-              try { eh.logError(e, `EventBus.emit.${event}`); } catch (logErr) { /* best-effort */ }
-            } else if (typeof console !== 'undefined' && console.debug) {
-              try { console.debug(`EventBus.emit.${event} handler error`, e); } catch (logErr) { /* best-effort */ }
+            const h = this._errorHandler || globalThis.NOOP_ERROR_HANDLER;
+            try {
+              if (h && typeof h.logError === 'function') {
+                h.logError(e, `EventBus.emit.${event}`);
+              } else if (h && typeof h.logWarning === 'function') {
+                h.logWarning(`EventBus.emit.${event} handler error`, `EventBus.emit.${event}`, { error: e });
+              }
+            } catch (logErr) {
+              /* best-effort */
             }
           }
         });

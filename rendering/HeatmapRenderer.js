@@ -2,6 +2,11 @@
 // Renders green crystal density heatmap visualization
 
 (function (global) {
+  // Shared, guarded NOOP error handler to avoid per-file duplicates
+  if (typeof globalThis.NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+  }
+
   class HeatmapRenderer {
     /**
      * Creates a new HeatmapRenderer instance for rendering green crystal density heatmaps.
@@ -17,7 +22,7 @@
       this.config = config || (global.MP4Config || {});
       this.layers = layers || (global.LAYERS || {});
       this.greenCrystalLayers = greenCrystalLayers || (global.GREEN_CRYSTAL_LAYERS || []);
-      this.errorHandler = global.errorHandler;
+      this.errorHandler = global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       // No direct map reference needed - all access through state managers and renderContext
     }
 
@@ -74,11 +79,12 @@
       try { 
         this._renderNow(renderContext); 
       } catch (e) { 
-        this.errorHandler && console.debug('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); 
+        this.errorHandler.logWarning('HeatmapRenderer._renderNow failed', 'HeatmapRenderer.render._renderNow', { error: e }); 
       }
     }
 
     _renderNow(renderContext) {
+      const h = this.errorHandler;
       try {
         this._ensureBufferSize(renderContext);
         if (!this.offscreenCtx) return;
@@ -117,7 +123,7 @@
                 });
               }
             });
-        } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: failed to build buckets', 'HeatmapRenderer._renderNow.buildBuckets', { error: e }); }
+        } catch (e) { h.logWarning('HeatmapRenderer._renderNow: failed to build buckets', 'HeatmapRenderer._renderNow.buildBuckets', { error: e }); }
 
         // Compute counts and draw soft radial blobs per marker into offscreen
         const counts = buckets.map(b => b.length);
@@ -174,9 +180,9 @@
           try { heatmapCtx.drawImage(this.offscreenCanvas, 0, 0, pw, ph, 0, 0, cssWidth, cssHeight); } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to draw offscreen canvas:', 'function', e); }
           try { heatmapCtx.globalCompositeOperation = 'source-over'; } catch (e) { this.errorHandler.logError('HeatmapRenderer._renderNow: Failed to reset composite operation:', 'function', e); }
           heatmapCtx.restore();
-        } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
+        } catch (e) { h.logWarning('HeatmapRenderer._renderNow: blit failed', 'HeatmapRenderer._renderNow.blit', { error: e }); }
 
-      } catch (e) { this.errorHandler && console.debug('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }
+      } catch (e) { h.logWarning('HeatmapRenderer._renderNow: non-fatal error', 'HeatmapRenderer._renderNow', { error: e }); }
     }
   }
 

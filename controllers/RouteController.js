@@ -3,6 +3,10 @@
 // Handles all route-specific operations and coordination between input, state, and rendering
 
 (function (global) {
+  if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
+  }
+
   class RouteController {
     constructor(routeManager, dragState, mapState, config, eventBus, errorHandler) {
       this.routeManager = routeManager;
@@ -11,7 +15,7 @@
       this.config = config || (global.MP4Config || {});
       this.eventBus = eventBus || window.eventBus;
       this.eventTypes = window.EventTypes || {};
-      this.errorHandler = errorHandler;
+      this.errorHandler = errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
       // Bind methods for performance
       this.findRouteSegmentAt = this.findRouteSegmentAt.bind(this);
@@ -51,7 +55,7 @@
             routeRenderer.invalidateCache();
           }
         } catch (e) {
-          console.debug('Failed to invalidate route renderer cache', 'RouteController.setRoute.invalidateCache', { error: e });
+          this.errorHandler.logWarning('Failed to invalidate route renderer cache', 'RouteController.setRoute.invalidateCache', { error: e });
         }
 
         try {

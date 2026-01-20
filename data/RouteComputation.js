@@ -1,9 +1,14 @@
 // Route computation utilities for complex route algorithms
 // Extracted from map.js to improve modularity and testability
 
+// Ensure a single shared NOOP handler exists globally to avoid duplicate declarations
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function () {}, logWarning: function () {}, logError: function () {} };
+}
+
 const RouteComputation = {
-    _errorHandler: null,
-    setErrorHandler(handler) { this._errorHandler = handler; },
+    _errorHandler: globalThis.__MP4_NOOP_ERROR_HANDLER,
+    setErrorHandler(handler) { this._errorHandler = handler || globalThis.__MP4_NOOP_ERROR_HANDLER; },
     // Configuration constants for route computation
     get CONFIG() {
         return {
@@ -72,11 +77,8 @@ const RouteComputation = {
                 }
             }
         } catch (e) {
-            if (RouteComputation._errorHandler) {
-                RouteComputation._errorHandler.logError(e, 'RouteComputation.expandRouteNearby');
-            } else if (typeof console !== 'undefined' && console.debug) {
-                console.debug('RouteComputation.expandRouteNearby error', e);
-            }
+            const h = RouteComputation._errorHandler;
+            h.logError(e, 'RouteComputation.expandRouteNearby');
         } finally {
             endRouteCompute();
         }

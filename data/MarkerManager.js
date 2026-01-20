@@ -1,6 +1,10 @@
 // MarkerManager class - decoupled marker management
 // Handles all marker operations without global state dependencies
 
+if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
+    globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
+}
+
 class MarkerManager {
         constructor(config, storage, notifications, eventBus, options = {}) {
         this.config = config || { maxMarkers: 50, layerPrefix: 'cm' };
@@ -8,8 +12,8 @@ class MarkerManager {
         this.notifications = notifications;
         this.eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
         
-                // Error handling (constructor-injected)
-                this.errorHandler = options.errorHandler || new ErrorHandler();
+        // Error handling (constructor-injected)
+        this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
         // Internal state
         this.markers = [];
@@ -37,6 +41,7 @@ class MarkerManager {
                     window.EventUtils.createEventManager(this) : null;
 
                 if (eventManager) {
+                    const h = this.errorHandler;
                     eventManager.setup(this.eventBus, [
                         {
                             event: window.EventTypes.MARKER_EDIT_REQUESTED,
@@ -54,7 +59,7 @@ class MarkerManager {
                                 try {
                                     this.clearMarkers();
                                 } catch (e) {
-                                    console.debug('MarkerManager clear handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                                    h.logWarning('MarkerManager clear handler failed', 'MarkerManager._setupEventListeners', { error: e });
                                 }
                             }
                         }
@@ -69,7 +74,7 @@ class MarkerManager {
                                 this.removeMarker(data.uid);
                             }
                         } catch (e) {
-                            console.debug('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                            this.errorHandler.logWarning('MarkerManager MARKER_EDIT_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
                         }
                     });
 
@@ -79,14 +84,14 @@ class MarkerManager {
                         try {
                             this.clearMarkers();
                         } catch (e) {
-                            console.debug('MarkerManager MARKER_CLEAR_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
+                            this.errorHandler.logWarning('MarkerManager MARKER_CLEAR_REQUESTED handler failed', 'MarkerManager._setupEventListeners', { error: e });
                         }
                     });
 
                     if (typeof unsubscribeClear === 'function') this._eventUnsubscribers.push(unsubscribeClear);
                 }
             } catch (e) {
-                console.debug('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
+                this.errorHandler.logWarning('MarkerManager._setupEventListeners failed', 'MarkerManager._setupEventListeners', { error: e });
             }
         }
     }
@@ -98,7 +103,7 @@ class MarkerManager {
             try {
                 this.eventBus.emit(eventType, eventData);
             } catch (e) {
-                console.debug('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
+                this.errorHandler.logWarning('MarkerManager EventBus emission failed', 'MarkerManager._notifyChanged.emit', { error: e, eventType });
             }
         }
     }
@@ -185,7 +190,7 @@ class MarkerManager {
             try {
                 this.onCleanupRouteReferences(uid);
             } catch (e) {
-                console.debug('MarkerManager cleanup callback failed', 'MarkerManager.deleteMarker.cleanupCallback', { error: e });
+                this.errorHandler.logWarning('MarkerManager cleanup callback failed', 'MarkerManager.deleteMarker.cleanupCallback', { error: e });
             }
         }
 
@@ -442,7 +447,7 @@ class MarkerManager {
                 this._eventUnsubscribers = [];
             }
         } catch (e) {
-            this.errorHandler && console.debug('MarkerManager.destroy failed', 'MarkerManager.destroy', { error: e });
+            this.errorHandler.logWarning('MarkerManager.destroy failed', 'MarkerManager.destroy', { error: e });
         }
     }
 }
