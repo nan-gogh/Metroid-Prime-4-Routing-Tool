@@ -1201,8 +1201,17 @@ class InteractiveMap {
         }
 
         if (needed !== current && loading !== needed) {
-            
-            try { if (this.tileRenderer && typeof this.tileRenderer.loadImage === 'function') this.tileRenderer.loadImage(needed); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage'); }
+            try {
+                if (this.tileRenderer && typeof this.tileRenderer.loadImage === 'function') {
+                    const runLoad = () => {
+                        try { this.tileRenderer.loadImage(needed); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage.scheduled'); }
+                    };
+
+                    // Use a short setTimeout (macro task) to avoid starting heavy decode/fetch
+                    // work synchronously in the rAF/input path; 50ms matches main branch behavior
+                    try { setTimeout(runLoad, 50); } catch (e) { setTimeout(runLoad, 0); }
+                }
+            } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.updateResolution.tileRenderer.loadImage'); }
         }
 
         // Update status display
@@ -2556,9 +2565,13 @@ async function init() {
                         // (that would create an infinite loop). Just handle derived effects and rendering.
                         if (data && map && map.mapState) {
                             // Always update resolution when MAP_VIEW_CHANGED is received (mapState already updated)
-                                if (typeof data.zoom === 'number') {
-                                map.imageState && map.imageState.updateResolution && map.imageState.updateResolution();
-                                map.updateResolution && map.updateResolution();
+                            // Defer updateResolution off the input stack to prevent heavy bitmap decode
+                            // from blocking rAF during zoom transitions (especially 4K -> 8K)
+                            if (typeof data.zoom === 'number') {
+                                setTimeout(() => {
+                                    try { map.imageState && map.imageState.updateResolution && map.imageState.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - imageState.updateResolution'); }
+                                    try { map.updateResolution && map.updateResolution(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - updateResolution'); }
+                                }, 0);
                             }
                             // Trigger render for view changes (map.mapState already has the new panX, panY, zoom)
                             if (map && typeof map.render === 'function') {

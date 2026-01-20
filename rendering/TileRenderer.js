@@ -43,9 +43,16 @@
      * Renders the map tiles, background, and honeycomb pattern to the tile canvas.
      * This method handles the main tile rendering logic migrated from map.renderTiles().
      * @param {RenderContext} renderContext - The render context providing canvas access
+     * @param {ViewportContext} viewportContext - Viewport context (required)
      */
-    render(renderContext) {
+    render(renderContext, viewportContext) {
       if (!renderContext || !renderContext.ctxTiles) return;
+      if (!viewportContext) {
+        console.warn('TileRenderer.render called without viewportContext');
+        return;
+      }
+
+      const vp = viewportContext;
 
       // Migrate rendering logic from map.renderTiles()
       const ctxT = renderContext.ctxTiles;
@@ -78,9 +85,9 @@
       } catch (e) { console.debug('TileRenderer: background fill failed', 'TileRenderer.render.backgroundFill', { error: e }); }
 
       if (this.imageState.currentImage) {
-        const size = (this.config.MAP_SIZE || 8192) * this.mapState.zoom;
+        const size = (this.config.MAP_SIZE || 8192) * vp.zoom;
         try { ctxT.imageSmoothingEnabled = true; ctxT.imageSmoothingQuality = 'high'; } catch (e) { console.debug('TileRenderer: image smoothing not supported', 'TileRenderer.render.imageSmoothing', { error: e.message }); }
-        try { ctxT.drawImage(this.imageState.currentImage, this.mapState.panX, this.mapState.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', 'TileRenderer.render.drawImage', { error: e }); }
+        try { ctxT.drawImage(this.imageState.currentImage, vp.panX, vp.panY, size, size); } catch (e) { console.debug('TileRenderer: drawImage failed', 'TileRenderer.render.drawImage', { error: e }); }
       }
     }
 
@@ -154,7 +161,20 @@
           if (this.imageState._tilesetGeneration !== gen) { this.imageState.loadingResolution = null; return; }
 
           let bmp = null;
-          try { bmp = await this._runBitmapTask(() => createImageBitmap(blob)); } catch (e) { bmp = null; }
+          try {
+            const tileKey = `${size}@${folder}`;
+            if (typeof window !== 'undefined' && window.map && window.map.renderController && window.map.renderController.getInstrumentation) {
+              const instr = window.map.renderController.getInstrumentation();
+              if (instr) instr.recordDecodeStart(tileKey);
+            }
+            const decodeStart = performance.now();
+            bmp = await this._runBitmapTask(() => createImageBitmap(blob));
+            const decodeDuration = performance.now() - decodeStart;
+            if (typeof window !== 'undefined' && window.map && window.map.renderController && window.map.renderController.getInstrumentation) {
+              const instr = window.map.renderController.getInstrumentation();
+              if (instr) instr.recordDecodeComplete(tileKey, decodeDuration);
+            }
+          } catch (e) { bmp = null; }
 
           if (bmp) {
             try { bmp._tilesetFolder = folder; } catch (e) { this.errorHandler.logError(e, 'TileRenderer: Failed to set tileset folder on bitmap'); }
@@ -280,6 +300,8 @@
         }
       });
     }
+
+    
 
     // Helper: run a promise-returning function with a timeout (ms)
     _withTimeout(fn, ms) {

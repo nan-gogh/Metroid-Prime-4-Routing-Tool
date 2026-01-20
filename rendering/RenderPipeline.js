@@ -26,6 +26,11 @@
       this._dirtyFlags = new Set(); // Track which renderers need updating
       this._frameScheduled = false; // Prevent multiple rAF calls
 
+      // Instrumentation API for performance diagnostics
+      this.instrumentation = (typeof PerformanceInstrumentation !== 'undefined')
+        ? new PerformanceInstrumentation()
+        : null;
+
       // Initialize all stages as enabled by default
       this.stages.forEach((stage, index) => {
         if (stage && typeof stage.render === 'function') {
@@ -237,6 +242,10 @@
             if (this._profilingEnabled) {
               const stageTime = performance.now() - stageStartTime;
               this._recordStagePerformance(stage, stageTime);
+              // Also record in instrumentation API
+              if (this.instrumentation) {
+                this.instrumentation.recordRendererTime(stageName, stageTime);
+              }
             }
           }
         } catch (e) {
@@ -254,31 +263,17 @@
       this._lastRenderTime = totalTime;
       this._averageRenderTime = (this._averageRenderTime * (this._renderCount - 1) + totalTime) / this._renderCount;
 
+      // Record frame metrics in instrumentation API
+      if (this._profilingEnabled && this.instrumentation) {
+        this.instrumentation.recordFrame(totalTime, renderedStages);
+      }
+
       // Log performance warnings
       if (totalTime > 16.67 && this._profilingEnabled) { // Slower than 60fps
         this.errorHandler && console.debug(`RenderPipeline: Slow frame (${totalTime.toFixed(2)}ms) - stages: [${renderedStages.join(', ')}]`, 'RenderPipeline.render.performance', { totalTime, renderedStages });
       }
 
       return renderedStages; // Return for debugging/analysis
-    }
-
-    /**
-     * Enables performance profiling for the rendering pipeline.
-     * When enabled, detailed timing and error statistics are collected for each stage.
-     * @returns {RenderPipeline} This pipeline instance for chaining
-     */
-    enableProfiling() {
-      this._profilingEnabled = true;
-      return this;
-    }
-
-    /**
-     * Disables performance profiling for the rendering pipeline.
-     * @returns {RenderPipeline} This pipeline instance for chaining
-     */
-    disableProfiling() {
-      this._profilingEnabled = false;
-      return this;
     }
 
     /**
@@ -408,6 +403,55 @@
      */
     disableAllStages() {
       this._enabledStages.clear();
+      return this;
+    }
+
+    /**
+     * Get the performance instrumentation API for diagnostics.
+     * @returns {PerformanceInstrumentation|null} Instrumentation instance or null if unavailable
+     */
+    getInstrumentation() {
+      return this.instrumentation;
+    }
+
+    /**
+     * Get performance summary for monitoring/debugging.
+     * @returns {Object} Summary of all collected metrics
+     */
+    getPerformanceSummary() {
+      return this.instrumentation ? this.instrumentation.getSummary() : null;
+    }
+
+    /**
+     * Reset performance metrics to start fresh measurement.
+     * @returns {RenderPipeline} This pipeline instance for chaining
+     */
+    resetMetrics() {
+      if (this.instrumentation) {
+        this.instrumentation.reset();
+      }
+      return this;
+    }
+
+    /**
+     * Enable performance profiling for all rendering stages.
+     * This records frame time and per-renderer metrics.
+     * @returns {RenderPipeline} This pipeline instance for chaining
+     */
+    enableProfiling() {
+      this._profilingEnabled = true;
+      if (this.instrumentation) {
+        this.instrumentation.reset();
+      }
+      return this;
+    }
+
+    /**
+     * Disable performance profiling.
+     * @returns {RenderPipeline} This pipeline instance for chaining
+     */
+    disableProfiling() {
+      this._profilingEnabled = false;
       return this;
     }
   }

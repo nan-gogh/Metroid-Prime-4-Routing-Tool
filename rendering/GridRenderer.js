@@ -86,9 +86,12 @@
         // This allows selective rendering without forcing other overlay renderers to redraw
         const gridCtx = renderContext.ctxGrid;
         if (!gridCtx || !renderContext.canvasGrid) return;
+        if (!viewportContext) {
+          console.warn('GridRenderer.render called without viewportContext');
+          return;
+        }
 
-        // Use viewportContext if available, otherwise fall back to this.mapState
-        const viewport = viewportContext || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+        const viewport = viewportContext;
 
         // Clear grid canvas at the start
         const canvasSize = renderContext.getCanvasSize();

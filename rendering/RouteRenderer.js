@@ -236,8 +236,12 @@
       const startTime = performance.now();
       this._renderCount++;
 
-      // Use viewportContext if available, otherwise fall back to this.mapState
-      const viewport = viewportContext || (this.mapState ? { zoom: this.mapState.zoom, panX: this.mapState.panX, panY: this.mapState.panY } : { zoom: 1, panX: 0, panY: 0 });
+      if (!viewportContext) {
+        console.warn('RouteRenderer.render called without viewportContext');
+        return;
+      }
+
+      const viewport = viewportContext;
 
       try {
         if (!this._validateRouteData()) {
