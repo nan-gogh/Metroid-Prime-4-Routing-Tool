@@ -2175,23 +2175,10 @@ function hideEditOverlayProperly() {
 function exitEditModeForLayer(layerKey) {
     try {
         if (layerKey === 'customMarkers' && map && map.editMarkersMode) {
+            // Update canonical state and delegate UI updates to centralized handlers
             map.editMarkersMode = false;
             try { map._exitEditMode && map._exitEditMode('customMarkers'); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.exitCustomMarkersMode'); }
-            try {
-                const editToggle = document.getElementById('editMarkersToggle');
-                if (editToggle) {
-                    editToggle.setAttribute('aria-pressed', 'false');
-                    editToggle.classList.remove('active');
-                }
-            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.updateEditMarkersToggle'); }
-            try {
-                const mini = document.getElementById('editMarkersToggleMini');
-                if (mini) {
-                    mini.classList.remove('glow');
-                    mini.setAttribute('aria-pressed', 'false');
-                }
-            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.updateMiniEditMarkersToggle'); }
-            // Properly hide edit overlay with full cleanup
+            // Hide edit overlay and request a render; UI toggles update via EDIT_MODE_CHANGED/LAYER_VISIBILITY_CHANGED listeners
             hideEditOverlayProperly();
             try {
                 if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
@@ -2201,25 +2188,11 @@ function exitEditModeForLayer(layerKey) {
                 }
             } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.renderAfterExitCustomMarkers'); }
         } else if (layerKey === 'route' && map && map.editRouteMode) {
+            // Update canonical state and delegate UI updates to centralized handlers
             map.editRouteMode = false;
             try { map._exitEditMode && map._exitEditMode('route'); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.exitRouteMode'); }
-            try {
-                const routeEditToggle = document.getElementById('editRouteToggle');
-                if (routeEditToggle) {
-                    routeEditToggle.setAttribute('aria-pressed', 'false');
-                    routeEditToggle.classList.remove('active');
-                }
-            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.updateRouteEditToggle'); }
-            try {
-                const mini = document.getElementById('editRouteToggleMini');
-                if (mini) {
-                    mini.classList.remove('glow');
-                    mini.setAttribute('aria-pressed', 'false');
-                }
-            } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.updateMiniRouteEditToggle'); }
-            // Reset cursor to grab when exiting route edit mode
+            // Reset cursor and hide overlay; REST of UI updated by centralized listeners
             try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.resetCursor'); }
-            // Properly hide edit overlay with full cleanup
             hideEditOverlayProperly();
             try {
                 if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
@@ -2308,12 +2281,62 @@ async function init() {
                 {
                     event: window.EventTypes.LAYER_VISIBILITY_CHANGED,
                     handler: (data) => {
-                        // Update layer state manager when controllers change visibility
-                        // Only handle events with layerVisibility (from controllers), not layerKey (from layerState itself)
-                        if (data && data.layerVisibility && map && map.layerState) {
-                            map.layerState.layerVisibility = data.layerVisibility;
+                        try {
+                            const h = moduleErrorHandler;
+
+                            // Entry log for diagnostics
+                            h && h.logDebug && h.logDebug('map.js: LAYER_VISIBILITY_CHANGED handler entry', 'map.LAYER_VISIBILITY_CHANGED.entry', {
+                                data: data,
+                                editMarkersMode: map && map.editModeState ? !!map.editModeState.editMarkersMode : undefined,
+                                editRouteMode: map && map.editModeState ? !!map.editModeState.editRouteMode : undefined,
+                                layerStateSnapshot: map && map.layerState ? { ...map.layerState.layerVisibility } : undefined
+                            });
+
+                            // Update layer state manager when controllers change visibility
+                            // Only handle events with layerVisibility (from controllers), not layerKey (from layerState itself)
+                            if (data && data.layerVisibility && map && map.layerState) {
+                                map.layerState.layerVisibility = data.layerVisibility;
+                                h && h.logDebug && h.logDebug('map.js: layerState.layerVisibility updated from event', 'map.LAYER_VISIBILITY_CHANGED.updateLayerState', { layerVisibility: data.layerVisibility });
+                            }
+
+                            // CENTRALIZED EDIT MODE EXIT: Exit edit modes when respective layers are hidden
+                            // This ensures ALL paths (SidebarController, LayerListController, LayerState, map.toggleLayer)
+                            // properly exit edit modes, maintaining architectural consistency
+                            if (data && map && map.editModeState) {
+                                // Check individual layer visibility changes
+                                if (data.layerKey && data.visible === false) {
+                                    if (data.layerKey === 'customMarkers' && map.editModeState.editMarkersMode) {
+                                        h.logDebug('map.js: Exiting marker edit mode (custom markers layer hidden)', 'map.LAYER_VISIBILITY_CHANGED.exitMarkers', { triggeredBy: data.triggeredBy });
+                                        map.editModeState.setEditMarkersMode(false);
+                                    }
+                                    else if (data.layerKey === 'route' && map.editModeState.editRouteMode) {
+                                        h.logDebug('map.js: Exiting route edit mode (route layer hidden)', 'map.LAYER_VISIBILITY_CHANGED.exitRoute', { triggeredBy: data.triggeredBy });
+                                        map.editModeState.setEditRouteMode(false);
+                                    }
+                                }
+                                // Also handle bulk visibility changes (show/hide all)
+                                else if (data.layerVisibility) {
+                                    if (data.layerVisibility.customMarkers === false && map.editModeState.editMarkersMode) {
+                                        h.logDebug('map.js: Exiting marker edit mode (bulk visibility change)', 'map.LAYER_VISIBILITY_CHANGED.exitMarkersBulk', { triggeredBy: data.triggeredBy });
+                                        map.editModeState.setEditMarkersMode(false);
+                                    }
+                                    if (data.layerVisibility.route === false && map.editModeState.editRouteMode) {
+                                        h.logDebug('map.js: Exiting route edit mode (bulk visibility change)', 'map.LAYER_VISIBILITY_CHANGED.exitRouteBulk', { triggeredBy: data.triggeredBy });
+                                        map.editModeState.setEditRouteMode(false);
+                                    }
+                                }
+
+                                // Log post-check state
+                                h && h.logDebug && h.logDebug('map.js: post LAYER_VISIBILITY_CHANGED editModeState', 'map.LAYER_VISIBILITY_CHANGED.postState', {
+                                    editMarkersMode: !!map.editModeState.editMarkersMode,
+                                    editRouteMode: !!map.editModeState.editRouteMode
+                                });
+                            }
+                            
+                            // Rendering is handled by RenderController; do not perform markDirty/render here.
+                        } catch (e) {
+                            try { moduleErrorHandler && moduleErrorHandler.logError(e, 'map.LAYER_VISIBILITY_CHANGED.handler'); } catch (ignore) {}
                         }
-                        // Rendering is handled by RenderController; do not perform markDirty/render here.
                     }
                 },
                 {
@@ -2429,6 +2452,26 @@ async function init() {
                 {
                     event: window.EventTypes.EDIT_MODE_CHANGED,
                     handler: (data) => {
+                        const h = moduleErrorHandler;
+                        h && h.logDebug && h.logDebug('map.js: EDIT_MODE_CHANGED handler entry', 'map.EDIT_MODE_CHANGED.entry', { data });
+
+                        // LAYER AUTO-ENABLE: When entering edit mode, automatically show the respective layer
+                        // This ensures users can see what they're editing
+                        if (data && data.enabled && map && map.layerState) {
+                            try {
+                                if (data.mode === 'markers' && !map.layerState.isLayerVisible('customMarkers')) {
+                                    h.logDebug('map.js: Auto-enabling custom markers layer (entering marker edit mode)', 'map.EDIT_MODE_CHANGED.autoEnableMarkers');
+                                    map.layerState.setLayerVisible('customMarkers', true);
+                                }
+                                else if (data.mode === 'route' && !map.layerState.isLayerVisible('route')) {
+                                    h.logDebug('map.js: Auto-enabling route layer (entering route edit mode)', 'map.EDIT_MODE_CHANGED.autoEnableRoute');
+                                    map.layerState.setLayerVisible('route', true);
+                                }
+                            } catch (e) {
+                                h.logError(e, 'map.EDIT_MODE_CHANGED.autoEnableLayer');
+                            }
+                        }
+                        
                         // When entering any edit mode, deselect any selected marker to prevent confusion
                         if (data && data.enabled && map && map.selectionState) {
                             if (map.selectionState.selectedMarker) {

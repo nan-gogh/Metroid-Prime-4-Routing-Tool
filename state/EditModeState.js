@@ -26,6 +26,7 @@
     setEditMarkersMode(enabled) {
       const h = this.errorHandler;
       try {
+        h.logDebug('EditModeState.setEditMarkersMode called', 'EditModeState.setEditMarkersMode', { enabled: !!enabled, prevMarkersMode: this.editMarkersMode, prevRouteMode: this.editRouteMode });
         if (enabled && this.editRouteMode) {
           // Exit route edit mode first
           this.setEditRouteMode(false);
@@ -37,6 +38,7 @@
           markersEnabled: !!enabled,
           routeEnabled: this.editRouteMode
         });
+        h.logDebug('EditModeState.setEditMarkersMode emitted EDIT_MODE_CHANGED', 'EditModeState.setEditMarkersMode.emit', { mode: !!enabled ? 'markers' : null, enabled: !!enabled });
         
         // Emit enter/exit events for UI effects (layer highlighting)
         if (enabled) {
@@ -56,6 +58,7 @@
     setEditRouteMode(enabled) {
       const h = this.errorHandler;
       try {
+        h.logDebug('EditModeState.setEditRouteMode called', 'EditModeState.setEditRouteMode', { enabled: !!enabled, prevMarkersMode: this.editMarkersMode, prevRouteMode: this.editRouteMode });
         if (enabled && this.editMarkersMode) {
           // Exit markers edit mode first
           this.setEditMarkersMode(false);
@@ -67,6 +70,7 @@
           markersEnabled: this.editMarkersMode,
           routeEnabled: !!enabled
         });
+        h.logDebug('EditModeState.setEditRouteMode emitted EDIT_MODE_CHANGED', 'EditModeState.setEditRouteMode.emit', { mode: !!enabled ? 'route' : null, enabled: !!enabled });
         
         // Emit enter/exit events for UI effects (layer highlighting)
         if (enabled) {

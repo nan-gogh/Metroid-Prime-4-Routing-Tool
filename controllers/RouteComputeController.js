@@ -271,26 +271,15 @@ class RouteComputeController {
                         } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.deselectMarker'); }
                         // Enter route edit mode automatically so user can refine the computed route
                         try {
-                            const routeToggle = document.getElementById('editRouteToggle');
-                            if (routeToggle) {
-                                // Click the sidebar toggle so its handler performs all UI sync work
-                                if (routeToggle.getAttribute('aria-pressed') !== 'true') routeToggle.click();
-                            } else {
-                                // Fallback: set mode and update overlay/mini toggle directly
-                                this.editModeState.setEditRouteMode(true);
-                                this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
-                                try {
-                                    const mini = document.getElementById('editRouteToggleMini');
-                                        if (mini) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', true); } catch(e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setEditToggleColor'); } mini.classList.toggle('glow', true); mini.setAttribute('aria-pressed', 'true'); }
-                                    } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setupMiniRouteToggle'); }
-                                // Ensure route edit-mode visual state: enter route edit mode helper
-                                try { this.eventBus.emit(EventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'route', scale: 2.0 }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditMode'); }
-                                // Disable markers edit mode (and properly exit it)
-                                this.editModeState.setEditMarkersMode(false);
-                                try { this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.exitCustomMarkersEditMode'); }
-                                try { const markersToggle = document.getElementById('editMarkersToggle'); if (markersToggle) { markersToggle.setAttribute('aria-pressed','false'); markersToggle.classList.remove('active'); } } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.updateMarkersToggle'); }
-                                try { const miniMarkers = document.getElementById('editMarkersToggleMini'); if (miniMarkers) { try { setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', false); } catch(e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.setMiniMarkersToggleColor'); } miniMarkers.classList.toggle('glow', false); miniMarkers.setAttribute('aria-pressed','false'); } } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.updateMiniMarkersToggle'); }
-                            }
+                            // Drive state via EditModeState (single source of truth)
+                            this.editModeState.setEditRouteMode(true);
+                            // Request overlay update; other UI (toolbar/sidebar) will update via EDIT_MODE_CHANGED listeners
+                            this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
+                            // Ensure route edit-mode visual state via event
+                            try { this.eventBus.emit(EventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'route', scale: 2.0 }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditMode'); }
+                            // Disable markers edit mode (stateful)
+                            this.editModeState.setEditMarkersMode(false);
+                            try { this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.exitCustomMarkersEditMode'); }
                         } catch (e) { h.logError(e, 'RouteComputeController.computeImprovedRoute.enterRouteEditModeAfterComputation'); }
                         // log removed
                     } else {
@@ -336,15 +325,7 @@ class RouteComputeController {
                     }
                 } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.releasePooledObjects'); }
                 try { this.routeEditState.clearRouteNodeCandidate(); this.routeEditState.clearRouteInsert(); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.clearRouteCandidates'); }
-                // Update sidebar & mini toggles if present
-                try {
-                    const routeToggle = document.getElementById('editRouteToggle');
-                    if (routeToggle) { routeToggle.setAttribute('aria-pressed', 'false'); routeToggle.classList.remove('active'); }
-                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateRouteToggle'); }
-                try {
-                    const miniRoute = document.getElementById('editRouteToggleMini');
-                    if (miniRoute) { try { setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', false); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.setMiniRouteToggleColor'); } miniRoute.classList.toggle('glow', false); miniRoute.setAttribute('aria-pressed', 'false'); }
-                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateMiniRouteToggle'); }
+                // Request overlay update and let subscribed controllers update UI toggles
                 try { this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.clearRoute.updateEditOverlay'); }
                 // Emit render requested event instead of direct render
                 this.eventBus.emit(this.eventTypes.RENDER_REQUESTED, {

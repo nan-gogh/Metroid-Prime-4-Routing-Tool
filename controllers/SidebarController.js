@@ -33,6 +33,23 @@
       this._bindShowHideAllButtons();
       this._bindLayerCheckboxes();
       this._updateLayerCounts();
+      // Subscribe to layer visibility changes so the sidebar UI stays in sync
+      try {
+        if (this.eventBus && this.eventBus.on && this.eventTypes && this.eventTypes.LAYER_VISIBILITY_CHANGED) {
+          this.eventBus.on(this.eventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
+            try {
+              // Update checkbox states to reflect authoritative LayerState
+              this.updateLayerCheckboxStates();
+              // Schedule a render pass for sidebar/UI if needed
+              this._scheduleRender();
+            } catch (e) {
+              this.errorHandler && this.errorHandler.logError && this.errorHandler.logError(e, 'SidebarController: Failed handling LAYER_VISIBILITY_CHANGED');
+            }
+          });
+        }
+      } catch (e) {
+        this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning('SidebarController: Failed to subscribe to LAYER_VISIBILITY_CHANGED', 'SidebarController.init.subscribe', { error: e });
+      }
     }
 
     /**
@@ -122,31 +139,15 @@
     /**
      * Exit edit modes for layers that are being hidden
      * @param {Object} newVisibility - New visibility state
+     * @deprecated - Edit mode exit now handled centrally by map.js LAYER_VISIBILITY_CHANGED handler
+     * This method kept for backward compatibility but logic moved to centralized handler
      */
     _exitEditModesForHiddenLayers(newVisibility) {
-      try {
-        const h = this.errorHandler;
-        
-        // Exit edit modes by directly updating state (not just emitting events)
-        // This ensures EditModeState remains the single source of truth
-        if (newVisibility && newVisibility.customMarkers === false && this.editModeState) {
-          if (this.editModeState.editMarkersMode) {
-            h.logDebug('SidebarController: Exiting marker edit mode (layer hidden)', 'SidebarController._exitEditModesForHiddenLayers.markers');
-            // Direct state update via setEditMarkersMode triggers all necessary events
-            this.editModeState.setEditMarkersMode(false);
-          }
-        }
-        
-        if (newVisibility && newVisibility.route === false && this.editModeState) {
-          if (this.editModeState.editRouteMode) {
-            h.logDebug('SidebarController: Exiting route edit mode (layer hidden)', 'SidebarController._exitEditModesForHiddenLayers.route');
-            // Direct state update via setEditRouteMode triggers all necessary events
-            this.editModeState.setEditRouteMode(false);
-          }
-        }
-      } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to exit edit modes for hidden layers');
-      }
+      // REMOVED: Edit mode exit logic moved to centralized map.js event handler
+      // All LAYER_VISIBILITY_CHANGED events (from any source) now trigger edit mode exit
+      // This ensures consistent behavior regardless of which UI path triggers visibility change
+      const h = this.errorHandler;
+      h.logDebug('SidebarController: Edit mode exit delegated to centralized handler', 'SidebarController._exitEditModesForHiddenLayers.delegated');
     }
 
     /**
@@ -187,34 +188,23 @@
     }
 
     /**
-     * Bind individual layer toggle buttons
-     * Note: Modern UI uses aria-pressed buttons, not checkboxes
+     * Bind individual layer checkboxes
      */
     _bindLayerCheckboxes() {
-      // Layer toggles are button rows with aria-pressed attributes
-      // This method is called after layer icons are initialized
+      // Layer checkboxes are created dynamically by initializeLayerIcons()
+      // This method would be called after layer icons are initialized
       try {
-        const h = this.errorHandler;
         const layerRows = document.querySelectorAll('#layerList .layer-toggle');
         layerRows.forEach(row => {
-          // The entire row is clickable, not just a checkbox
-          // We listen for click events on the row itself
-          row.addEventListener('click', (e) => {
-            // Determine new visibility state from aria-pressed or active class
-            const currentState = row.getAttribute('aria-pressed') === 'true' || row.classList.contains('active');
-            const newState = !currentState;  // Toggle to opposite state
-            const layerKey = row.dataset.layer;
-            
-            if (layerKey) {
-              h.logDebug('SidebarController: Layer toggle button clicked', 
-                'SidebarController._bindLayerCheckboxes.click', 
-                { layerKey, currentState, newState });
-              this._handleLayerCheckboxChange(layerKey, newState);
-            }
-          });
+          const checkbox = row.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+            checkbox.addEventListener('change', (e) => {
+              this._handleLayerCheckboxChange(row.dataset.layer, e.target.checked);
+            });
+          }
         });
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to bind layer toggles');
+        this.errorHandler.logError(e, 'SidebarController: Failed to bind layer checkboxes');
       }
     }
 
@@ -232,19 +222,19 @@
         newVisibility[layerKey] = checked;
 
         h.logDebug('SidebarController: Handling layer checkbox change', 'SidebarController._handleLayerCheckboxChange', { layerKey, checked });
+        try {
+          h.logDebug('SidebarController: diagnostic state', 'SidebarController._handleLayerCheckboxChange.state', {
+            layerVisible: this.layerState ? this.layerState.isLayerVisible(layerKey) : undefined,
+            editMarkersMode: this.editModeState ? !!this.editModeState.editMarkersMode : undefined,
+            editRouteMode: this.editModeState ? !!this.editModeState.editRouteMode : undefined
+          });
+        } catch (e) { /* best-effort logging */ }
 
-        // Exit edit mode if hiding the layer being edited
-        // This must happen BEFORE emitting visibility change to maintain consistent state
+        // Edit mode exit is now handled centrally by map.js LAYER_VISIBILITY_CHANGED handler
+        // No need to duplicate logic here - separation of concerns maintained
+        
+        // Deselect markers from this layer when hiding it
         if (!checked) {
-          if (layerKey === 'customMarkers' && this.editModeState && this.editModeState.editMarkersMode) {
-            h.logDebug('SidebarController: Exiting marker edit mode (custom markers hidden)', 'SidebarController._handleLayerCheckboxChange.exitMarkers');
-            this.editModeState.setEditMarkersMode(false);
-          } else if (layerKey === 'route' && this.editModeState && this.editModeState.editRouteMode) {
-            h.logDebug('SidebarController: Exiting route edit mode (route hidden)', 'SidebarController._handleLayerCheckboxChange.exitRoute');
-            this.editModeState.setEditRouteMode(false);
-          }
-          
-          // Deselect markers from this layer when hiding it
           this._deselectHiddenMarkers(layerKey);
         }
 

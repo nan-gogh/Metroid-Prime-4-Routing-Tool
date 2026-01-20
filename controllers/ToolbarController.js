@@ -32,6 +32,20 @@
       this._bindExportImportControls();
       this._bindRouteControls();
       this._bindPressedHandlers();
+      // Subscribe to edit mode changes to keep toolbar toggles in sync
+      try {
+        if (this.eventBus && this.eventBus.on && this.eventTypes && this.eventTypes.EDIT_MODE_CHANGED) {
+          this.eventBus.on(this.eventTypes.EDIT_MODE_CHANGED, (data) => {
+            try {
+              this.updateEditToggleStates();
+            } catch (e) {
+              if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed in EDIT_MODE_CHANGED handler');
+            }
+          });
+        }
+      } catch (e) {
+        if (this.errorHandler) this.errorHandler.logWarning('ToolbarController: Failed to subscribe to EDIT_MODE_CHANGED', 'ToolbarController.init.subscribe', { error: e });
+      }
     }
 
     /**
@@ -104,41 +118,25 @@
           }
 
           const toggleMarkersEdit = () => {
-            const on = !(editMarkersToggle.getAttribute('aria-pressed') === 'true');
+            // Prefer authoritative state from EditModeState rather than reading DOM attributes
+            const on = !!(this.editModeState && !this.editModeState.editMarkersMode);
             try {
-              editMarkersToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-              editMarkersToggle.classList.toggle('active', on);
-              if (editMarkersToggleMini) {
-                editMarkersToggleMini.setAttribute('aria-pressed', on ? 'true' : 'false');
-                editMarkersToggleMini.classList.toggle('glow', on);
-              }
-            } catch (e) {
-              if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle marker edit button state');
-            }
+              // Update authoritative state
+              this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('ToolbarController: toggling marker edit mode', 'ToolbarController.toggleMarkersEdit', { on });
+            } catch (e) {}
 
             if (this.editModeState) {
-              this.editModeState.setEditMarkersMode(on);
-              this._setEditToggleColor('customMarkers', on);
               try {
-                const routeToggle = document.getElementById('editRouteToggle');
-                const routeToggleMini = document.getElementById('editRouteToggleMini');
-                if (routeToggle) {
-                  routeToggle.setAttribute('aria-pressed', 'false');
-                  routeToggle.classList.remove('active');
-                }
-                if (routeToggleMini) {
-                  routeToggleMini.setAttribute('aria-pressed', 'false');
-                  routeToggleMini.classList.remove('glow');
-                }
+                this.editModeState.setEditMarkersMode(on);
+                // Ensure route edit mode is disabled via state (UI will sync via EDIT_MODE_CHANGED)
+                try { this.editModeState.setEditRouteMode(false); } catch (e) {}
+                this._setEditToggleColor('customMarkers', on);
               } catch (e) {
-                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit route edit mode when entering marker edit');
+                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle marker edit mode (state)');
               }
 
-              // Update edit overlay
-              this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
-
-              // Note: EDIT_MODE_CHANGED is already emitted by EditModeState.setEditMarkersMode()
-              // Do not duplicate event emissions - comply with single source of truth architecture
+              // Request overlay update; controllers will update DOM in response to EDIT_MODE_CHANGED
+              try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to emit EDIT_OVERLAY_UPDATE_REQUESTED'); }
             }
           };
 
@@ -165,41 +163,24 @@
           }
 
           const toggleRouteEdit = () => {
-            const on = !(editRouteToggle.getAttribute('aria-pressed') === 'true');
+            // Prefer authoritative state from EditModeState rather than reading DOM attributes
+            const on = !!(this.editModeState && !this.editModeState.editRouteMode);
             try {
-              editRouteToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-              editRouteToggle.classList.toggle('active', on);
-              if (editRouteToggleMini) {
-                editRouteToggleMini.setAttribute('aria-pressed', on ? 'true' : 'false');
-                editRouteToggleMini.classList.toggle('glow', on);
-              }
-            } catch (e) {
-              if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle route edit button state');
-            }
+              this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('ToolbarController: toggling route edit mode', 'ToolbarController.toggleRouteEdit', { on });
+            } catch (e) {}
 
             if (this.editModeState) {
-              this.editModeState.setEditRouteMode(on);
-              this._setEditToggleColor('route', on);
               try {
-                const markersToggle = document.getElementById('editMarkersToggle');
-                const markersToggleMini = document.getElementById('editMarkersToggleMini');
-                if (markersToggle) {
-                  markersToggle.setAttribute('aria-pressed', 'false');
-                  markersToggle.classList.remove('active');
-                }
-                if (markersToggleMini) {
-                  markersToggleMini.setAttribute('aria-pressed', 'false');
-                  markersToggleMini.classList.remove('glow');
-                }
+                this.editModeState.setEditRouteMode(on);
+                // Ensure marker edit mode is disabled via state (UI will sync via EDIT_MODE_CHANGED)
+                try { this.editModeState.setEditMarkersMode(false); } catch (e) {}
+                this._setEditToggleColor('route', on);
               } catch (e) {
-                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to exit marker edit mode when entering route edit');
+                if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to toggle route edit mode (state)');
               }
 
-              // Update edit overlay
-              this.eventBus.emit(EventTypes.EDIT_OVERLAY_UPDATE_REQUESTED);
-
-              // Note: EDIT_MODE_CHANGED is already emitted by EditModeState.setEditRouteMode()
-              // Do not duplicate event emissions - comply with single source of truth architecture
+              // Request overlay update; controllers will update DOM in response to EDIT_MODE_CHANGED
+              try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { if (this.errorHandler) this.errorHandler.logError(e, 'ToolbarController: Failed to emit EDIT_OVERLAY_UPDATE_REQUESTED'); }
             }
           };
 
@@ -365,12 +346,20 @@
       try {
         const editMarkersToggle = document.getElementById('editMarkersToggle');
         const editRouteToggle = document.getElementById('editRouteToggle');
+        const editMarkersToggleMini = document.getElementById('editMarkersToggleMini');
+        const editRouteToggleMini = document.getElementById('editRouteToggleMini');
 
         if (editMarkersToggle && this.editModeState) {
           const isActive = !!this.editModeState.editMarkersMode;
           editMarkersToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editMarkersToggle.classList.toggle('active', isActive);
           this._setEditToggleColor('customMarkers', isActive);
+          if (editMarkersToggleMini) {
+            try {
+              editMarkersToggleMini.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+              editMarkersToggleMini.classList.toggle('glow', isActive);
+            } catch (e) {}
+          }
         }
 
         if (editRouteToggle && this.editModeState) {
@@ -378,6 +367,12 @@
           editRouteToggle.setAttribute('aria-pressed', isActive ? 'true' : 'false');
           editRouteToggle.classList.toggle('active', isActive);
           this._setEditToggleColor('route', isActive);
+          if (editRouteToggleMini) {
+            try {
+              editRouteToggleMini.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+              editRouteToggleMini.classList.toggle('glow', isActive);
+            } catch (e) {}
+          }
         }
 
       } catch (e) {

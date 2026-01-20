@@ -48,17 +48,13 @@
         // Global Escape: exit any edit mode
         if (ev.key === 'Escape' || ev.key === 'Esc') {
           try {
-            // Prefer clicking the toggles so their handlers run UI sync
-            const markersToggle = document.getElementById('editMarkersToggle');
-            const routeToggle = document.getElementById('editRouteToggle');
+            // Drive state rather than manipulating DOM directly
             if (this.editModeState && this.editModeState.editMarkersMode) {
-              if (markersToggle) markersToggle.click(); else this.editModeState.setEditMarkersMode(false);
+              try { this.editModeState.setEditMarkersMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.exitMarkers'); }
             }
             if (this.editModeState && this.editModeState.editRouteMode) {
-              if (routeToggle) routeToggle.click(); else {
-                this.editModeState.setEditRouteMode(false);
-                try { if (this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
-              }
+              try { this.editModeState.setEditRouteMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.exitRoute'); }
+              try { if (this.map && this.map.canvas) this.map.canvas.style.cursor = 'grab'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.escape.resetCursor'); }
             }
             try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to update edit overlay on escape:', 'function', err); }
           } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle escape key:', 'function', err); }
@@ -128,19 +124,16 @@
         // Edit mode toggles: Q/q for route, E/e for markers
         if (ev.key === 'q' || ev.key === 'Q') {
           try {
-            const routeToggleEl = document.getElementById('editRouteToggle');
-            if (routeToggleEl) {
-              routeToggleEl.click();
-            } else if (this.editModeState) {
+            if (this.editModeState) {
               const newMode = !this.editModeState.editRouteMode;
               this.editModeState.setEditRouteMode(newMode);
               if (newMode) {
-                try { this.map._enterEditMode && this.map._enterEditMode('route', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.enterRoute'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'route', scale: 2.0 }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.enterRoute'); }
                 try { this.editModeState.setEditMarkersMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkers'); }
-                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkersMode'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitMarkersMode'); }
                 this._updateEditModeUI('route', true);
               } else {
-                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitRoute'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.q.exitRoute'); }
               }
             }
           } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle Q key (route toggle):', 'function', err); }
@@ -148,19 +141,16 @@
           return;
         } else if (ev.key === 'e' || ev.key === 'E') {
           try {
-            const editToggleEl = document.getElementById('editMarkersToggle');
-            if (editToggleEl) {
-              editToggleEl.click();
-            } else if (this.editModeState) {
+            if (this.editModeState) {
               const newMode = !this.editModeState.editMarkersMode;
               this.editModeState.setEditMarkersMode(newMode);
               if (newMode) {
-                try { this.map._enterEditMode && this.map._enterEditMode('customMarkers', 2.0); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.enterMarkers'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_ENTER_REQUESTED, { mode: 'customMarkers', scale: 2.0 }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.enterMarkers'); }
                 try { this.editModeState.setEditRouteMode(false); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRoute'); }
-                try { this.map._exitEditMode && this.map._exitEditMode('route'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRouteMode'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitRouteMode'); }
                 this._updateEditModeUI('markers', true);
               } else {
-                try { this.map._exitEditMode && this.map._exitEditMode('customMarkers'); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitMarkers'); }
+                try { this.eventBus.emit(this.eventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' }); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler.e.exitMarkers'); }
               }
             }
           } catch (err) { this.errorHandler.logError('KeyboardHandler: Failed to handle E key (markers toggle):', 'function', err); }
@@ -289,30 +279,10 @@
 
     _updateEditModeUI(mode, enabled) {
       try {
-        if (mode === 'route') {
-          const routeToggle = document.getElementById('editRouteToggle');
-          const miniRoute = document.getElementById('editRouteToggleMini');
-          if (routeToggle) { 
-            routeToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
-            routeToggle.classList.toggle('active', enabled); 
-          }
-          if (miniRoute) { 
-            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('route','editRouteToggle','editRouteToggleMini','edit-route', enabled); } catch(e) { this.errorHandler.logError('Failed to set edit toggle color for route', e); } 
-            miniRoute.classList.toggle('glow', enabled); 
-            miniRoute.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
-          }
-        } else if (mode === 'markers') {
-          const markersToggle = document.getElementById('editMarkersToggle');
-          const miniMarkers = document.getElementById('editMarkersToggleMini');
-          if (markersToggle) { 
-            markersToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
-            markersToggle.classList.toggle('active', enabled); 
-          }
-          if (miniMarkers) { 
-            try { if (typeof setEditToggleColor === 'function') setEditToggleColor('markers','editMarkersToggle','editMarkersToggleMini','edit-markers', enabled); } catch(e) { this.errorHandler.logError('Failed to set edit toggle color for markers', e); } 
-            miniMarkers.classList.toggle('glow', enabled); 
-            miniMarkers.setAttribute('aria-pressed', enabled ? 'true' : 'false'); 
-          }
+        // UI synchronization delegated to centralized handlers. Emit overlay update request
+        // and rely on EDIT_MODE_CHANGED listeners (ToolbarController/SidebarController) to update DOM.
+        if (this.eventBus && this.eventTypes && this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED) {
+          try { this.eventBus.emit(this.eventTypes.EDIT_OVERLAY_UPDATE_REQUESTED); } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'KeyboardHandler._updateEditModeUI.emitOverlayUpdate'); }
         }
       } catch (e) { this.errorHandler && this.errorHandler.logWarning('KeyboardHandler._updateEditModeUI failed', 'KeyboardHandler._updateEditModeUI', { error: e }); }
     }
