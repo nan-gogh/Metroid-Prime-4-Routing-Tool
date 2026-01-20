@@ -51,6 +51,27 @@ class ErrorHandler {
             ...additionalData
         });
     }
+
+    /**
+     * Log debug information (no-op unless debug enabled)
+     * @param {string} message - Debug message
+     * @param {string} context - Context description
+     * @param {Object} additionalData - Additional context data
+     */
+    logDebug(message, context = '', additionalData = {}) {
+        // Respect runtime debug flag if available
+        try {
+            if (typeof window !== 'undefined' && window.MP4Config && !window.MP4Config.DEBUG) return;
+        } catch (e) {
+            // ignore and continue to best-effort log
+        }
+
+        this._writeConsole('debug', `[${context}] ${message}`, {
+            timestamp: new Date().toISOString(),
+            context,
+            ...additionalData
+        });
+    }
     
     _writeConsole(level, ...args) {
         try {

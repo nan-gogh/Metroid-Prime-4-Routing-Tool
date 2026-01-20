@@ -2,6 +2,9 @@
 // Loaded before `map.js` via <script src="data/config.js"></script>
 
 const MP4Config = {
+    // Global debug toggle for development; set true to enable debug logging
+    DEBUG: false,
+    
     MAP_SIZE: 8192,
     TILE_RESOLUTIONS: [256, 512, 1024, 2048, 4096, 8192],
 

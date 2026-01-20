@@ -25,7 +25,7 @@ function initializeErrorHandlerInjection() {
     }
     // If ObjectPool helper is available, set default error handler for pre-allocated pools
     if (typeof setObjectPoolDefaultErrorHandler !== 'undefined' && typeof setObjectPoolDefaultErrorHandler === 'function') {
-        try { setObjectPoolDefaultErrorHandler(appErrorHandler); } catch (e) { console.debug('Failed to set ObjectPool default error handler', { error: e }); }
+        try { setObjectPoolDefaultErrorHandler(appErrorHandler); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'ObjectPool.setDefaultErrorHandler', { message: 'Failed to set ObjectPool default error handler' }); }
     }
 }
 
@@ -112,7 +112,7 @@ class InteractiveMap {
                     this.markerManager = this.dataController.getMarkerManager();
                     this.routeManager = this.dataController.getRouteManager();
                 } catch (e) {
-                    console.debug('DataController.init failed', 'InteractiveMap.init', { error: e });
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init', { message: 'DataController.init failed' });
                 }
             }
 
@@ -159,10 +159,10 @@ class InteractiveMap {
                     this.overlayRenderer = this.renderController.getRenderer('OverlayRenderer');
                     this.renderPipeline = this.renderController.renderPipeline;
                 } catch (e) {
-                    console.debug('RenderController.init failed', 'InteractiveMap.init', { error: e });
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init', { message: 'RenderController.init failed' });
                 }
             }
-        } catch (e) { console.debug('InteractiveMap: renderer and manager initialization failed', 'InteractiveMap.init.rendererManagerInit', { error: e }); }
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logError(e, 'InteractiveMap.init.rendererManagerInit', { message: 'InteractiveMap: renderer and manager initialization failed' }); }
 
         // Initialize map state through state manager
         if (this.mapState) {
@@ -193,7 +193,7 @@ class InteractiveMap {
                 this._lowSpec = true;
                 this._bitmapLimit = 1;
             }
-        } catch (e) { console.debug('InteractiveMap: device detection failed', 'InteractiveMap.deviceDetection', { error: e }); }
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.deviceDetection', { message: 'InteractiveMap: device detection failed' }); }
 
         // Method to update loop UI (called when route changes)
         this.updateLoopUI = () => {
@@ -202,7 +202,7 @@ class InteractiveMap {
                 if (!loopBtn) return;
                 loopBtn.classList.toggle('active', this.routeLooping);
                 loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
-            } catch (e) { console.debug('updateLoopUI: failed to update button state', 'InteractiveMap.updateLoopUI', { error: e }); }
+            } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateLoopUI', { message: 'updateLoopUI: failed to update button state' }); }
         };
         
         // Markers
@@ -290,10 +290,10 @@ class InteractiveMap {
         // Keep tooltip at root level for proper positioning above sidebar
         try {
             if (this.tooltip) {
-                try { this.tooltip.style.position = 'absolute'; this.tooltip.style.zIndex = '150'; this.tooltip.style.pointerEvents = 'none'; } catch (e) { console.debug('Failed to style tooltip', 'InteractiveMap.init.tooltipStyle', { error: e }); }
+                try { this.tooltip.style.position = 'absolute'; this.tooltip.style.zIndex = '150'; this.tooltip.style.pointerEvents = 'none'; } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.tooltipStyle', { message: 'Failed to style tooltip' }); }
             }
         } catch (e) {
-            console.debug('Tooltip positioning setup failed', 'InteractiveMap.init.tooltipSetup', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.tooltipSetup', { message: 'Tooltip positioning setup failed' });
         }
         // Tileset settings managed by TilesetState, Heatmap by HeatmapDisplayState
         if (this.layerState) {
@@ -347,7 +347,7 @@ class InteractiveMap {
                 }
             }
         } catch (e) {
-            console.debug('Failed to load marker scaling config', 'InteractiveMap.init.markerScaling', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.markerScaling', { message: 'Failed to load marker scaling config' });
         }
         
         // Setup
@@ -387,7 +387,7 @@ class InteractiveMap {
                 RouteAnimation.initialize(this);
             }
         } catch (e) {
-            console.debug('RouteAnimation initialization failed', 'InteractiveMap.init.routeAnimation', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.routeAnimation', { message: 'RouteAnimation initialization failed' });
         }
 
         this.render();
@@ -400,7 +400,7 @@ class InteractiveMap {
                 try { 
                     loopBtn.classList.toggle('active', this.routeLooping);
                     loopBtn.setAttribute('aria-pressed', this.routeLooping ? 'true' : 'false');
-                } catch (e) { console.debug('updateLoopUI: failed to update button state', 'InteractiveMap.init.updateLoopUI', { error: e }); }
+                } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.updateLoopUI', { message: 'updateLoopUI: failed to update button state' }); }
             };
             if (loopBtn) {
                 loopBtn.addEventListener('click', () => {
@@ -432,18 +432,18 @@ class InteractiveMap {
                             this.routeRenderer.invalidateCache();
                         }
                     } catch (e) {
-                        console.debug('Failed to invalidate route renderer cache on loop toggle', 'InteractiveMap.loopRoute.invalidateCache', { error: e });
+                        moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.loopRoute.invalidateCache', { message: 'Failed to invalidate route renderer cache on loop toggle' });
                     }
 
                     try {
                         if (this.routeManager) this.routeManager.saveRouteLoopingFlag(this.routeLooping);
-                    } catch (e) { console.debug('loopRoute: failed to persist loop flag', 'InteractiveMap.loopRoute.persistFlag', { error: e }); }
-                    try { this.render(); } catch (e) { console.debug('loopRoute: failed to request render', 'InteractiveMap.loopRoute.render', { error: e }); }
+                    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.loopRoute.persistFlag', { message: 'loopRoute: failed to persist loop flag' }); }
+                    try { this.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.loopRoute.render', { message: 'loopRoute: failed to request render' }); }
                     updateLoopUI();
                 });
             }
             updateLoopUI();
-        } catch (e) { console.debug('InteractiveMap: loop controls initialization failed', 'InteractiveMap.init.loopControls', { error: e }); }
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.loopControls', { message: 'InteractiveMap: loop controls initialization failed' }); }
 
         // Phase 2: input and state scaffolds
         try {
@@ -462,10 +462,10 @@ class InteractiveMap {
                     this.pointerHandler = this.inputController.getPointerHandler();
                     this.keyboardHandler = this.inputController.getKeyboardHandler();
                 } catch (e) {
-                    console.debug('InputController.init failed', 'InteractiveMap.init', { error: e });
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init', { message: 'InputController.init failed' });
                 }
             }
-        } catch (e) { console.debug('InteractiveMap: input/state scaffolding setup failed', 'InteractiveMap.init.inputStateSetup', { error: e }); }
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.inputStateSetup', { message: 'InteractiveMap: input/state scaffolding setup failed' }); }
     }
 
     // Cleanup method to properly destroy controllers and resources
@@ -475,7 +475,7 @@ class InteractiveMap {
             try {
                 this.inputController.destroy();
             } catch (e) {
-                console.debug('InputController.destroy failed', 'InteractiveMap.destroy', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy', { message: 'InputController.destroy failed' });
             }
         }
 
@@ -483,7 +483,7 @@ class InteractiveMap {
             try {
                 this.renderController.destroy();
             } catch (e) {
-                console.debug('RenderController.destroy failed', 'InteractiveMap.destroy', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy', { message: 'RenderController.destroy failed' });
             }
         }
 
@@ -491,7 +491,7 @@ class InteractiveMap {
             try {
                 this.dataController.destroy();
             } catch (e) {
-                console.debug('DataController.destroy failed', 'InteractiveMap.destroy', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy', { message: 'DataController.destroy failed' });
             }
         }
 
@@ -708,7 +708,7 @@ class InteractiveMap {
                 return this.tileRenderer.preloadAllMapImages();
             }
         } catch (e) {
-            console.debug('Failed to preload map images', 'InteractiveMap.preloadAllMapImages', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.preloadAllMapImages', { message: 'Failed to preload map images' });
         }
     }
     
@@ -743,14 +743,14 @@ class InteractiveMap {
 
         // Scale drawing so we can use CSS pixels in drawing code
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        if (this.ctxTiles) {
+            if (this.ctxTiles) {
             try { this.ctxTiles.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set tile canvas transform', 'InteractiveMap.resize.tileTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.tileTransform', { message: 'Failed to set tile canvas transform' });
             }
         }
         if (this.ctxHeatmap) {
             try { this.ctxHeatmap.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set heatmap canvas transform', 'InteractiveMap.resize.heatmapTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.heatmapTransform', { message: 'Failed to set heatmap canvas transform' });
             }
         }
 
@@ -762,7 +762,7 @@ class InteractiveMap {
             this.canvasGrid.width = Math.max(1, Math.floor(cssWidth * dpr));
             this.canvasGrid.height = Math.max(1, Math.floor(cssHeight * dpr));
             try { this.ctxGrid.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set grid canvas transform', 'InteractiveMap.resize.gridTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.gridTransform', { message: 'Failed to set grid canvas transform' });
             }
         }
         if (this.canvasMarker && this.ctxMarker) {
@@ -771,7 +771,7 @@ class InteractiveMap {
             this.canvasMarker.width = Math.max(1, Math.floor(cssWidth * dpr));
             this.canvasMarker.height = Math.max(1, Math.floor(cssHeight * dpr));
             try { this.ctxMarker.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set marker canvas transform', 'InteractiveMap.resize.markerTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.markerTransform', { message: 'Failed to set marker canvas transform' });
             }
         }
         if (this.canvasRoute && this.ctxRoute) {
@@ -780,7 +780,7 @@ class InteractiveMap {
             this.canvasRoute.width = Math.max(1, Math.floor(cssWidth * dpr));
             this.canvasRoute.height = Math.max(1, Math.floor(cssHeight * dpr));
             try { this.ctxRoute.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set route canvas transform', 'InteractiveMap.resize.routeTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.routeTransform', { message: 'Failed to set route canvas transform' });
             }
         }
         if (this.canvasOverlay && this.ctxOverlay) {
@@ -789,7 +789,7 @@ class InteractiveMap {
             this.canvasOverlay.width = Math.max(1, Math.floor(cssWidth * dpr));
             this.canvasOverlay.height = Math.max(1, Math.floor(cssHeight * dpr));
             try { this.ctxOverlay.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {
-                console.debug('Failed to set overlay canvas transform', 'InteractiveMap.resize.overlayTransform', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.overlayTransform', { message: 'Failed to set overlay canvas transform' });
             }
         }
 
@@ -806,7 +806,7 @@ class InteractiveMap {
         this.imageState.updateResolution();
         // Recreate honeycomb pattern when the canvas size or DPR changes
         try { this._createHoneycombPattern && this._createHoneycombPattern(); } catch (e) {
-            console.debug('Failed to recreate honeycomb pattern', 'InteractiveMap.resize.honeycombPattern', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.resize.honeycombPattern', { message: 'Failed to recreate honeycomb pattern' });
         }
         // Trigger full render when canvas resizes (affects all renderers through batched pipeline)
         this.requestRender();
@@ -970,7 +970,7 @@ class InteractiveMap {
             }
             return false;
         } catch (e) { 
-            console.debug('loadViewFromStorage failed', 'InteractiveMap.loadViewFromStorage', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.loadViewFromStorage', { message: 'loadViewFromStorage failed' });
             return false; 
         }
     }
@@ -1318,7 +1318,7 @@ class InteractiveMap {
                 if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
                     const dirtyRenderers = this.renderPipeline && typeof this.renderPipeline.getDirtyRenderers === 'function'
                         ? Array.from(this.renderPipeline.getDirtyRenderers()) : ['MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
-                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: dirtyRenderers }); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.emitRenderSelective'); } catch (logErr) { try { console.debug('toggleLayer emit failed', logErr); } catch (ignore) {} } }
+                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: dirtyRenderers }); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.emitRenderSelective'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'InteractiveMap.toggleLayer.emitRenderSelective.logFallback', { message: 'toggleLayer emit failed' }); } catch (ignore) {} } }
                 } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
                     const dirtyRenderers = this.renderPipeline.getDirtyRenderers();
                     if (dirtyRenderers.size > 0) this.renderPipeline.render(dirtyRenderers);
@@ -1432,7 +1432,7 @@ class InteractiveMap {
             try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.startRouteInsert.setCursor'); }
 
         } catch (err) {
-            console.debug('Route insert start failed', 'InteractiveMap.startRouteInsert', { error: err });
+            moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.startRouteInsert', { message: 'Route insert start failed' });
             // Clean up pooled objects on failure
             if (this._routeInsert && this._routeInsert.tempMarker && typeof markerPool !== 'undefined') {
                 markerPool.release(this._routeInsert.tempMarker);
@@ -1465,7 +1465,7 @@ class InteractiveMap {
             this.pointerDownTime = 0;
 
         } catch (err) {
-            console.debug('Route node drag start failed', 'InteractiveMap.handleRouteNodeDragStart', { error: err });
+            moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.handleRouteNodeDragStart', { message: 'Route node drag start failed' });
             this.pointerHandler.dragState.setRouteNodeCandidate(null);
         }
     }
@@ -1558,15 +1558,15 @@ class InteractiveMap {
             try {
                 this.renderPipeline.render();
             } catch (e) {
-                console.debug('map.render: renderPipeline.render failed', 'InteractiveMap.render.renderPipeline', { error: e });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.renderPipeline', { message: 'map.render: renderPipeline.render failed' });
                 // Fall back to individual renderers with renderContext
                 const fallbackRenderContext = typeof RenderContext !== 'undefined' ? RenderContext.fromMap(this) : null;
-                try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderTiles: tileRenderer.render failed', 'InteractiveMap.render.tileRenderer', { error: err }); }
-                try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderHeatmap: heatmapRenderer.render failed', 'InteractiveMap.render.heatmapRenderer', { error: err }); }
-                try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderGrid: gridRenderer.render failed', 'InteractiveMap.render.gridRenderer', { error: err }); }
-                try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderMarkers: markerRenderer.render failed', 'InteractiveMap.render.markerRenderer', { error: err }); }
-                try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderRoute: routeRenderer.render failed', 'InteractiveMap.render.routeRenderer', { error: err }); }
-                try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(fallbackRenderContext); } catch (err) { console.debug('renderOverlay: overlayRenderer.render failed', 'InteractiveMap.render.overlayRenderer', { error: err }); }
+                try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.tileRenderer', { message: 'renderTiles: tileRenderer.render failed' }); }
+                try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.heatmapRenderer', { message: 'renderHeatmap: heatmapRenderer.render failed' }); }
+                try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.gridRenderer', { message: 'renderGrid: gridRenderer.render failed' }); }
+                try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.markerRenderer', { message: 'renderMarkers: markerRenderer.render failed' }); }
+                try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.routeRenderer', { message: 'renderRoute: routeRenderer.render failed' }); }
+                try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.overlayRenderer', { message: 'renderOverlay: overlayRenderer.render failed' }); }
                 return;
             }
             // Ensure DOM quadrant labels are updated
@@ -1577,12 +1577,12 @@ class InteractiveMap {
         }
 
         // Fallback: individual renderers (legacy path)
-        try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(); } catch (e) { console.debug('renderTiles: tileRenderer.render failed', 'InteractiveMap.render.fallback.tileRenderer', { error: e }); }
-        try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(); } catch (e) { console.debug('renderHeatmap: heatmapRenderer.render failed', 'InteractiveMap.render.fallback.heatmapRenderer', { error: e }); }
-        try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(); } catch (e) { console.debug('renderGrid: gridRenderer.render failed', 'InteractiveMap.render.fallback.gridRenderer', { error: e }); }
-        try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(); } catch (e) { console.debug('renderMarkers: markerRenderer.render failed', 'InteractiveMap.render.fallback.markerRenderer', { error: e }); }
-        try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(); } catch (e) { console.debug('renderRoute: routeRenderer.render failed', 'InteractiveMap.render.fallback.routeRenderer', { error: e }); }
-        try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(); } catch (e) { console.debug('renderOverlay: overlayRenderer.render failed', 'InteractiveMap.render.fallback.overlayRenderer', { error: e }); }
+        try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.tileRenderer', { message: 'renderTiles: tileRenderer.render failed' }); }
+        try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.heatmapRenderer', { message: 'renderHeatmap: heatmapRenderer.render failed' }); }
+        try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.gridRenderer', { message: 'renderGrid: gridRenderer.render failed' }); }
+        try { if (this.markerRenderer && typeof this.markerRenderer.render === 'function') this.markerRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.markerRenderer', { message: 'renderMarkers: markerRenderer.render failed' }); }
+        try { if (this.routeRenderer && typeof this.routeRenderer.render === 'function') this.routeRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.routeRenderer', { message: 'renderRoute: routeRenderer.render failed' }); }
+        try { if (this.overlayRenderer && typeof this.overlayRenderer.render === 'function') this.overlayRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.overlayRenderer', { message: 'renderOverlay: overlayRenderer.render failed' }); }
         // Ensure DOM quadrant labels are updated
         try { if (this.gridRenderer && typeof this.gridRenderer.updateQuadLabels === 'function') this.gridRenderer.updateQuadLabels(); } catch (e) { 
             this.errorHandler.logError(e, 'InteractiveMap.render.fallback.updateQuadLabels');
@@ -1658,13 +1658,13 @@ class InteractiveMap {
 
     // Draw the quadrant grid separating the map into 4 equal sections
     renderQuadrantGrid() {
-        try { this.gridRenderer.renderQuadrantGrid(); } catch (e) { console.debug('map.renderQuadrantGrid delegate failed', 'InteractiveMap.renderQuadrantGrid', { error: e }); }
+        try { this.gridRenderer.renderQuadrantGrid(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.renderQuadrantGrid', { message: 'map.renderQuadrantGrid delegate failed' }); }
     }
 
 
     // Draw fine detail grid covering the map area (8x8 subdivision)
     renderDetailGrid() {
-        try { this.gridRenderer.renderDetailGrid(); } catch (e) { console.debug('map.renderDetailGrid delegate failed', 'InteractiveMap.renderDetailGrid', { error: e }); }
+        try { this.gridRenderer.renderDetailGrid(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.renderDetailGrid', { message: 'map.renderDetailGrid delegate failed' }); }
     }
             
 
@@ -1673,7 +1673,7 @@ class InteractiveMap {
     
     // Draw axis index labels for the 8x8 grid
     renderAxisLabels() {
-        try { this.gridRenderer.renderAxisLabels(); } catch (e) { console.debug('map.renderAxisLabels delegate failed', 'InteractiveMap.renderAxisLabels', { error: e }); }
+        try { this.gridRenderer.renderAxisLabels(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.renderAxisLabels', { message: 'map.renderAxisLabels delegate failed' }); }
     }
     
     // Helper: lighten a hex color by a given percentage
@@ -1745,7 +1745,7 @@ class InteractiveMap {
                 });
             }
         } catch (e) {
-            console.debug('Failed to save marker scaling config', 'InteractiveMap.updateMarkerBaseSize', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerBaseSize', { message: 'Failed to save marker scaling config' });
         }
         // Trigger re-render to show new sizes
         this.render();
@@ -1767,7 +1767,7 @@ class InteractiveMap {
                 });
             }
         } catch (e) {
-            console.debug('Failed to save marker scaling config', 'InteractiveMap.updateMarkerUserScaleMultiplier', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerUserScaleMultiplier', { message: 'Failed to save marker scaling config' });
         }
         // Trigger re-render to show new sizes
         this.render();
@@ -1789,7 +1789,7 @@ class InteractiveMap {
                 });
             }
         } catch (e) {
-            console.debug('Failed to save marker scaling config', 'InteractiveMap.updateMarkerHighlightMultiplier', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerHighlightMultiplier', { message: 'Failed to save marker scaling config' });
         }
         // Trigger re-render to show new sizes
         this.render();
@@ -1816,7 +1816,7 @@ class InteractiveMap {
                 this.routeRenderer.invalidateCache();
             }
         } catch (e) {
-            console.debug('Failed to invalidate route renderer cache', 'InteractiveMap.setRoute.invalidateCache', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.setRoute.invalidateCache', { message: 'Failed to invalidate route renderer cache' });
         }
 
         // Update route length display in sidebar
@@ -1864,7 +1864,7 @@ class InteractiveMap {
                 this.routeRenderer.invalidateCache();
             }
         } catch (e) {
-            console.debug('Failed to invalidate route renderer cache', 'InteractiveMap.clearRoute.invalidateCache', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.clearRoute.invalidateCache', { message: 'Failed to invalidate route renderer cache' });
         }
 
         // Update UI counts via the central updater so it shows '0'
@@ -1917,7 +1917,7 @@ class InteractiveMap {
                         unsubscribe();
                     }
                 } catch (e) {
-                    console.debug('Failed to unsubscribe event listener', 'InteractiveMap.destroy.unsubscribe', { error: e });
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.unsubscribe', { message: 'Failed to unsubscribe event listener' });
                 }
             });
             this._eventUnsubscribers.length = 0; // Clear the array
@@ -1927,7 +1927,7 @@ class InteractiveMap {
         try {
             this.stopRouteAnimation();
         } catch (e) {
-            console.debug('Failed to stop route animation during destroy', 'InteractiveMap.destroy.stopAnimation', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.stopAnimation', { message: 'Failed to stop route animation during destroy' });
         }
 
         // Clean up renderers if they have destroy methods
@@ -1938,7 +1938,7 @@ class InteractiveMap {
                     renderer.destroy();
                 }
             } catch (e) {
-                console.debug('Failed to destroy renderer', 'InteractiveMap.destroy.renderer', { error: e, renderer: renderer ? renderer.constructor.name : 'unknown' });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.renderer', { message: 'Failed to destroy renderer', renderer: renderer ? renderer.constructor.name : 'unknown' });
             }
         });
 
@@ -1950,7 +1950,7 @@ class InteractiveMap {
                     manager.destroy();
                 }
             } catch (e) {
-                console.debug('Failed to destroy state manager', 'InteractiveMap.destroy.stateManager', { error: e, manager: manager ? manager.constructor.name : 'unknown' });
+                moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.stateManager', { message: 'Failed to destroy state manager', manager: manager ? manager.constructor.name : 'unknown' });
             }
         });
 
@@ -1960,7 +1960,7 @@ class InteractiveMap {
                 this.routeController.destroy();
             }
         } catch (e) {
-            console.debug('Failed to destroy route controller', 'InteractiveMap.destroy.routeController', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.routeController', { message: 'Failed to destroy route controller' });
         }
 
         // Clean up input handlers if they have destroy methods
@@ -1969,7 +1969,7 @@ class InteractiveMap {
                 this.gestureHandler.destroy();
             }
         } catch (e) {
-            console.debug('Failed to destroy gesture handler', 'InteractiveMap.destroy.gestureHandler', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.gestureHandler', { message: 'Failed to destroy gesture handler' });
         }
 
         // Clean up route manager if it has destroy method
@@ -1978,7 +1978,7 @@ class InteractiveMap {
                 this.routeManager.destroy();
             }
         } catch (e) {
-            console.debug('Failed to destroy route manager', 'InteractiveMap.destroy.routeManager', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.routeManager', { message: 'Failed to destroy route manager' });
         }
 
         // Clean up marker manager if it has destroy method
@@ -1987,7 +1987,7 @@ class InteractiveMap {
                 this.markerManager.destroy();
             }
         } catch (e) {
-            console.debug('Failed to destroy marker manager', 'InteractiveMap.destroy.markerManager', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.markerManager', { message: 'Failed to destroy marker manager' });
         }
 
         // Clean up settings controller if it has destroy method
@@ -1996,7 +1996,7 @@ class InteractiveMap {
                 this.settingsController.destroy();
             }
         } catch (e) {
-            console.debug('Failed to destroy settings controller', 'InteractiveMap.destroy.settingsController', { error: e });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.destroy.settingsController', { message: 'Failed to destroy settings controller' });
         }
 
         // Clear references to prevent memory leaks
@@ -2377,7 +2377,7 @@ async function init() {
                         // Display settings have changed — update persistence/UI as needed.
                         // Rendering decisions are owned by RenderController; do not markDirty/render here.
                             if (map && typeof window.storageService !== 'undefined' && data && typeof data.persist === 'boolean') {
-                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { console.debug('DISPLAY_SETTINGS_CHANGED save failed', logErr); } catch (ignore) {} } }
+                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.logFallback', { message: 'DISPLAY_SETTINGS_CHANGED save failed' }); } catch (ignore) {} } }
                         }
                     }
                 },
@@ -2393,10 +2393,10 @@ async function init() {
                                 btn.classList.toggle('active', isVisible);
                                 btn.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
                             }
-                        } catch (e) { console.debug('HEATMAP_VISIBILITY_CHANGED: Failed to update button state', 'EventBus:HEATMAP_VISIBILITY_CHANGED - updateButton', { error: e }); }
+                        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED.updateButton', { message: 'HEATMAP_VISIBILITY_CHANGED: Failed to update button state' }); }
 
                         if (map && map.heatmapDisplayState && window.storageService) {
-                            try { map.heatmapDisplayState.saveToStorage(window.storageService); } catch (e) { console.debug('HEATMAP_VISIBILITY_CHANGED: Failed to save storage', 'EventBus:HEATMAP_VISIBILITY_CHANGED - saveStorage', { error: e }); }
+                            try { map.heatmapDisplayState.saveToStorage(window.storageService); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED.saveStorage', { message: 'HEATMAP_VISIBILITY_CHANGED: Failed to save storage' }); }
                         }
                     }
                 },
@@ -2531,12 +2531,12 @@ async function init() {
                         if (map && map.routeManager) {
                             try {
                                 if (data && Array.isArray(data.route)) {
-                                    try { map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRoute'); } catch (logErr) { try { console.debug('ROUTE_UPDATED.setRoute failed', logErr); } catch (ignore) {} } }
+                                    try { map.routeManager.setRoute(data.route, data.lengthNormalized || 0, data.sources || []); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRoute'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:ROUTE_UPDATED.setRoute.logFallback', { message: 'ROUTE_UPDATED.setRoute failed' }); } catch (ignore) {} } }
                                 }
-                            } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.handler'); } catch (logErr) { try { console.debug('ROUTE_UPDATED handler failed', logErr); } catch (ignore) {} } }
+                            } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.handler'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:ROUTE_UPDATED.handler.logFallback', { message: 'ROUTE_UPDATED handler failed' }); } catch (ignore) {} } }
 
                             if (data && typeof data.looping === 'boolean') {
-                                try { map.routeManager.setRouteLooping(data.looping); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRouteLooping'); } catch (logErr) { try { console.debug('ROUTE_UPDATED.setRouteLooping failed', logErr); } catch (ignore) {} } }
+                                try { map.routeManager.setRouteLooping(data.looping); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:ROUTE_UPDATED.setRouteLooping'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:ROUTE_UPDATED.setRouteLooping.logFallback', { message: 'ROUTE_UPDATED.setRouteLooping failed' }); } catch (ignore) {} } }
                             }
 
                             // Update layer counts; rendering handled by RenderController
@@ -2722,7 +2722,7 @@ async function init() {
     // Expose map globally for renderers and other modules to access
     window.interactiveMap = map;
     // Flush any event unsubscriber functions that were queued before `map` existed
-    try { flushPendingUnsubscribers(); } catch (e) { console.debug('Failed to flush pending unsubscribers', 'init', { error: e }); }
+    try { flushPendingUnsubscribers(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'init.flushPendingUnsubscribers', { message: 'Failed to flush pending unsubscribers' }); }
 
     // Initialize controllers asynchronously
     await map.init();
@@ -2863,7 +2863,7 @@ async function init() {
             await layerListController.init();
         }
     } catch (e) {
-        console.debug('Failed to initialize LayerListController', 'InteractiveMap.initUIControllers.layerListController', { error: e });
+        moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.layerListController', { message: 'Failed to initialize LayerListController' });
     }
 
     // Initialize UI controllers
@@ -2911,7 +2911,7 @@ async function init() {
             settingsController.loadSavedSettings();
         }
     } catch (e) {
-        console.debug('Failed to initialize UI controllers', 'InteractiveMap.initUIControllers', { error: e });
+        moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers', { message: 'Failed to initialize UI controllers' });
     }
 
     // Load custom markers from storage if consent is given
@@ -2935,7 +2935,7 @@ async function init() {
             }
         }
     } catch (e) {
-        console.debug('Failed to load markers on page load', 'InteractiveMap.loadMarkersFromStorage', { error: e });
+        moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.loadMarkersFromStorage', { message: 'Failed to load markers on page load' });
     }
 
     // Wire Show All / Hide All layer buttons — batch updates to avoid N renders/storage writes
@@ -3275,7 +3275,7 @@ async function init() {
                         try {
                             window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
                         } catch (e) {
-                            console.debug('Failed to emit MARKER_CLEAR_REQUESTED', 'InteractiveMap.clearMarkers', { error: e });
+                            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.clearMarkers', { message: 'Failed to emit MARKER_CLEAR_REQUESTED' });
                             // Fallback to direct call when emit fails
                             if (map.markerManager && typeof map.markerManager.clearMarkers === 'function') map.markerManager.clearMarkers();
                             else { moduleErrorHandler.logWarning('markerManager not available during clear markers', 'InteractiveMap.clearMarkers'); map.customMarkers = []; }

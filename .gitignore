@@ -6,3 +6,6 @@ Metroid-Prime-4-Routing-Tool.code-workspace
 
 # Documentation folder
 docs/
+
+# GitHub metadata and CI configs (local-only for AI-agent instructions folder)
+.github/
