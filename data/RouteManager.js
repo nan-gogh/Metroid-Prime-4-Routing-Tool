@@ -18,6 +18,9 @@ class RouteManager {
         this.routeLooping = false;
         this.onRouteChanged = null;
 
+        // Route version for cache invalidation
+        this._routeVersion = 0;
+
         // Temporary drag state for waypoint repositioning
         this.dragWaypointState = null; // { originalIndex, tempMarker, originalSources, originalIndices }
 
@@ -135,6 +138,9 @@ class RouteManager {
                 this.currentRoute = routeData.indices || [];
                 this.routeSources = routeData.sources || [];
                 this.currentRouteLengthNormalized = routeData.lengthNormalized || 0;
+
+                // Increment route version for cache invalidation
+                this._routeVersion++;
             }
             this.routeLooping = this.storage.loadRouteLoopingFlag();
         } catch (e) {
@@ -163,9 +169,33 @@ class RouteManager {
 
     // Set route data
     setRoute(indices, lengthNormalized, sources) {
-        this.currentRoute = indices || [];
+        // Validate indices are within marker range
+        const validIndices = [];
+        const validSources = [];
+        const markerCount = this.markerManager ? this.markerManager.getCount() : 0;
+
+        if (indices && Array.isArray(indices)) {
+            for (let i = 0; i < indices.length; i++) {
+                const index = indices[i];
+                if (typeof index === 'number' && index >= 0 && index < markerCount) {
+                    validIndices.push(index);
+                    validSources.push(sources && sources[i] ? sources[i] : null);
+                } else {
+                    this.errorHandler.logWarning(`RouteManager.setRoute: Invalid marker index ${index}, skipping`, 'RouteManager.setRoute.validation', {
+                        index,
+                        markerCount,
+                        routeLength: indices.length
+                    });
+                }
+            }
+        }
+
+        this.currentRoute = validIndices;
         this.currentRouteLengthNormalized = lengthNormalized || 0;
-        this.routeSources = sources || [];
+        this.routeSources = validSources;
+
+        // Increment route version for cache invalidation
+        this._routeVersion++;
 
         this.saveToStorage();
 
@@ -188,6 +218,9 @@ class RouteManager {
         this.currentRoute = [];
         this.routeSources = [];
         this.currentRouteLengthNormalized = 0;
+
+        // Increment route version for cache invalidation
+        this._routeVersion++;
 
         this.saveToStorage();
 
@@ -484,6 +517,9 @@ class RouteManager {
 
             // Clean up drag state
             this.dragWaypointState = null;
+
+            // Increment route version for cache invalidation
+            this._routeVersion++;
 
             // Save to storage and notify
             this.saveToStorage();

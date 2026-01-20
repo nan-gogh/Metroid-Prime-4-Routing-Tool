@@ -84,10 +84,58 @@
 
     /**
      * Initializes the renderer caches and performance monitoring.
+     * Sets up event listeners for route changes to invalidate caches.
      */
     init() {
       // Initialize caches and performance monitoring
       this._resetCaches();
+
+      // Set up event listeners for route changes
+      this._setupEventListeners();
+    }
+
+    /**
+     * Sets up event listeners for route change events to invalidate caches.
+     */
+    _setupEventListeners() {
+      // Listen for route updates to invalidate caches
+      if (window.eventBus && window.EventTypes) {
+        try {
+          // Use EventUtils for standardized event handling if available
+          if (typeof window.EventUtils !== 'undefined' && window.EventUtils.createEventManager) {
+            const eventManager = window.EventUtils.createEventManager(this);
+            eventManager.setup(window.eventBus, [
+              {
+                event: window.EventTypes.ROUTE_UPDATED,
+                handler: () => {
+                  this.invalidateCache();
+                }
+              },
+              {
+                event: window.EventTypes.ROUTE_CLEARED,
+                handler: () => {
+                  this.invalidateCache();
+                }
+              }
+            ], this, this.errorHandler);
+          } else {
+            // Fallback: direct event listener setup
+            this._eventUnsubscribers = this._eventUnsubscribers || [];
+
+            const routeUpdatedUnsub = window.eventBus.on(window.EventTypes.ROUTE_UPDATED, () => {
+              this.invalidateCache();
+            });
+            this._eventUnsubscribers.push(routeUpdatedUnsub);
+
+            const routeClearedUnsub = window.eventBus.on(window.EventTypes.ROUTE_CLEARED, () => {
+              this.invalidateCache();
+            });
+            this._eventUnsubscribers.push(routeClearedUnsub);
+          }
+        } catch (e) {
+          this.errorHandler.logWarning('RouteRenderer failed to set up event listeners', 'RouteRenderer._setupEventListeners', { error: e });
+        }
+      }
     }
 
     _resetCaches() {
@@ -152,7 +200,8 @@
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const routeKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions;
+      const routeVersion = this.routeManager._routeVersion || 0;
+      const routeKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions + '|' + routeVersion;
 
       if (this._cachedPath && this._pathCacheValid && this._cachedPath.key === routeKey) {
         return this._cachedPath.data;
@@ -220,7 +269,8 @@
         const m = src && src.marker;
         return m ? `${m.x},${m.y}` : 'invalid';
       }).join('|');
-      const glowKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|glow|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions;
+      const routeVersion = this.routeManager._routeVersion || 0;
+      const glowKey = JSON.stringify(currentRoute) + '|' + this.routeManager.routeLooping + '|glow|' + vp.zoom + '|' + vp.panX + '|' + vp.panY + '|' + markerPositions + '|' + routeVersion;
 
       if (this._glowCache && this._glowCacheValid && this._glowCache.key === glowKey) {
         return this._glowCache.data;
@@ -531,6 +581,26 @@
       } catch (e) {
         try { this.errorHandler.logWarning('RouteRenderer._renderRoutePreview failed', 'RouteRenderer._renderRoutePreview', { error: e }); } catch (__) { }
       }
+    }
+
+    /**
+     * Cleans up resources and event listeners.
+     */
+    destroy() {
+      // Clean up event listeners
+      if (this._eventUnsubscribers) {
+        this._eventUnsubscribers.forEach(unsub => {
+          try {
+            unsub();
+          } catch (e) {
+            this.errorHandler.logWarning('Failed to unsubscribe event listener', 'RouteRenderer.destroy', { error: e });
+          }
+        });
+        this._eventUnsubscribers = [];
+      }
+
+      // Clear caches
+      this._resetCaches();
     }
 
     /**
