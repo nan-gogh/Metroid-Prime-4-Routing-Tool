@@ -125,29 +125,62 @@
      */
     _exitEditModesForHiddenLayers(newVisibility) {
       try {
-        if (newVisibility && newVisibility.customMarkers === false) {
-          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' });
+        const h = this.errorHandler;
+        
+        // Exit edit modes by directly updating state (not just emitting events)
+        // This ensures EditModeState remains the single source of truth
+        if (newVisibility && newVisibility.customMarkers === false && this.editModeState) {
+          if (this.editModeState.editMarkersMode) {
+            h.logDebug('SidebarController: Exiting marker edit mode (layer hidden)', 'SidebarController._exitEditModesForHiddenLayers.markers');
+            // Direct state update via setEditMarkersMode triggers all necessary events
+            this.editModeState.setEditMarkersMode(false);
+          }
         }
-        if (newVisibility && newVisibility.route === false) {
-          this.eventBus.emit(EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' });
+        
+        if (newVisibility && newVisibility.route === false && this.editModeState) {
+          if (this.editModeState.editRouteMode) {
+            h.logDebug('SidebarController: Exiting route edit mode (layer hidden)', 'SidebarController._exitEditModesForHiddenLayers.route');
+            // Direct state update via setEditRouteMode triggers all necessary events
+            this.editModeState.setEditRouteMode(false);
+          }
         }
       } catch (e) {
-        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to exit edit modes');
+        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to exit edit modes for hidden layers');
       }
     }
 
     /**
      * Deselect any selected markers when hiding layers
+     * Also called for individual layer toggles to ensure consistency
+     * @param {string} layerKey - Optional: specific layer being hidden (for selective deselection)
      */
-    _deselectHiddenMarkers() {
+    _deselectHiddenMarkers(layerKey = null) {
       try {
-        if (this.selectionState) {
+        const h = this.errorHandler;
+        
+        if (!this.selectionState) return;
+        
+        // If specific layer provided, only deselect if selected marker is from that layer
+        if (layerKey) {
+          const selectedMarker = this.selectionState.selectedMarker;
+          const selectedLayer = this.selectionState.selectedMarkerLayer;
+          
+          if (selectedMarker && selectedLayer === layerKey) {
+            h.logDebug('SidebarController: Deselecting marker from hidden layer', 'SidebarController._deselectHiddenMarkers.specific', { layerKey });
+            this.selectionState.clearSelectedMarker();
+            this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
+              triggeredBy: 'layer-hide-specific',
+              layerKey: layerKey
+            });
+          }
+        } else {
+          // Deselect all (used for hide-all)
+          h.logDebug('SidebarController: Deselecting all markers (all layers hidden)', 'SidebarController._deselectHiddenMarkers.all');
           this.selectionState.clearSelectedMarker();
+          this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
+            triggeredBy: 'layer-hide-all'
+          });
         }
-        // Emit selection cleared event instead of direct render
-        this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
-          triggeredBy: 'layer-hide-all'
-        });
       } catch (e) {
         if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to deselect markers');
       }
@@ -181,17 +214,27 @@
      */
     _handleLayerCheckboxChange(layerKey, checked) {
       try {
+        const h = this.errorHandler;
+        
         // Update layer visibility via event (handled by map listener)
         const newVisibility = { ...this.layerState.layerVisibility };
         newVisibility[layerKey] = checked;
 
+        h.logDebug('SidebarController: Handling layer checkbox change', 'SidebarController._handleLayerCheckboxChange', { layerKey, checked });
+
         // Exit edit mode if hiding the layer being edited
+        // This must happen BEFORE emitting visibility change to maintain consistent state
         if (!checked) {
           if (layerKey === 'customMarkers' && this.editModeState && this.editModeState.editMarkersMode) {
+            h.logDebug('SidebarController: Exiting marker edit mode (custom markers hidden)', 'SidebarController._handleLayerCheckboxChange.exitMarkers');
             this.editModeState.setEditMarkersMode(false);
           } else if (layerKey === 'route' && this.editModeState && this.editModeState.editRouteMode) {
+            h.logDebug('SidebarController: Exiting route edit mode (route hidden)', 'SidebarController._handleLayerCheckboxChange.exitRoute');
             this.editModeState.setEditRouteMode(false);
           }
+          
+          // Deselect markers from this layer when hiding it
+          this._deselectHiddenMarkers(layerKey);
         }
 
         // Emit layer visibility changed event with standard format
@@ -208,8 +251,11 @@
             layerVisibility: this.layerState.layerVisibility
           });
         }
+
+        // Emit render requested event
+        this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
       } catch (e) {
-        this.errorHandler.logError(e, 'SidebarController: Failed to handle layer checkbox change');
+        if (this.errorHandler) this.errorHandler.logError(e, 'SidebarController: Failed to handle layer checkbox change');
       }
     }
 
