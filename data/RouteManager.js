@@ -541,6 +541,17 @@ class RouteManager {
     // Export route to file
     exportRoute(viewState, mapSize) {
         try {
+            // Emit export started event
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_EXPORT_STARTED, {
+                        pointCount: Array.isArray(this.currentRoute) ? this.currentRoute.length : 0,
+                        routeLength: this.currentRouteLengthNormalized
+                    });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_EXPORT_STARTED', 'RouteManager.exportRoute', { error: evErr });
+            }
             this.validateRouteForExport(this.currentRoute, this.routeSources);
             const points = this.extractRoutePoints(this.currentRoute, this.routeSources);
             const timestamp = Date.now();
@@ -551,31 +562,121 @@ class RouteManager {
             this._downloadRouteFile(json, timestamp, hash);
 
             this.notifications.showSuccess('Route exported successfully');
+
+            // Emit export completed
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_EXPORT_COMPLETED, {
+                        pointCount: points.length,
+                        routeLength: this.currentRouteLengthNormalized,
+                        timestamp,
+                        hash
+                    });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_EXPORT_COMPLETED', 'RouteManager.exportRoute', { error: evErr });
+            }
+
             return true;
         } catch (err) {
-            this.notifications.showError('Export failed: ' + err.message);
-            throw err;
+            // Distinguish validation errors (logWarning) from unexpected errors (logError)
+            const isValidationError = err && err.message && err.message.includes('No route to export');
+            if (isValidationError) {
+                this.errorHandler && this.errorHandler.logWarning(err && err.message ? err.message : String(err), 'RouteManager.exportRoute.validation');
+            } else {
+                this.errorHandler && this.errorHandler.logError(err, 'RouteManager.exportRoute');
+            }
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_EXPORT_FAILED, { error: err && err.message ? err.message : String(err) });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_EXPORT_FAILED', 'RouteManager.exportRoute', { error: evErr });
+            }
+            // Use notifications interface for consistent route error handling
+            if (this.notifications && typeof this.notifications.showRouteError === 'function') {
+                this.notifications.showRouteError('Export failed: ' + (err && err.message ? err.message : String(err)));
+            }
+            // Don't re-throw validation errors—user has been notified
+            if (!isValidationError) {
+                throw err;
+            }
+            return false;
         }
     }
 
     // Import route from file
     importRoute(file) {
         return new Promise((resolve, reject) => {
+            // Emit import started event
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_STARTED, { fileName: file && file.name, fileSize: file && file.size });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_STARTED', 'RouteManager.importRoute', { error: evErr });
+            }
+
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
                     this._processImportedRoute(data);
                     this.notifications.showSuccess('Route imported successfully');
+
+                    // Emit import completed
+                    try {
+                        if (this.eventBus && window.EventTypes) {
+                            this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_COMPLETED, {
+                                pointCount: Array.isArray(data.points) ? data.points.length : 0,
+                                routeLength: data.length || 0
+                            });
+                        }
+                    } catch (evErr) {
+                        this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_COMPLETED', 'RouteManager.importRoute', { error: evErr });
+                    }
+
                     resolve(true);
                 } catch (err) {
-                    this.notifications.showError('Import failed: ' + err.message);
-                    reject(err);
+                    // Distinguish validation errors (invalid JSON, bad format) from unexpected errors
+                    const isValidationError = err && err.message && (err.message.includes('Invalid') || err instanceof SyntaxError);
+                    if (isValidationError) {
+                        this.errorHandler && this.errorHandler.logWarning(err && err.message ? err.message : String(err), 'RouteManager.importRoute.validation');
+                    } else {
+                        this.errorHandler && this.errorHandler.logError(err, 'RouteManager.importRoute');
+                    }
+                    try {
+                        if (this.eventBus && window.EventTypes) {
+                            this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_FAILED, { error: err && err.message ? err.message : String(err) });
+                        }
+                    } catch (evErr) {
+                        this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_FAILED', 'RouteManager.importRoute', { error: evErr });
+                    }
+                    if (this.notifications && typeof this.notifications.showRouteError === 'function') {
+                        this.notifications.showRouteError('Import failed: ' + (err && err.message ? err.message : String(err)));
+                    }
+                    // Don't re-throw validation errors—user has been notified
+                    if (!isValidationError) {
+                        reject(err);
+                    } else {
+                        reject(err);
+                    }
                 }
             };
-            reader.onerror = () => {
-                this.notifications.showError('Failed to read file');
-                reject(new Error('File read error'));
+            reader.onerror = (e) => {
+                const err = new Error('File read error');
+                this.errorHandler && this.errorHandler.logError(err, 'RouteManager.importRoute.readFile');
+                try {
+                    if (this.eventBus && window.EventTypes) {
+                        this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_FAILED, { error: 'File read error' });
+                    }
+                } catch (evErr) {
+                    this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_FAILED', 'RouteManager.importRoute', { error: evErr });
+                }
+                if (this.notifications && typeof this.notifications.showRouteError === 'function') {
+                    this.notifications.showRouteError('Failed to read file');
+                }
+                reject(err);
             };
             reader.readAsText(file);
         });
@@ -584,13 +685,52 @@ class RouteManager {
     // Import route from content string (for backward compatibility)
     importRouteFromContent(content) {
         try {
+            // Emit import started for content-based import
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_STARTED, { source: 'content', size: content ? content.length : 0 });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_STARTED', 'RouteManager.importRouteFromContent', { error: evErr });
+            }
             const data = JSON.parse(content);
             this._processImportedRoute(data);
             this.notifications.showSuccess('Route imported successfully');
+
+            // Emit import completed
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_COMPLETED, {
+                        pointCount: Array.isArray(data.points) ? data.points.length : 0,
+                        routeLength: data.length || 0
+                    });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_COMPLETED', 'RouteManager.importRouteFromContent', { error: evErr });
+            }
             return true;
         } catch (err) {
-            this.notifications.showError('Import failed: ' + err.message);
-            throw err;
+            // Distinguish validation errors (invalid JSON, bad format) from unexpected errors
+            const isValidationError = err && err.message && (err.message.includes('Invalid') || err instanceof SyntaxError);
+            if (isValidationError) {
+                this.errorHandler && this.errorHandler.logWarning(err && err.message ? err.message : String(err), 'RouteManager.importRouteFromContent.validation');
+            } else {
+                this.errorHandler && this.errorHandler.logError(err, 'RouteManager.importRouteFromContent');
+            }
+            try {
+                if (this.eventBus && window.EventTypes) {
+                    this.eventBus.emit(window.EventTypes.ROUTE_IMPORT_FAILED, { error: err && err.message ? err.message : String(err) });
+                }
+            } catch (evErr) {
+                this.errorHandler && this.errorHandler.logDebug('Failed to emit ROUTE_IMPORT_FAILED', 'RouteManager.importRouteFromContent', { error: evErr });
+            }
+            if (this.notifications && typeof this.notifications.showRouteError === 'function') {
+                this.notifications.showRouteError('Import failed: ' + (err && err.message ? err.message : String(err)));
+            }
+            // Don't re-throw validation errors—user has been notified
+            if (!isValidationError) {
+                throw err;
+            }
         }
     }
 

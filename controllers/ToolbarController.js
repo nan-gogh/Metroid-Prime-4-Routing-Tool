@@ -202,16 +202,11 @@
         const exportCustomBtn = document.getElementById('exportCustom');
         if (exportCustomBtn) {
           exportCustomBtn.addEventListener('click', () => {
-            try {
-              if (this.markerManager) {
-                this.markerManager.exportMarkers();
-              } else {
-                // Marker manager missing is an internal condition — suppressed verbose debug
-              }
-            } catch (err) {
-              if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {
-                NotificationUtils.showMarkerError('Failed to export custom markers: ' + (err.message || String(err)));
-              }
+            if (this.markerManager) {
+              // Let MarkerManager emit events and show notifications.
+              this.markerManager.exportMarkers();
+            } else {
+              // Marker manager missing is an internal condition — suppressed verbose debug
             }
           });
         }

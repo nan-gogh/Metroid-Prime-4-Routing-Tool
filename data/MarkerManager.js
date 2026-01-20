@@ -271,32 +271,50 @@ class MarkerManager {
 
     // Export markers to JSON
     exportMarkers() {
-        if (this.markers.length === 0) {
-            throw new Error('No custom markers to export.');
+        try {
+            if (this.markers.length === 0) {
+                throw new Error('No custom markers to export.');
+            }
+
+            const dataHash = MarkerUtilsCore.hashMarkerData(this.markers);
+            const now = new Date();
+            const timestamp = now.getTime();
+
+            // Create JSON using MarkerUtilsCore
+            const json = MarkerUtilsCore.createExportJson(this.markers, timestamp, dataHash);
+
+            // Create download blob
+            const downloadInfo = MarkerUtilsCore.createDownloadBlob(json, timestamp, dataHash);
+
+            // Trigger download (UI concern - could be moved to a separate UI handler)
+            const a = document.createElement('a');
+            a.href = downloadInfo.url;
+            a.download = downloadInfo.filename;
+            a.click();
+            URL.revokeObjectURL(downloadInfo.url);
+
+            // Save to storage and notify
+            this.saveToStorage();
+            this.notifications.showSuccess('Markers exported successfully');
+
+            return true;
+        } catch (err) {
+            // Distinguish validation errors (no data to export) from unexpected errors
+            const isValidationError = err && err.message && err.message.includes('No custom markers to export');
+            if (isValidationError) {
+                this.errorHandler && this.errorHandler.logWarning(err && err.message ? err.message : String(err), 'MarkerManager.exportMarkers.validation');
+            } else {
+                this.errorHandler && this.errorHandler.logError(err, 'MarkerManager.exportMarkers');
+            }
+            if (this.notifications && typeof this.notifications.showMarkerError === 'function') {
+                this.notifications.showMarkerError('Failed to export markers: ' + (err && err.message ? err.message : String(err)));
+            }
+            // Don't re-throw validation errors—user has been notified
+            if (!isValidationError) {
+                throw err;
+            }
+            return false;
         }
-
-        const dataHash = MarkerUtilsCore.hashMarkerData(this.markers);
-        const now = new Date();
-        const timestamp = now.getTime();
-
-        // Create JSON using MarkerUtilsCore
-        const json = MarkerUtilsCore.createExportJson(this.markers, timestamp, dataHash);
-
-        // Create download blob
-        const downloadInfo = MarkerUtilsCore.createDownloadBlob(json, timestamp, dataHash);
-
-        // Trigger download (UI concern - could be moved to a separate UI handler)
-        const a = document.createElement('a');
-        a.href = downloadInfo.url;
-        a.download = downloadInfo.filename;
-        a.click();
-        URL.revokeObjectURL(downloadInfo.url);
-
-        // Save to storage and notify
-        this.saveToStorage();
-        this.notifications.showSuccess('Markers exported successfully');
-
-        return true;
     }
 
     // Import markers from JSON file

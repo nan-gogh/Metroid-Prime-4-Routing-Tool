@@ -38,9 +38,6 @@ class ErrorHandler {
 
             // Console logging (through internal safe writer)
             this._writeConsole('error', `[${context}] ${errorMessage}`, logData);
-
-            // Always include error details for diagnostics
-            this._writeConsole('debug', 'Error details:', logData);
         } catch (inner) {
             try {
                 if (typeof console !== 'undefined' && console.error) {

@@ -870,14 +870,11 @@ class InteractiveMap {
 
         if (exportRouteBtn) {
             exportRouteBtn.addEventListener('click', () => {
-                try {
-                    if (map.routeManager && typeof map.routeManager.exportRoute === 'function') {
-                        map.routeManager.exportRoute({ zoom: map.zoom, panX: map.panX, panY: map.panY }, MP4Config.MAP_SIZE);
-                    } else {
-                        moduleErrorHandler.logWarning('Route manager not available', 'InteractiveMap.bindEvents.exportRoute');
-                    }
-                } catch (err) {
-                    NotificationUtils.showRouteError('Failed to export route: ' + (err.message || String(err)));
+                if (map.routeManager && typeof map.routeManager.exportRoute === 'function') {
+                    // Let RouteManager emit events and show notifications.
+                    map.routeManager.exportRoute({ zoom: map.zoom, panX: map.panX, panY: map.panY }, MP4Config.MAP_SIZE);
+                } else {
+                    moduleErrorHandler.logWarning('Route manager not available', 'InteractiveMap.bindEvents.exportRoute');
                 }
             });
         }

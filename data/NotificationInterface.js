@@ -85,6 +85,46 @@ const NotificationInterface = {
                 }
             }
         }
+    },
+
+    // Route error notifications
+    showRouteError: function(message) {
+        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showRouteError) {
+            NotificationUtils.showRouteError(message);
+        } else {
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logError('Route error: ' + message, 'NotificationInterface.showRouteError');
+            try {
+                alert('Route Error: ' + message);
+            } catch (e) {
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = 'Route Error: ' + message;
+                    statusEl.style.color = 'red';
+                    setTimeout(() => { statusEl.textContent = ''; }, 5000);
+                }
+            }
+        }
+    },
+
+    // Marker error notifications
+    showMarkerError: function(message) {
+        if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {
+            NotificationUtils.showMarkerError(message);
+        } else {
+            const h = (typeof window !== 'undefined' && window.errorHandler) ? window.errorHandler : globalThis.__MP4_NOOP_ERROR_HANDLER;
+            h.logError('Marker error: ' + message, 'NotificationInterface.showMarkerError');
+            try {
+                alert('Marker Error: ' + message);
+            } catch (e) {
+                const statusEl = document.getElementById('status') || document.getElementById('notification-area');
+                if (statusEl) {
+                    statusEl.textContent = 'Marker Error: ' + message;
+                    statusEl.style.color = 'red';
+                    setTimeout(() => { statusEl.textContent = ''; }, 5000);
+                }
+            }
+        }
     }
 };
 

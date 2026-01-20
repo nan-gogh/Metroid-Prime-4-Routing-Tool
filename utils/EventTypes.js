@@ -119,6 +119,13 @@ const EventTypes = {
     ROUTE_COMPUTATION_COMPLETED: 'route:computation-completed',
     ROUTE_COMPUTATION_FAILED: 'route:computation-failed',
     ROUTE_EDIT_REQUESTED: 'route:edit-requested',
+    // Route import/export lifecycle events
+    ROUTE_IMPORT_STARTED: 'route:import-started',
+    ROUTE_IMPORT_COMPLETED: 'route:import-completed',
+    ROUTE_IMPORT_FAILED: 'route:import-failed',
+    ROUTE_EXPORT_STARTED: 'route:export-started',
+    ROUTE_EXPORT_COMPLETED: 'route:export-completed',
+    ROUTE_EXPORT_FAILED: 'route:export-failed',
     /**
      * Emitted when route data changes. Currently the canonical emitter is
      * `RouteManager`, which provides the RouteManager-format fields below.
