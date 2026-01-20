@@ -68,10 +68,9 @@
         // Listen for layer visibility changes
         const unsubscribeVisibility = this.eventBus.on(this.eventTypes.LAYER_VISIBILITY_CHANGED, (data) => {
           try {
-            if (data && data.layerVisibility) {
+              if (data && data.layerVisibility) {
               // Update reference to latest layer visibility state
               this.layerVisibility = data.layerVisibility;
-              this.errorHandler.logDebug('MarkerEditHandler: Updated layer visibility reference', 'MarkerEditHandler._setupEventListeners.visibilityUpdate', { visibility: data.layerVisibility });
             }
           } catch (e) {
             this.errorHandler.logWarning('MarkerEditHandler: Failed to handle visibility change', 'MarkerEditHandler._setupEventListeners.visibilityChange', { error: e });

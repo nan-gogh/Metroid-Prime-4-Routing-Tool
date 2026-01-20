@@ -146,8 +146,7 @@
       // REMOVED: Edit mode exit logic moved to centralized map.js event handler
       // All LAYER_VISIBILITY_CHANGED events (from any source) now trigger edit mode exit
       // This ensures consistent behavior regardless of which UI path triggers visibility change
-      const h = this.errorHandler;
-      h.logDebug('SidebarController: Edit mode exit delegated to centralized handler', 'SidebarController._exitEditModesForHiddenLayers.delegated');
+      // Edit mode exit is delegated to centralized handler in map.js; no verbose logging here.
     }
 
     /**
@@ -167,7 +166,7 @@
           const selectedLayer = this.selectionState.selectedMarkerLayer;
           
           if (selectedMarker && selectedLayer === layerKey) {
-            h.logDebug('SidebarController: Deselecting marker from hidden layer', 'SidebarController._deselectHiddenMarkers.specific', { layerKey });
+            // Deselecting marker from hidden layer
             this.selectionState.clearSelectedMarker();
             this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
               triggeredBy: 'layer-hide-specific',
@@ -176,7 +175,6 @@
           }
         } else {
           // Deselect all (used for hide-all)
-          h.logDebug('SidebarController: Deselecting all markers (all layers hidden)', 'SidebarController._deselectHiddenMarkers.all');
           this.selectionState.clearSelectedMarker();
           this.eventBus.emit(this.eventTypes.SELECTION_CLEARED, {
             triggeredBy: 'layer-hide-all'
@@ -221,14 +219,7 @@
         const newVisibility = { ...this.layerState.layerVisibility };
         newVisibility[layerKey] = checked;
 
-        h.logDebug('SidebarController: Handling layer checkbox change', 'SidebarController._handleLayerCheckboxChange', { layerKey, checked });
-        try {
-          h.logDebug('SidebarController: diagnostic state', 'SidebarController._handleLayerCheckboxChange.state', {
-            layerVisible: this.layerState ? this.layerState.isLayerVisible(layerKey) : undefined,
-            editMarkersMode: this.editModeState ? !!this.editModeState.editMarkersMode : undefined,
-            editRouteMode: this.editModeState ? !!this.editModeState.editRouteMode : undefined
-          });
-        } catch (e) { /* best-effort logging */ }
+        // Layer checkbox change handled; diagnostics suppressed to reduce verbosity
 
         // Edit mode exit is now handled centrally by map.js LAYER_VISIBILITY_CHANGED handler
         // No need to duplicate logic here - separation of concerns maintained

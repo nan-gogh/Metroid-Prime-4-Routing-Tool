@@ -120,10 +120,7 @@
           const toggleMarkersEdit = () => {
             // Prefer authoritative state from EditModeState rather than reading DOM attributes
             const on = !!(this.editModeState && !this.editModeState.editMarkersMode);
-            try {
-              // Update authoritative state
-              this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('ToolbarController: toggling marker edit mode', 'ToolbarController.toggleMarkersEdit', { on });
-            } catch (e) {}
+            // Toggle requested; reduced diagnostic logging
 
             if (this.editModeState) {
               try {
@@ -165,9 +162,7 @@
           const toggleRouteEdit = () => {
             // Prefer authoritative state from EditModeState rather than reading DOM attributes
             const on = !!(this.editModeState && !this.editModeState.editRouteMode);
-            try {
-              this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('ToolbarController: toggling route edit mode', 'ToolbarController.toggleRouteEdit', { on });
-            } catch (e) {}
+            // Toggle requested; reduced diagnostic logging
 
             if (this.editModeState) {
               try {
@@ -211,8 +206,7 @@
               if (this.markerManager) {
                 this.markerManager.exportMarkers();
               } else {
-                // Marker manager missing is an internal condition — log it, don't show a user notification
-                this.errorHandler.logDebug('Marker manager not available', 'ToolbarController.exportMarkers');
+                // Marker manager missing is an internal condition — suppressed verbose debug
               }
             } catch (err) {
               if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showMarkerError) {
