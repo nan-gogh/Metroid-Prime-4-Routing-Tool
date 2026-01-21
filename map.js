@@ -105,6 +105,8 @@ class InteractiveMap {
                         StorageInterface: typeof StorageInterface !== 'undefined' ? StorageInterface : null,
                         NotificationInterface: typeof NotificationInterface !== 'undefined' ? NotificationInterface : null
                     }
+                    ,
+                    storageProvider: this.storageProvider
                 });
                 try {
                     await this.dataController.init();
