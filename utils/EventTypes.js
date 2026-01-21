@@ -428,6 +428,15 @@ const EventTypes = {
     STORAGE_QUOTA_EXCEEDED: 'storage:quota-exceeded',
     STORAGE_CONSENT_CHANGED: 'storage:consent-changed',
 
+    // Data export/import events (GDPR compliance)
+    STORAGE_EXPORT_STARTED: 'storage:export-started',
+    STORAGE_EXPORT_COMPLETED: 'storage:export-completed',
+    STORAGE_EXPORT_FAILED: 'storage:export-failed',
+
+    STORAGE_IMPORT_STARTED: 'storage:import-started',
+    STORAGE_IMPORT_COMPLETED: 'storage:import-completed',
+    STORAGE_IMPORT_FAILED: 'storage:import-failed',
+
     // Tileset Events (enhanced)
     /**
      * Emitted to report tileset loader/selection state changes. Useful

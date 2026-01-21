@@ -124,6 +124,105 @@ class StorageService {
         };
     }
 
+    /**
+     * Calculate total size of stored items
+     * @returns {number} Total bytes used in localStorage
+     */
+    _calculateUsedStorage() {
+        try {
+            let totalBytes = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) {
+                    const value = localStorage.getItem(key) || '';
+                    totalBytes += key.length + value.length;
+                }
+            }
+            return totalBytes;
+        } catch (e) {
+            this._errorHandler.logWarning('StorageService: Failed to calculate storage usage', 'StorageService._calculateUsedStorage', { error: e });
+            return 0;
+        }
+    }
+
+    /**
+     * Get detailed storage size statistics (GDPR feature)
+     * @returns {Object} Storage size information including quota and usage percentage
+     */
+    getStorageSizeStats() {
+        try {
+            const usedBytes = this._calculateUsedStorage();
+            // Typical localStorage quota is 5-10MB (5242880-10485760 bytes)
+            // Most browsers default to 5MB
+            const maxBytes = 5242880; // 5MB
+
+            return {
+                usedBytes,
+                maxBytes,
+                availableBytes: Math.max(0, maxBytes - usedBytes),
+                usedPercentage: Math.round((usedBytes / maxBytes) * 100),
+                availablePercentage: Math.max(0, Math.round(((maxBytes - usedBytes) / maxBytes) * 100)),
+                canStore: usedBytes < (maxBytes * 0.9), // 90% threshold
+                formattedUsed: this._formatBytes(usedBytes),
+                formattedMax: this._formatBytes(maxBytes),
+                formattedAvailable: this._formatBytes(Math.max(0, maxBytes - usedBytes))
+            };
+        } catch (e) {
+            this._errorHandler.logWarning('StorageService: Failed to get storage size stats', 'StorageService.getStorageSizeStats', { error: e });
+            return {
+                usedBytes: 0,
+                maxBytes: 5242880,
+                availableBytes: 5242880,
+                usedPercentage: 0,
+                availablePercentage: 100,
+                canStore: true
+            };
+        }
+    }
+
+    /**
+     * Format bytes to human-readable format
+     * @private
+     * @param {number} bytes - Number of bytes
+     * @returns {string} Formatted string (e.g. "1.23 MB")
+     */
+    _formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    /**
+     * Clear all application data from storage
+     * @returns {boolean} True if successful
+     */
+    clearAll() {
+        try {
+            const keysToKeep = ['mp4_storage_consent']; // Keep consent flag
+            const keysToClear = [];
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('mp4_') && !keysToKeep.includes(key)) {
+                    keysToClear.push(key);
+                }
+            }
+
+            for (const key of keysToClear) {
+                this.remove(key);
+            }
+
+            this._cache.clear();
+            this._errorHandler.logDebug('StorageService: All application data cleared', 'StorageService.clearAll');
+            return true;
+        } catch (e) {
+            this._errorHandler.logWarning('StorageService: Failed to clear all data', 'StorageService.clearAll', { error: e });
+            return false;
+        }
+    }
+
     // ===== LEGACY COMPATIBILITY METHODS =====
     // These methods maintain backward compatibility with existing code
 

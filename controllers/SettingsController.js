@@ -22,6 +22,10 @@
       this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventTypes = window.EventTypes || {};
       
+      // Optional managers for Phase 5 privacy features
+      this.consentManager = options.consentManager || null;
+      this.dataExportController = options.dataExportController || null;
+      
       // Optional map reference for operations that previously called map methods
       this.map = options.map || null;
       // Optional storage provider for DI
@@ -39,6 +43,7 @@
       this._bindDisplayToggles();
       this._bindHighlightControls();
       this._bindEventListeners();
+      this._bindDataExportControls();
       this._updateSidebarHandleEmphasis();
     }
 
@@ -703,6 +708,68 @@
     }
 
     /**
+     * Bind data export controls (GDPR compliance - Phase 5)
+     * @private
+     */
+    _bindDataExportControls() {
+      try {
+        // Look for export data button
+        const exportBtn = document.getElementById('exportDataButton');
+        if (exportBtn && this.dataExportController) {
+          exportBtn.addEventListener('click', async (ev) => {
+            try {
+              ev.preventDefault();
+              this.errorHandler.logDebug('SettingsController: Export button clicked', 'SettingsController._bindDataExportControls.click');
+              
+              // Disable button during export
+              exportBtn.disabled = true;
+              exportBtn.textContent = 'Exporting...';
+              
+              // Trigger export and download
+              const success = await this.dataExportController.downloadDataExportAsync();
+              
+              if (success) {
+                this.errorHandler.logDebug('SettingsController: Data export successful', 'SettingsController._bindDataExportControls.success');
+              } else {
+                this.errorHandler.logWarning('SettingsController: Data export failed', 'SettingsController._bindDataExportControls.failed');
+              }
+              
+              // Re-enable button
+              exportBtn.disabled = false;
+              exportBtn.textContent = 'Export Data (GDPR)';
+            } catch (e) {
+              this.errorHandler.logError(e, 'SettingsController._bindDataExportControls.click', { error: e });
+              exportBtn.disabled = false;
+              exportBtn.textContent = 'Export Data (GDPR)';
+            }
+          });
+        }
+
+        // Look for storage stats display
+        const statsBtn = document.getElementById('storageStatsButton');
+        if (statsBtn) {
+          statsBtn.addEventListener('click', (ev) => {
+            try {
+              ev.preventDefault();
+              const stats = this.dataExportController?.getStorageSizeStats?.();
+              if (stats) {
+                const message = `Storage Usage: ${stats.formattedUsed} / ${stats.formattedMax} (${stats.usedPercentage}%)`;
+                this.errorHandler.logDebug('SettingsController: Storage stats', 'SettingsController._bindDataExportControls.stats', stats);
+                if (typeof NotificationUtils !== 'undefined' && NotificationUtils.showInfoAsync) {
+                  NotificationUtils.showInfoAsync(message);
+                }
+              }
+            } catch (e) {
+              this.errorHandler.logWarning('SettingsController: Failed to show storage stats', 'SettingsController._bindDataExportControls.stats', { error: e });
+            }
+          });
+        }
+      } catch (e) {
+        this.errorHandler.logWarning('SettingsController: Failed to bind data export controls', 'SettingsController._bindDataExportControls', { error: e });
+      }
+    }
+
+    /**
      * Clean up event listeners to prevent memory leaks
      */
     destroy() {
@@ -715,6 +782,14 @@
             }
           }
           this._eventUnsubscribers = [];
+        }
+        
+        // Cleanup managers
+        if (this.consentManager && typeof this.consentManager.destroy === 'function') {
+          this.consentManager.destroy();
+        }
+        if (this.dataExportController && typeof this.dataExportController.destroy === 'function') {
+          this.dataExportController.destroy();
         }
       } catch (e) {
         this.errorHandler && this.errorHandler.logWarning('SettingsController.destroy failed', 'SettingsController.destroy', { error: e });
