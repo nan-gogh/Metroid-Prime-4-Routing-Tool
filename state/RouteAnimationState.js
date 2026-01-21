@@ -136,7 +136,7 @@
       return this.animationFrameId !== null;
     }
 
-    // Unified persistence methods — use injected storage and emit storage events (RouteAnimationState)
+    // Unified persistence methods — use StorageService exclusively (RouteAnimationState)
     saveToStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.ROUTE_ANIMATION_STATE) || 'mp4_routeAnimationState';
@@ -150,9 +150,6 @@
 
         if (this.storage && typeof this.storage.set === 'function') {
           this.storage.set(key, payload);
-        } else if (typeof localStorage !== 'undefined') {
-          // last-resort fallback (consent not checked here because higher-level consent manager should gate calls)
-          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (_) {}
         }
 
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { 

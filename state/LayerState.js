@@ -320,8 +320,6 @@
         
         if (this.storage && typeof this.storage.set === 'function') {
           this.storage.set(key, payload);
-        } else if (typeof localStorage !== 'undefined') {
-          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
         }
         
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
@@ -342,17 +340,23 @@
 
     loadFromStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.LAYER_STATE : 'mp4_layer_state';
+        const key = (this.config?.STORAGE_KEYS?.LAYER_STATE) || 'mp4_layer_state';
         let data = null;
-        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
-        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (this.storage && typeof this.storage.get === 'function') {
+          data = this.storage.get(key);
+        }
         if (data && typeof data === 'object') {
-          if (data.layerVisibility && typeof data.layerVisibility === 'object') this.layerVisibility = { ...this.layerVisibility, ...data.layerVisibility };
+          if (data.layerVisibility && typeof data.layerVisibility === 'object') {
+            this.layerVisibility = { ...this.layerVisibility, ...data.layerVisibility };
+          }
           if (typeof data.showGridHeatmap === 'boolean') this._showGridHeatmap = data.showGridHeatmap;
           return true;
         }
         return false;
-      } catch (e) { try { this.errorHandler.logWarning('LayerState.loadFromStorage failed', 'LayerState.loadFromStorage', { error: e }); } catch (ignore) {} return false; }
+      } catch (e) {
+        try { this.errorHandler?.logError?.(e, 'LayerState.loadFromStorage'); } catch (ignore) {}
+        return false;
+      }
     }
 
     // State serialization for debugging/testing

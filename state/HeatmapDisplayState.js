@@ -104,22 +104,18 @@
 
     /**
      * Save heatmap visibility to storage (unified pattern)
-     * @param {Object} storageService - Storage service for persisting state (optional, uses injected this.storage)
      */
-    saveToStorage(storageService) {
+    saveToStorage() {
       try {
-        const storage = storageService || this.storage;
-        if (!storage) return;
+        if (!this.storage) return;
 
         const key = (this.config?.STORAGE_KEYS?.GRID_HEATMAP) || 'mp4_grid_heatmap';
         const value = this._heatmapVisible ? '1' : '0';
         
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'heatmapDisplay' });
         
-        if (typeof storage.set === 'function') {
-          storage.set(key, value);
-        } else if (typeof storage.saveSetting === 'function') {
-          storage.saveSetting(key, value);
+        if (typeof this.storage.set === 'function') {
+          this.storage.set(key, value);
         }
         
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { 

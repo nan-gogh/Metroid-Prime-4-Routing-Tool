@@ -138,15 +138,11 @@ class MarkerManager {
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'markers' });
             
             // Get storage key from config
-            const key = this.config && this.config.STORAGE_KEYS 
-                ? this.config.STORAGE_KEYS.CUSTOM_MARKERS 
-                : 'mp4_customMarkers';
+            const key = (this.config?.STORAGE_KEYS?.CUSTOM_MARKERS) || 'mp4_customMarkers';
             
-            // Use injected storage (StorageService or fallback)
+            // Use StorageService exclusively
             if (this.storage && typeof this.storage.set === 'function') {
                 this.storage.set(key, this.markers);
-            } else if (this.storage && typeof this.storage.saveMarkers === 'function') {
-                this.storage.saveMarkers(this.markers);
             }
             
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 

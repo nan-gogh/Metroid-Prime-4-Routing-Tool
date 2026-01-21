@@ -282,8 +282,6 @@
         
         if (this.storage && typeof this.storage.set === 'function') {
           this.storage.set(key, payload);
-        } else if (typeof localStorage !== 'undefined') {
-          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
         }
         
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
@@ -305,19 +303,30 @@
 
     loadFromStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.MAP_VIEW : 'mp4_map_view';
+        const key = (this.config?.STORAGE_KEYS?.MAP_VIEW) || 'mp4_map_view';
         let data = null;
-        if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
-        else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
+        if (this.storage && typeof this.storage.get === 'function') {
+          data = this.storage.get(key);
+        }
         if (data && typeof data === 'object') {
-          const minZoom = this.minZoom; const maxZoom = this.maxZoom;
-          if (typeof data.zoom === 'number' && Number.isFinite(data.zoom)) this.zoom = Math.max(minZoom, Math.min(maxZoom, data.zoom));
-          if (typeof data.panX === 'number' && Number.isFinite(data.panX)) this.panX = data.panX;
-          if (typeof data.panY === 'number' && Number.isFinite(data.panY)) this.panY = data.panY;
+          const minZoom = this.minZoom;
+          const maxZoom = this.maxZoom;
+          if (typeof data.zoom === 'number' && Number.isFinite(data.zoom)) {
+            this.zoom = Math.max(minZoom, Math.min(maxZoom, data.zoom));
+          }
+          if (typeof data.panX === 'number' && Number.isFinite(data.panX)) {
+            this.panX = data.panX;
+          }
+          if (typeof data.panY === 'number' && Number.isFinite(data.panY)) {
+            this.panY = data.panY;
+          }
           return true;
         }
         return false;
-      } catch (e) { try { this.errorHandler.logWarning('MapState.loadFromStorage failed', 'MapState.loadFromStorage', { error: e }); } catch (ignore) {} return false; }
+      } catch (e) {
+        try { this.errorHandler?.logError?.(e, 'MapState.loadFromStorage'); } catch (ignore) {}
+        return false;
+      }
     }
   }
 

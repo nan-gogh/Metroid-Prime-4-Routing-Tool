@@ -136,23 +136,16 @@ class RouteManager {
             this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_STARTED, { entity: 'route' });
             
             // Get storage keys from config
-            const routeKey = this.config && this.config.STORAGE_KEYS 
-                ? this.config.STORAGE_KEYS.ROUTE 
-                : 'mp4_route';
-            const loopingKey = this.config && this.config.STORAGE_KEYS 
-                ? this.config.STORAGE_KEYS.ROUTE_LOOPING_FLAG 
-                : 'mp4_route_looping_flag';
+            const routeKey = (this.config?.STORAGE_KEYS?.ROUTE) || 'mp4_route';
+            const loopingKey = (this.config?.STORAGE_KEYS?.ROUTE_LOOPING_FLAG) || 'mp4_route_looping_flag';
             
             let routeData = null;
             let looping = false;
             
-            // Use injected storage (StorageService or fallback)
+            // Use StorageService exclusively
             if (this.storage && typeof this.storage.get === 'function') {
                 routeData = this.storage.get(routeKey);
                 looping = this.storage.get(loopingKey, false);
-            } else if (this.storage && typeof this.storage.loadRoute === 'function') {
-                routeData = this.storage.loadRoute();
-                looping = this.storage.loadRouteLoopingFlag();
             }
             
             if (routeData && routeData.indices && Array.isArray(routeData.indices)) {
@@ -192,12 +185,8 @@ class RouteManager {
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'route' });
             
             // Get storage keys from config
-            const routeKey = this.config && this.config.STORAGE_KEYS 
-                ? this.config.STORAGE_KEYS.ROUTE 
-                : 'mp4_route';
-            const loopingKey = this.config && this.config.STORAGE_KEYS 
-                ? this.config.STORAGE_KEYS.ROUTE_LOOPING_FLAG 
-                : 'mp4_route_looping_flag';
+            const routeKey = (this.config?.STORAGE_KEYS?.ROUTE) || 'mp4_route';
+            const loopingKey = (this.config?.STORAGE_KEYS?.ROUTE_LOOPING_FLAG) || 'mp4_route_looping_flag';
             
             const routeData = {
                 indices: this.currentRoute,
@@ -205,13 +194,10 @@ class RouteManager {
                 lengthNormalized: this.currentRouteLengthNormalized
             };
             
-            // Use injected storage (StorageService or fallback)
+            // Use StorageService exclusively
             if (this.storage && typeof this.storage.set === 'function') {
                 this.storage.set(routeKey, routeData);
                 this.storage.set(loopingKey, this.routeLooping);
-            } else if (this.storage && typeof this.storage.saveRoute === 'function') {
-                this.storage.saveRoute(routeData);
-                this.storage.saveRouteLoopingFlag(this.routeLooping);
             }
             
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 
