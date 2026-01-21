@@ -496,7 +496,7 @@
         } else if (storage && typeof storage.hasStorageConsent === 'function') {
           return storage.hasStorageConsent();
         }
-        return svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
+        return false;
       } catch (e) {
         return false;
       }
@@ -514,10 +514,6 @@
           else storage.remove && storage.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
         } else if (storage && typeof storage.setStorageConsent === 'function') {
           storage.setStorageConsent(consent);
-        }
-            if (consent) svc.set('mp4_storage_consent', '1');
-            else svc.remove && svc.remove('mp4_storage_consent');
-          }
         }
       } catch (e) {
         this.errorHandler.logWarning('SettingsController: Failed to set storage consent', 'SettingsController._setStorageConsent', { error: e });
