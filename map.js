@@ -244,7 +244,14 @@ class InteractiveMap {
             // LayerState initializes visibility in constructor
             // Set grid visibility from storage
             try {
-                const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
+                const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : (typeof window !== 'undefined' ? window.storageService : null);
+                let g = null;
+                if (storage && typeof storage.loadSetting === 'function') {
+                    g = storage.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
+                } else if (storage && typeof storage.get === 'function') {
+                    g = storage.get(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
+                }
+
                 if (g === null || typeof g === 'undefined') {
                     this.layerState.setGridVisible(false);
                 } else {
@@ -2253,6 +2260,36 @@ async function init() {
         }
     } catch (e) {
         moduleErrorHandler.logWarn('Failed to initialize StorageService', 'InteractiveMap.init.StorageService', { error: e });
+    }
+
+    // Create a StorageServiceProvider for DI and attach to map instance
+    try {
+        const svcInstance = (typeof getStorageService === 'function') ? getStorageService() : (typeof window !== 'undefined' ? window.storageService : null);
+        try {
+            this.storageProvider = new StorageServiceProvider(svcInstance);
+        } catch (e) {
+            // Fallback: expose an object with getInstance
+            this.storageProvider = { getInstance: () => svcInstance };
+        }
+        // Expose globally for other modules that want to pick it up
+        if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
+        // Propagate storage instance to existing state managers (if any)
+        try {
+            const svcInst = this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null;
+            if (svcInst) {
+                try { this.mapState && (this.mapState.storage = svcInst); } catch (__) {}
+                try { this.selectionState && (this.selectionState.storage = svcInst); } catch (__) {}
+                try { this.editModeState && (this.editModeState.storage = svcInst); } catch (__) {}
+                try { this.highlightState && (this.highlightState.storage = svcInst); } catch (__) {}
+                try { this.tilesetState && (this.tilesetState.storage = svcInst); } catch (__) {}
+                try { this.routeAnimationState && (this.routeAnimationState.storage = svcInst); } catch (__) {}
+                try { this.layerState && (this.layerState.storage = svcInst); } catch (__) {}
+                try { this.heatmapDisplayState && (this.heatmapDisplayState.storage = svcInst); } catch (__) {}
+                try { this.imageState && (this.imageState.storage = svcInst); } catch (__) {}
+            }
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.propagateStorage', {}); }
+    } catch (e) {
+        moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.storageProvider', { message: 'Failed to create storage provider' });
     }
 
     // Initialize EventBus for cross-module communication

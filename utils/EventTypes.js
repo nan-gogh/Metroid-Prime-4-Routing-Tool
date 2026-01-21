@@ -416,6 +416,18 @@ const EventTypes = {
      */
     HIGHLIGHTED_LAYERS_SAVE_REQUESTED: 'storage:highlighted-layers-save',
 
+    // Generic storage lifecycle events
+    STORAGE_SAVE_STARTED: 'storage:save-started',
+    STORAGE_SAVE_COMPLETED: 'storage:save-completed',
+    STORAGE_SAVE_FAILED: 'storage:save-failed',
+
+    STORAGE_LOAD_STARTED: 'storage:load-started',
+    STORAGE_LOAD_COMPLETED: 'storage:load-completed',
+    STORAGE_LOAD_FAILED: 'storage:load-failed',
+
+    STORAGE_QUOTA_EXCEEDED: 'storage:quota-exceeded',
+    STORAGE_CONSENT_CHANGED: 'storage:consent-changed',
+
     // Tileset Events (enhanced)
     /**
      * Emitted to report tileset loader/selection state changes. Useful

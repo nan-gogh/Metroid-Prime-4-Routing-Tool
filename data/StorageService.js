@@ -2,10 +2,11 @@
 // Consolidates all localStorage operations with consent checking and error handling
 
 class StorageService {
-    constructor(consentChecker, errorHandler = null) {
+    constructor(consentChecker, errorHandler = null, eventBus = null) {
         this._consentChecker = consentChecker;
         this._errorHandler = errorHandler || new ErrorHandler();
         this._cache = new Map();
+        this._eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
     }
 
     /**
@@ -32,8 +33,12 @@ class StorageService {
             return defaultValue;
         }
 
+        // Emit load started
+        try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_STARTED, { key }); } catch (__) {}
+
         // Check cache first
         if (this._cache.has(key)) {
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { key, source: 'cache' }); } catch (__) {}
             return this._cache.get(key);
         }
 
@@ -41,9 +46,11 @@ class StorageService {
             const value = localStorage.getItem(key);
             const parsed = value !== null ? JSON.parse(value) : defaultValue;
             this._cache.set(key, parsed);
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { key, source: 'localStorage' }); } catch (__) {}
             return parsed;
         } catch (e) {
             this._errorHandler.logWarning(`StorageService.get: Failed to load ${key}`, 'StorageService.get', { key, error: e });
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_FAILED, { key, error: e && e.message ? e.message : String(e) }); } catch (__) {}
             return defaultValue;
         }
     }
@@ -59,13 +66,26 @@ class StorageService {
             return false;
         }
 
+        // Emit save started
+        try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { key }); } catch (__) {}
+
         try {
             const serialized = JSON.stringify(value);
             localStorage.setItem(key, serialized);
             this._cache.set(key, value);
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { key }); } catch (__) {}
             return true;
         } catch (e) {
             this._errorHandler.logWarning(`StorageService.set: Failed to save ${key}`, 'StorageService.set', { key, value, error: e });
+            try {
+                this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { key, error: e && e.message ? e.message : String(e) });
+            } catch (__) {}
+            // Quota handling
+            try {
+                if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
+                    this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_QUOTA_EXCEEDED, { key, error: e && e.message ? e.message : String(e) });
+                }
+            } catch (__) {}
             return false;
         }
     }
@@ -78,8 +98,10 @@ class StorageService {
         try {
             this._cache.delete(key);
             localStorage.removeItem(key);
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { key, removed: true }); } catch (__) {}
         } catch (e) {
             this._errorHandler.logWarning(`StorageService.remove: Failed to remove ${key}`, 'StorageService.remove', { key, error: e });
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { key, error: e && e.message ? e.message : String(e) }); } catch (__) {}
         }
     }
 
