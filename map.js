@@ -2347,9 +2347,7 @@ async function init() {
             try { this.imageState && (this.imageState.storage = svcInst); } catch (__) {}
         }
     } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.propagateStorage', {}); }
-    } catch (e) {
-        moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.storageProvider', { message: 'Failed to create storage provider' });
-    }
+    
 
     // Initialize EventBus for cross-module communication
     try {
@@ -3046,24 +3044,15 @@ async function init() {
         
         // Retrieve StorageService from global getStorageService() function
         let storageService = null;
-        try {
-          if (typeof getStorageService === 'function') {
-            storageService = getStorageService();
-            moduleErrorHandler && moduleErrorHandler.logDebug('StorageService retrieved via getStorageService()', 'InteractiveMap.initUIControllers', {
-              hasInstance: !!storageService
-            });
-          }
-        } catch (e) {
-          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService' });
-        }
+                try {
+                    if (typeof getStorageService === 'function') {
+                        storageService = getStorageService();
+                    }
+                } catch (e) {
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService' });
+                }
         
-        moduleErrorHandler && moduleErrorHandler.logDebug('Phase 5 initialization', 'InteractiveMap.initUIControllers', {
-          consentManagerDefined: typeof ConsentManager !== 'undefined',
-          dataExportControllerDefined: typeof DataExportController !== 'undefined',
-          storageServiceAvailable: !!storageService,
-          markerManagerAvailable: !!map.markerManager,
-          routeManagerAvailable: !!map.routeManager
-        });
+                // Phase 5 initialization diagnostics removed
         
         try {
           if (typeof ConsentManager !== 'undefined' && storageService) {
@@ -3073,7 +3062,7 @@ async function init() {
               config: MP4Config,
               errorHandler: moduleErrorHandler
             });
-            moduleErrorHandler && moduleErrorHandler.logDebug('ConsentManager initialized successfully', 'InteractiveMap.initUIControllers.ConsentManager');
+            // ConsentManager initialized
           } else {
             moduleErrorHandler && moduleErrorHandler.logDebug('ConsentManager not initialized - missing dependencies', 'InteractiveMap.initUIControllers', {
               consentManagerDefined: typeof ConsentManager !== 'undefined',
@@ -3096,7 +3085,7 @@ async function init() {
               config: MP4Config,
               errorHandler: moduleErrorHandler
             });
-            moduleErrorHandler && moduleErrorHandler.logDebug('DataExportController initialized successfully', 'InteractiveMap.initUIControllers.DataExportController');
+            // DataExportController initialized
           } else {
             moduleErrorHandler && moduleErrorHandler.logDebug('DataExportController not initialized - missing dependencies', 'InteractiveMap.initUIControllers', {
               dataExportControllerDefined: typeof DataExportController !== 'undefined',
