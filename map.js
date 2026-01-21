@@ -3064,35 +3064,37 @@ async function init() {
         // Initialize Phase 5 REQUIRED managers for GDPR compliance
         let consentManager = null;
         let dataExportController = null;
-        try {
-          if (typeof ConsentManager !== 'undefined' && map.storageService) {
-            consentManager = new ConsentManager({
-              storage: map.storageService,
-              eventBus: eventBus,
-              config: MP4Config,
-              errorHandler: moduleErrorHandler
-            });
-          }
-        } catch (e) {
-          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.ConsentManager', { message: 'Failed to initialize ConsentManager' });
-        }
-        
-        try {
-          if (typeof DataExportController !== 'undefined' && map.markerManager && map.routeManager && map.storageService) {
-            dataExportController = new DataExportController({
-              markerManager: map.markerManager,
-              routeManager: map.routeManager,
-              storage: map.storageService,
-              mapState: map.mapState,
-              layerState: map.layerState,
-              eventBus: eventBus,
-              config: MP4Config,
-              errorHandler: moduleErrorHandler
-            });
-          }
-        } catch (e) {
-          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.DataExportController', { message: 'Failed to initialize DataExportController' });
-        }
+                try {
+                    const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+                    if (typeof ConsentManager !== 'undefined' && svc) {
+                        consentManager = new ConsentManager({
+                            storage: svc,
+                            eventBus: eventBus,
+                            config: MP4Config,
+                            errorHandler: moduleErrorHandler
+                        });
+                    }
+                } catch (e) {
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.ConsentManager', { message: 'Failed to initialize ConsentManager' });
+                }
+
+                try {
+                    const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+                    if (typeof DataExportController !== 'undefined' && map.markerManager && map.routeManager && svc) {
+                        dataExportController = new DataExportController({
+                            markerManager: map.markerManager,
+                            routeManager: map.routeManager,
+                            storage: svc,
+                            mapState: map.mapState,
+                            layerState: map.layerState,
+                            eventBus: eventBus,
+                            config: MP4Config,
+                            errorHandler: moduleErrorHandler
+                        });
+                    }
+                } catch (e) {
+                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.DataExportController', { message: 'Failed to initialize DataExportController' });
+                }
 
         if (typeof SettingsController !== 'undefined') {
             settingsController = new SettingsController({
