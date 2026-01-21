@@ -42,8 +42,6 @@
       
       // Optional map reference for operations that previously called map methods
       this.map = options.map || null;
-      // Optional storage provider for DI
-      this.storageProvider = options.storageProvider || (typeof window !== 'undefined' ? window.storageProvider : null);
       // Event listener cleanup
       this._eventUnsubscribers = [];
     }
@@ -492,14 +490,12 @@
      */
     _getStorageConsent() {
       try {
-        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
         if (storage && typeof storage.hasConsent === 'function') {
           return storage.hasConsent();
         } else if (storage && typeof storage.hasStorageConsent === 'function') {
           return storage.hasStorageConsent();
         }
-        // Fallback: check storage service via global function
-        const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
         return svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
       } catch (e) {
         return false;
@@ -512,16 +508,13 @@
      */
     _setStorageConsent(consent) {
       try {
-        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
         if (storage && typeof storage.set === 'function') {
           if (consent) storage.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
           else storage.remove && storage.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
         } else if (storage && typeof storage.setStorageConsent === 'function') {
           storage.setStorageConsent(consent);
-        } else {
-          // Fallback to storage service via global function
-          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
-          if (svc && typeof svc.set === 'function') {
+        }
             if (consent) svc.set('mp4_storage_consent', '1');
             else svc.remove && svc.remove('mp4_storage_consent');
           }
@@ -612,7 +605,7 @@
           gridVisible: this.layerState ? this.layerState.isGridVisible() : false
         };
 
-        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
         if (storage && typeof storage.set === 'function') {
           storage.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
           storage.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
@@ -640,7 +633,7 @@
      */
     _clearAllSavedData() {
       try {
-        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
         if (storage && typeof storage.remove === 'function') {
           // Clear all storage keys using StorageService
           const keys = Object.values(this.config.STORAGE_KEYS);

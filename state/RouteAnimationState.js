@@ -13,9 +13,8 @@
       this.animationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
       this.lineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
       this.animationDirection = 1; // 1 for forward, -1 for reverse
-      // Injected services (prefer DI/provider, fall back to globals for compatibility)
-      // Prefer explicit storage option, then storageProvider passed via options
-      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      // Storage will be obtained via global getStorageService() when needed
+      this.storage = (options && options.storage) ? options.storage : null;
       this.eventBus = options.eventBus || null;
     }
 

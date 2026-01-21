@@ -19,8 +19,6 @@
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
       this.notificationInterface = options.notificationInterface || global.NotificationInterface || null;
-      // Optional storage provider for DI
-      this.storageProvider = options.storageProvider || (typeof window !== 'undefined' ? window.storageProvider : null);
 
       // Manager instances (will be created in init)
       this._markerManager = null;
@@ -61,11 +59,11 @@
      * @private
      */
     async _createManagers() {
-      // Build a storage adapter that adapts either the injected StorageService
-      // or the legacy StorageInterface to the methods expected by managers.
+      // Build a storage adapter that adapts the global StorageService
+      // to the methods expected by managers.
       let storageInstance = null;
       try {
-        storageInstance = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        storageInstance = (typeof getStorageService === 'function') ? getStorageService() : null;
       } catch (e) {
         storageInstance = null;
       }

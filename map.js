@@ -63,24 +63,17 @@ class InteractiveMap {
             this.eventBus.setErrorHandler(this.errorHandler);
         }
 
-        // Create a StorageServiceProvider early so we can pass it explicitly to state managers/controllers
-        try {
-            this.storageProvider = new StorageServiceProvider(null);
-        } catch (e) {
-            this.storageProvider = { getInstance: () => null, setInstance: () => {} };
-        }
-
-        // Initialize state managers
-        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        // Initialize state managers (storage will be obtained from global getStorageService() when needed)
+        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
 
         // State managers initialized
@@ -2339,32 +2332,21 @@ async function init() {
         moduleErrorHandler.logWarn('Failed to initialize StorageService', 'InteractiveMap.init.StorageService', { error: e });
     }
 
-    // Attach StorageService instance to the provider (created earlier in constructor)
+    // Propagate storage instance to existing state managers (storage will auto-fetch via getStorageService when needed)
     try {
-        const svcInstance = (typeof getStorageService === 'function') ? getStorageService() : null;
-        try {
-            if (this.storageProvider && typeof this.storageProvider.setInstance === 'function') this.storageProvider.setInstance(svcInstance);
-        } catch (e) {
-            // Fallback: set getInstance to return svcInstance
-            try { this.storageProvider = { getInstance: () => svcInstance, setInstance: () => {} }; } catch (__) {}
+        const svcInst = (typeof getStorageService === 'function') ? getStorageService() : null;
+        if (svcInst) {
+            try { this.mapState && (this.mapState.storage = svcInst); } catch (__) {}
+            try { this.selectionState && (this.selectionState.storage = svcInst); } catch (__) {}
+            try { this.editModeState && (this.editModeState.storage = svcInst); } catch (__) {}
+            try { this.highlightState && (this.highlightState.storage = svcInst); } catch (__) {}
+            try { this.tilesetState && (this.tilesetState.storage = svcInst); } catch (__) {}
+            try { this.routeAnimationState && (this.routeAnimationState.storage = svcInst); } catch (__) {}
+            try { this.layerState && (this.layerState.storage = svcInst); } catch (__) {}
+            try { this.heatmapDisplayState && (this.heatmapDisplayState.storage = svcInst); } catch (__) {}
+            try { this.imageState && (this.imageState.storage = svcInst); } catch (__) {}
         }
-        // Expose globally for backward compatibility only
-        if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
-        // Propagate storage instance to existing state managers (if any)
-        try {
-            const svcInst = this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null;
-            if (svcInst) {
-                try { this.mapState && (this.mapState.storage = svcInst); } catch (__) {}
-                try { this.selectionState && (this.selectionState.storage = svcInst); } catch (__) {}
-                try { this.editModeState && (this.editModeState.storage = svcInst); } catch (__) {}
-                try { this.highlightState && (this.highlightState.storage = svcInst); } catch (__) {}
-                try { this.tilesetState && (this.tilesetState.storage = svcInst); } catch (__) {}
-                try { this.routeAnimationState && (this.routeAnimationState.storage = svcInst); } catch (__) {}
-                try { this.layerState && (this.layerState.storage = svcInst); } catch (__) {}
-                try { this.heatmapDisplayState && (this.heatmapDisplayState.storage = svcInst); } catch (__) {}
-                try { this.imageState && (this.imageState.storage = svcInst); } catch (__) {}
-            }
-        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.propagateStorage', {}); }
+    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.propagateStorage', {}); }
     } catch (e) {
         moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.storageProvider', { message: 'Failed to create storage provider' });
     }
@@ -3023,8 +3005,7 @@ async function init() {
                 highlightState: map.highlightState,
                 eventBus: eventBus,
                 config: MP4Config,
-                    errorHandler: moduleErrorHandler,
-                    storageProvider: this.storageProvider
+                    errorHandler: moduleErrorHandler
             });
             await layerListController.init();
         }
@@ -3043,8 +3024,7 @@ async function init() {
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
-                map: map, // For UI operations
-                storageProvider: this.storageProvider
+                map: map // For UI operations
             });
             sidebarController.init();
         }
@@ -3056,8 +3036,7 @@ async function init() {
                 markerManager: map.markerManager,
                 eventBus: eventBus,
                 config: MP4Config,
-                errorHandler: moduleErrorHandler,
-                storageProvider: this.storageProvider
+                errorHandler: moduleErrorHandler
             });
             toolbarController.init();
         }
@@ -3142,7 +3121,6 @@ async function init() {
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
-                storageProvider: this.storageProvider,
                 consentManager: consentManager,
                 dataExportController: dataExportController
             });
