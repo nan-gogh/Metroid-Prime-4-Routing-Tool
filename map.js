@@ -2346,7 +2346,7 @@ async function init() {
 
     // Propagate storage instance to existing state managers (storage will auto-fetch via getStorageService when needed)
     try {
-        const svcInst = (typeof getStorageService === 'function') ? getStorageService() : null;
+        const svcInst = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : ((typeof getStorageService === 'function') ? getStorageService() : null);
         if (svcInst) {
             try { this.mapState && (this.mapState.storage = svcInst); } catch (__) {}
             try { this.selectionState && (this.selectionState.storage = svcInst); } catch (__) {}
@@ -3209,7 +3209,7 @@ async function init() {
             }
         } catch (inner) {
             // Fallback: check if storage service has consent
-            const svc = getStorageService && typeof getStorageService === 'function' ? getStorageService() : null;
+            const svc = (map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : (getStorageService && typeof getStorageService === 'function' ? getStorageService() : null);
             const consent = svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
             if (consent && map && typeof map.loadViewFromStorage === 'function') {
                 try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
