@@ -3064,7 +3064,32 @@ async function init() {
         // Initialize Phase 5 REQUIRED managers for GDPR compliance
         let consentManager = null;
         let dataExportController = null;
-        const storageService = map.storageProvider ? map.storageProvider.getInstance() : null;
+        
+        // Retrieve StorageService from the provider
+        let storageService = null;
+        try {
+          if (map.storageProvider && typeof map.storageProvider.getInstance === 'function') {
+            storageService = map.storageProvider.getInstance();
+            moduleErrorHandler && moduleErrorHandler.logDebug('StorageService retrieved from provider', 'InteractiveMap.initUIControllers', {
+              hasInstance: !!storageService,
+              providerType: typeof map.storageProvider
+            });
+          }
+        } catch (e) {
+          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService from provider' });
+        }
+        
+        // Also try global getStorageService function as fallback
+        if (!storageService && typeof getStorageService === 'function') {
+          try {
+            storageService = getStorageService();
+            moduleErrorHandler && moduleErrorHandler.logDebug('StorageService retrieved via global getStorageService()', 'InteractiveMap.initUIControllers', {
+              hasInstance: !!storageService
+            });
+          } catch (e) {
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.globalGetStorageService', { message: 'Failed to call global getStorageService()' });
+          }
+        }
         
         moduleErrorHandler && moduleErrorHandler.logDebug('Phase 5 initialization', 'InteractiveMap.initUIControllers', {
           consentManagerDefined: typeof ConsentManager !== 'undefined',
