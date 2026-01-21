@@ -3066,6 +3066,14 @@ async function init() {
         let dataExportController = null;
         const storageService = map.storageProvider ? map.storageProvider.getInstance() : null;
         
+        moduleErrorHandler && moduleErrorHandler.logDebug('Phase 5 initialization', 'InteractiveMap.initUIControllers', {
+          consentManagerDefined: typeof ConsentManager !== 'undefined',
+          dataExportControllerDefined: typeof DataExportController !== 'undefined',
+          storageServiceAvailable: !!storageService,
+          markerManagerAvailable: !!map.markerManager,
+          routeManagerAvailable: !!map.routeManager
+        });
+        
         try {
           if (typeof ConsentManager !== 'undefined' && storageService) {
             consentManager = new ConsentManager({
@@ -3074,7 +3082,12 @@ async function init() {
               config: MP4Config,
               errorHandler: moduleErrorHandler
             });
-            moduleErrorHandler && moduleErrorHandler.logDebug('ConsentManager initialized', 'InteractiveMap.initUIControllers.ConsentManager');
+            moduleErrorHandler && moduleErrorHandler.logDebug('ConsentManager initialized successfully', 'InteractiveMap.initUIControllers.ConsentManager');
+          } else {
+            moduleErrorHandler && moduleErrorHandler.logDebug('ConsentManager not initialized', 'InteractiveMap.initUIControllers', {
+              consentManagerDefined: typeof ConsentManager !== 'undefined',
+              storageServiceAvailable: !!storageService
+            });
           }
         } catch (e) {
           moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.ConsentManager', { message: 'Failed to initialize ConsentManager' });
@@ -3092,7 +3105,14 @@ async function init() {
               config: MP4Config,
               errorHandler: moduleErrorHandler
             });
-            moduleErrorHandler && moduleErrorHandler.logDebug('DataExportController initialized', 'InteractiveMap.initUIControllers.DataExportController');
+            moduleErrorHandler && moduleErrorHandler.logDebug('DataExportController initialized successfully', 'InteractiveMap.initUIControllers.DataExportController');
+          } else {
+            moduleErrorHandler && moduleErrorHandler.logDebug('DataExportController not initialized', 'InteractiveMap.initUIControllers', {
+              dataExportControllerDefined: typeof DataExportController !== 'undefined',
+              markerManagerAvailable: !!map.markerManager,
+              routeManagerAvailable: !!map.routeManager,
+              storageServiceAvailable: !!storageService
+            });
           }
         } catch (e) {
           moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.DataExportController', { message: 'Failed to initialize DataExportController' });
