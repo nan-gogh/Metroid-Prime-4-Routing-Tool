@@ -3061,6 +3061,39 @@ async function init() {
             });
             toolbarController.init();
         }
+        // Initialize Phase 5 REQUIRED managers for GDPR compliance
+        let consentManager = null;
+        let dataExportController = null;
+        try {
+          if (typeof ConsentManager !== 'undefined' && map.storageService) {
+            consentManager = new ConsentManager({
+              storage: map.storageService,
+              eventBus: eventBus,
+              config: MP4Config,
+              errorHandler: moduleErrorHandler
+            });
+          }
+        } catch (e) {
+          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.ConsentManager', { message: 'Failed to initialize ConsentManager' });
+        }
+        
+        try {
+          if (typeof DataExportController !== 'undefined' && map.markerManager && map.routeManager && map.storageService) {
+            dataExportController = new DataExportController({
+              markerManager: map.markerManager,
+              routeManager: map.routeManager,
+              storage: map.storageService,
+              mapState: map.mapState,
+              layerState: map.layerState,
+              eventBus: eventBus,
+              config: MP4Config,
+              errorHandler: moduleErrorHandler
+            });
+          }
+        } catch (e) {
+          moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.DataExportController', { message: 'Failed to initialize DataExportController' });
+        }
+
         if (typeof SettingsController !== 'undefined') {
             settingsController = new SettingsController({
                 layerState: map.layerState,
@@ -3073,7 +3106,9 @@ async function init() {
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
-                storageProvider: this.storageProvider
+                storageProvider: this.storageProvider,
+                consentManager: consentManager,
+                dataExportController: dataExportController
             });
             settingsController.init();
             // Load saved settings after controller is initialized
