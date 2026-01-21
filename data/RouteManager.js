@@ -130,40 +130,101 @@ class RouteManager {
         }
     }
 
-    // Load route from storage
+    // Load route from storage (unified pattern)
     loadFromStorage() {
         try {
-            const routeData = this.storage.loadRoute();
-            if (routeData) {
-                this.currentRoute = routeData.indices || [];
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_STARTED, { entity: 'route' });
+            
+            // Get storage keys from config
+            const routeKey = this.config && this.config.STORAGE_KEYS 
+                ? this.config.STORAGE_KEYS.ROUTE 
+                : 'mp4_route';
+            const loopingKey = this.config && this.config.STORAGE_KEYS 
+                ? this.config.STORAGE_KEYS.ROUTE_LOOPING_FLAG 
+                : 'mp4_route_looping_flag';
+            
+            let routeData = null;
+            let looping = false;
+            
+            // Use injected storage (StorageService or fallback)
+            if (this.storage && typeof this.storage.get === 'function') {
+                routeData = this.storage.get(routeKey);
+                looping = this.storage.get(loopingKey, false);
+            } else if (this.storage && typeof this.storage.loadRoute === 'function') {
+                routeData = this.storage.loadRoute();
+                looping = this.storage.loadRouteLoopingFlag();
+            }
+            
+            if (routeData && routeData.indices && Array.isArray(routeData.indices)) {
+                this.currentRoute = routeData.indices;
                 this.routeSources = routeData.sources || [];
                 this.currentRouteLengthNormalized = routeData.lengthNormalized || 0;
-
+                this.routeLooping = !!looping;
+                
                 // Increment route version for cache invalidation
                 this._routeVersion++;
+                
+                this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { 
+                    entity: 'route',
+                    routeLength: this.currentRoute.length,
+                    looping: this.routeLooping
+                });
+                return true;
             }
-            this.routeLooping = this.storage.loadRouteLoopingFlag();
+            
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { entity: 'route' });
         } catch (e) {
-            this.errorHandler.logWarning(e, 'RouteManager.loadFromStorage.failed', {});
+            this.errorHandler.logError(e, 'RouteManager.loadFromStorage');
             this.currentRoute = [];
             this.routeSources = [];
             this.currentRouteLengthNormalized = 0;
             this.routeLooping = false;
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_FAILED, { 
+                entity: 'route', 
+                error: e.message 
+            });
         }
     }
 
-    // Save route to storage
+    // Save route to storage (unified pattern)
     saveToStorage() {
         try {
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'route' });
+            
+            // Get storage keys from config
+            const routeKey = this.config && this.config.STORAGE_KEYS 
+                ? this.config.STORAGE_KEYS.ROUTE 
+                : 'mp4_route';
+            const loopingKey = this.config && this.config.STORAGE_KEYS 
+                ? this.config.STORAGE_KEYS.ROUTE_LOOPING_FLAG 
+                : 'mp4_route_looping_flag';
+            
             const routeData = {
                 indices: this.currentRoute,
                 sources: this.routeSources,
                 lengthNormalized: this.currentRouteLengthNormalized
             };
-            this.storage.saveRoute(routeData);
-            this.storage.saveRouteLoopingFlag(this.routeLooping);
+            
+            // Use injected storage (StorageService or fallback)
+            if (this.storage && typeof this.storage.set === 'function') {
+                this.storage.set(routeKey, routeData);
+                this.storage.set(loopingKey, this.routeLooping);
+            } else if (this.storage && typeof this.storage.saveRoute === 'function') {
+                this.storage.saveRoute(routeData);
+                this.storage.saveRouteLoopingFlag(this.routeLooping);
+            }
+            
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 
+                entity: 'route',
+                routeLength: this.currentRoute.length,
+                looping: this.routeLooping
+            });
         } catch (e) {
-            this.errorHandler.logWarning(e, 'RouteManager.saveToStorage.failed', {});
+            this.errorHandler.logError(e, 'RouteManager.saveToStorage');
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { 
+                entity: 'route', 
+                error: e.message 
+            });
         }
     }
 

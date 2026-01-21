@@ -17,9 +17,6 @@ function initializeErrorHandlerInjection() {
     if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setErrorHandler === 'function') {
         MarkerUtils.setErrorHandler(appErrorHandler);
     }
-    if (typeof StorageInterface !== 'undefined' && typeof StorageInterface.setErrorHandler === 'function') {
-        StorageInterface.setErrorHandler(appErrorHandler);
-    }
     if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.setErrorHandler === 'function') {
         RouteAnimation.setErrorHandler(appErrorHandler);
     }
@@ -59,22 +56,31 @@ class InteractiveMap {
         // Initialize error handler FIRST (before state managers that need it)
         this.errorHandler = appErrorHandler || new ErrorHandler();
 
-        // Set error handler on global eventBus
-        if (window.eventBus) {
-            window.eventBus.setErrorHandler(this.errorHandler);
+        // Centralize eventBus reference (prefer global instance for top-level map)
+        this.eventBus = (typeof window !== 'undefined' && window.eventBus) ? window.eventBus : null;
+        // Set error handler on eventBus if available
+        if (this.eventBus) {
+            this.eventBus.setErrorHandler(this.errorHandler);
+        }
+
+        // Create a StorageServiceProvider early so we can pass it explicitly to state managers/controllers
+        try {
+            this.storageProvider = new StorageServiceProvider(null);
+        } catch (e) {
+            this.storageProvider = { getInstance: () => null, setInstance: () => {} };
         }
 
         // Initialize state managers
-        this.mapState = new MapState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.selectionState = new SelectionState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.editModeState = new EditModeState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.highlightState = new HighlightState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.tilesetState = new TilesetState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.routeEditState = new RouteEditState({ eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.dragState = new DragState(window.eventBus, this.errorHandler);
-        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
-        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: window.eventBus, errorHandler: this.errorHandler });
+        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
 
         // State managers initialized
@@ -98,14 +104,10 @@ class InteractiveMap {
             if (typeof DataController !== 'undefined') {
                 this.dataController = new DataController({
                     mapState: this.mapState,
-                    eventBus: window.eventBus,
+                    eventBus: this.eventBus,
                     errorHandler: this.errorHandler,
                     config: MP4Config,
-                    storageUtils: {
-                        StorageInterface: typeof StorageInterface !== 'undefined' ? StorageInterface : null,
-                        NotificationInterface: typeof NotificationInterface !== 'undefined' ? NotificationInterface : null
-                    }
-                    ,
+                    notificationInterface: (typeof NotificationInterface !== 'undefined') ? NotificationInterface : null,
                     storageProvider: this.storageProvider
                 });
                 try {
@@ -127,7 +129,7 @@ class InteractiveMap {
                     mapState: this.mapState,
                     tilesetState: this.tilesetState,
                     imageState: this.imageState,
-                    eventBus: window.eventBus,
+                    eventBus: this.eventBus,
                     errorHandler: this.errorHandler,
                     config: MP4Config,
                     markerManager: this.markerManager,
@@ -137,6 +139,7 @@ class InteractiveMap {
                     routeAnimationState: this.routeAnimationState,
                     dragState: this.dragState,
                     highlightState: this.highlightState,
+                    storageProvider: this.storageProvider,
                     heatmapDisplayState: this.heatmapDisplayState,
                     canvas: {
                         main: this.canvas,
@@ -246,12 +249,12 @@ class InteractiveMap {
             // LayerState initializes visibility in constructor
             // Set grid visibility from storage
             try {
-                const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : (typeof window !== 'undefined' ? window.storageService : null);
+                const _stor = getStorage();
                 let g = null;
-                if (storage && typeof storage.loadSetting === 'function') {
-                    g = storage.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
-                } else if (storage && typeof storage.get === 'function') {
-                    g = storage.get(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
+                if (_stor && typeof _stor.loadSetting === 'function') {
+                    g = _stor.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
+                } else if (_stor && typeof _stor.get === 'function') {
+                    g = _stor.get(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
                 }
 
                 if (g === null || typeof g === 'undefined') {
@@ -308,25 +311,36 @@ class InteractiveMap {
         if (this.layerState) {
             // Load tileset from storage
             try {
-                const t = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
-                // LayerState doesn't have tileset yet, so we'll handle this later
+                const _stor = getStorage();
+                let t = null;
+                if (_stor && typeof _stor.loadSetting === 'function') t = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
+                else if (_stor && typeof _stor.get === 'function') t = _stor.get(MP4Config.STORAGE_KEYS.TILESET);
                 this.tileset = t || 'sat';
             } catch (e) { this.tileset = 'sat'; }
 
             // Load tileset grayscale from storage
             try {
-                const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                const _stor = getStorage();
+                let g = null;
+                if (_stor && typeof _stor.loadSetting === 'function') g = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                else if (_stor && typeof _stor.get === 'function') g = _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
         } else {
             // Fallback for when LayerState is not available
             try {
-                const t = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
+                const _stor = getStorage();
+                let t = null;
+                if (_stor && typeof _stor.loadSetting === 'function') t = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
+                else if (_stor && typeof _stor.get === 'function') t = _stor.get(MP4Config.STORAGE_KEYS.TILESET);
                 this.tileset = t || 'sat';
             } catch (e) { this.tileset = 'sat'; }
 
             try {
-                const g = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                const _stor = getStorage();
+                let g = null;
+                if (_stor && typeof _stor.loadSetting === 'function') g = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                else if (_stor && typeof _stor.get === 'function') g = _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
         }
@@ -334,7 +348,8 @@ class InteractiveMap {
         // Load heatmap visibility from storage into dedicated HeatmapDisplayState
         if (this.heatmapDisplayState) {
             try {
-                this.heatmapDisplayState.loadFromStorage(window.storageService);
+                const _stor = getStorage();
+                this.heatmapDisplayState.loadFromStorage(_stor);
             } catch (e) {
                 this.heatmapDisplayState.setVisible(false);
             }
@@ -342,18 +357,17 @@ class InteractiveMap {
         
         // Load marker scaling configuration (consent-gated)
         try {
-            if (window.storageService && window.storageService.hasConsent()) {
-                const savedScaling = window.storageService.get(MP4Config.STORAGE_KEYS.MARKER_SCALING);
-                if (savedScaling) {
-                    MP4Config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || MP4Config.MARKER_SCALING.userScaleMultiplier;
-                    MP4Config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || MP4Config.MARKER_SCALING.highlightMultiplier;
-                }
-            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
-                const savedScaling = StorageInterface.loadMarkerScaling();
-                if (savedScaling) {
-                    MP4Config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || MP4Config.MARKER_SCALING.userScaleMultiplier;
-                    MP4Config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || MP4Config.MARKER_SCALING.highlightMultiplier;
-                }
+            const _stor = getStorage();
+            let savedScaling = null;
+            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+                if (typeof _stor.get === 'function') savedScaling = _stor.get(MP4Config.STORAGE_KEYS.MARKER_SCALING);
+                else if (typeof _stor.loadSetting === 'function') savedScaling = _stor.loadSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING);
+            } else if (_stor && typeof _stor.loadMarkerScaling === 'function') {
+                savedScaling = _stor.loadMarkerScaling();
+            }
+            if (savedScaling) {
+                MP4Config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || MP4Config.MARKER_SCALING.userScaleMultiplier;
+                MP4Config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || MP4Config.MARKER_SCALING.highlightMultiplier;
             }
         } catch (e) {
             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.markerScaling', { message: 'Failed to load marker scaling config' });
@@ -460,9 +474,11 @@ class InteractiveMap {
             if (typeof InputController !== 'undefined') {
                 this.inputController = new InputController({
                     map: this,
-                    eventBus: window.eventBus,
+                    eventBus: this.eventBus,
                     errorHandler: this.errorHandler,
                     config: MP4Config
+                    ,
+                    storageProvider: this.storageProvider
                 });
                 try {
                     await this.inputController.init();
@@ -1012,7 +1028,11 @@ class InteractiveMap {
         // Increment generation and abort any in-flight tile loads from previous tileset
         try { this.imageState.incrementTilesetGeneration(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.incrementGeneration'); }
         try { this._abortAndCleanupTileLoads(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.abortTileLoads'); }
-        try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting'); }
+        try {
+            const _stor = getStorage();
+            if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
+            else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
+        } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting'); }
         // Clear cached images and reload (folder may change depending on
         // whether grayscale variants are enabled)
         try { this.preloadAllMapImages(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.preloadImages'); }
@@ -1045,7 +1065,11 @@ class InteractiveMap {
             enabled = !!enabled;
             if (this.tilesetGrayscale === enabled) return;
             this.tilesetGrayscale = enabled;
-            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting'); }
+            try {
+                const _stor = getStorage();
+                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
+                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting'); }
             this._handleTilesetChange();
         }
     }
@@ -1062,7 +1086,11 @@ class InteractiveMap {
             // Fallback to old implementation using _showGridHeatmap
             if (this._showGridHeatmap === enabled) return;
             this._showGridHeatmap = enabled;
-            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0'); } } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
+            try {
+                const _stor = getStorage();
+                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
+                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
+            } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
             try {
                 // Redraw the heatmap renderer to show/hide heatmap overlay
                 this.markRendererDirty('HeatmapRenderer');
@@ -1321,10 +1349,10 @@ class InteractiveMap {
             }
             // Request selective render via RenderController (preserve immediate fallback)
             try {
-                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
+                if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
                     const dirtyRenderers = this.renderPipeline && typeof this.renderPipeline.getDirtyRenderers === 'function'
                         ? Array.from(this.renderPipeline.getDirtyRenderers()) : ['MarkerRenderer', 'RouteRenderer', 'OverlayRenderer'];
-                    try { window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: dirtyRenderers }); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.emitRenderSelective'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'InteractiveMap.toggleLayer.emitRenderSelective.logFallback', { message: 'toggleLayer emit failed' }); } catch (ignore) {} } }
+                    try { this.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: dirtyRenderers }); } catch (e) { try { this.errorHandler && this.errorHandler.logError(e, 'InteractiveMap.toggleLayer.emitRenderSelective'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'InteractiveMap.toggleLayer.emitRenderSelective.logFallback', { message: 'toggleLayer emit failed' }); } catch (ignore) {} } }
                 } else if (this.renderPipeline && typeof this.renderPipeline.render === 'function') {
                     const dirtyRenderers = this.renderPipeline.getDirtyRenderers();
                     if (dirtyRenderers.size > 0) this.renderPipeline.render(dirtyRenderers);
@@ -1741,13 +1769,21 @@ class InteractiveMap {
     updateMarkerBaseSize(newSize) {
         MP4Config.MARKER_SCALING.baseSize = Math.max(2, Math.min(12, newSize));
         try {
-            if (window.storageService && window.storageService.hasConsent()) {
-                window.storageService.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
-            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
-                StorageInterface.saveMarkerScaling({
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                }
+            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
+                _stor.saveMarkerScaling({
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 });
@@ -1763,13 +1799,21 @@ class InteractiveMap {
     updateMarkerUserScaleMultiplier(newMultiplier) {
         MP4Config.MARKER_SCALING.userScaleMultiplier = Math.max(0.5, Math.min(1.5, newMultiplier));
         try {
-            if (window.storageService && window.storageService.hasConsent()) {
-                window.storageService.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
-            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
-                StorageInterface.saveMarkerScaling({
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                }
+            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
+                _stor.saveMarkerScaling({
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 });
@@ -1785,13 +1829,21 @@ class InteractiveMap {
     updateMarkerHighlightMultiplier(newMultiplier) {
         MP4Config.MARKER_SCALING.highlightMultiplier = Math.max(1.5, Math.min(2.5, newMultiplier));
         try {
-            if (window.storageService && window.storageService.hasConsent()) {
-                window.storageService.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
-            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
-                StorageInterface.saveMarkerScaling({
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                    });
+                }
+            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
+                _stor.saveMarkerScaling({
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 });
@@ -1883,7 +1935,7 @@ class InteractiveMap {
         // Stop animated route when cleared
         this.stopRouteAnimation();
         // If we were in route edit mode, exit via canonical helper so visuals cleanly update
-        try { if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' }); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.exitEditModeForLayer'); }
+        try { if (this.eventBus) this.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'route' }); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.clearRoute.exitEditModeForLayer'); }
         // Remove persisted route when cleared
         try {
             this.routeManager.clearRoute();
@@ -2027,6 +2079,23 @@ class InteractiveMap {
 // Module-level error handler for utility functions
 const moduleErrorHandler = appErrorHandler || new ErrorHandler();
 
+// Centralized storage resolver: prefer injected provider, then new StorageService, then legacy _mp4Storage
+function getStorage() {
+    try {
+        // Prefer the map's injected provider when available
+        if (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') {
+            return map.storageProvider.getInstance();
+        }
+        // Fallback to a global provider if one was set for legacy reasons
+        if (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function') {
+            return window.storageProvider.getInstance();
+        }
+    } catch (e) {
+        // swallow - fallback to null
+    }
+    return null;
+}
+
 // Initialize
 let map;
 // Queue for event unsubscriber functions registered before `map` is created.
@@ -2050,16 +2119,10 @@ function flushPendingUnsubscribers() {
 // LocalStorage helpers for layer visibility persistence
 function loadLayerVisibilityFromStorage() {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.loadSetting === 'function') {
-            return window.storageService.loadSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY);
-        } else {
-            // Fallback to legacy method
-            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                return window._mp4Storage.loadSetting('mp4_layerVisibility');
-            }
-            return null;
-        }
+        const _stor = getStorage();
+        if (_stor && typeof _stor.loadSetting === 'function') return _stor.loadSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY);
+        if (_stor && typeof _stor.get === 'function') return _stor.get(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY);
+        return null;
     } catch (e) {
         moduleErrorHandler.logError(e, 'loadLayerVisibilityFromStorage');
         return null;
@@ -2068,81 +2131,82 @@ function loadLayerVisibilityFromStorage() {
 
 function saveLayerVisibilityToStorage(obj) {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.saveSetting === 'function') {
-            window.storageService.saveSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, obj || {});
-        } else {
-            // Fallback to legacy method
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_layerVisibility', obj || {});
-            }
+        const _stor = getStorage();
+        if (_stor && typeof _stor.saveSetting === 'function') {
+            _stor.saveSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, obj || {});
+            return;
         }
+        if (_stor && typeof _stor.set === 'function') {
+            _stor.set(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, obj || {});
+            return;
+        }
+        return;
     } catch (e) { moduleErrorHandler.logError(e, 'saveLayerVisibilityToStorage'); }
 }
 
 // Highlight multiplier persistence
 function loadHighlightMultiplierFromStorage() {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.loadSetting === 'function') {
-            const v = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER);
-            if (v === null || typeof v === 'undefined') return null;
-            return (typeof v === 'string') ? parseFloat(v) : Number(v);
-        } else {
-            // Fallback to legacy method
-            if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return null;
-            const v = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlightMultiplier') : null;
+        const _stor = getStorage();
+        if (_stor && typeof _stor.loadSetting === 'function') {
+            const v = _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER);
             if (v === null || typeof v === 'undefined') return null;
             return (typeof v === 'string') ? parseFloat(v) : Number(v);
         }
+        if (_stor && typeof _stor.get === 'function') {
+            const v = _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER);
+            if (v === null || typeof v === 'undefined') return null;
+            return (typeof v === 'string') ? parseFloat(v) : Number(v);
+        }
+        return null;
     } catch (e) { moduleErrorHandler.logError(e, 'loadHighlightMultiplierFromStorage'); return null; }
 }
 
 function saveHighlightMultiplierToStorage(v) {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.saveSetting === 'function') {
-            window.storageService.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, v);
-        } else {
-            // Fallback to legacy method
-            if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return;
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_highlightMultiplier', v);
-            }
+        const _stor = getStorage();
+        if (_stor && typeof _stor.saveSetting === 'function') {
+            _stor.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, v);
+            return;
         }
+        if (_stor && typeof _stor.set === 'function') {
+            _stor.set(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, v);
+            return;
+        }
+        return;
     } catch (e) { moduleErrorHandler.logError(e, 'saveHighlightMultiplierToStorage'); }
 }
 
 // Highlighted layers persistence (consent-gated)
 function loadHighlightedLayersFromStorage() {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.loadSetting === 'function') {
-            const s = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS);
-            if (!s) return null;
-            return s;
-        } else {
-            // Fallback to legacy method
-            if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return null;
-            const s = (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') ? window._mp4Storage.loadSetting('mp4_highlighted_layers') : null;
+        const _stor = getStorage();
+        if (_stor && typeof _stor.loadSetting === 'function') {
+            const s = _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS);
             if (!s) return null;
             return s;
         }
+        if (_stor && typeof _stor.get === 'function') {
+            const s = _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS);
+            if (!s) return null;
+            return s;
+        }
+        return null;
     } catch (e) { moduleErrorHandler.logError(e, 'loadHighlightedLayersFromStorage'); return null; }
 }
 
 function saveHighlightedLayersToStorage(obj) {
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
-        if (window.storageService && typeof window.storageService.saveSetting === 'function') {
-            window.storageService.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, obj || {});
-        } else {
-            // Fallback to legacy method
-            if (!window._mp4Storage || typeof window._mp4Storage.hasStorageConsent !== 'function' || !window._mp4Storage.hasStorageConsent()) return;
-            if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-                window._mp4Storage.saveSetting('mp4_highlighted_layers', obj || {});
-            }
+        const _stor = getStorage();
+        if (_stor && typeof _stor.saveSetting === 'function') {
+            _stor.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, obj || {});
+            return;
         }
+        if (_stor && typeof _stor.set === 'function') {
+            _stor.set(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, obj || {});
+            return;
+        }
+        return;
     } catch (e) { moduleErrorHandler.logError(e, 'saveHighlightedLayersToStorage'); }
 }
 
@@ -2187,8 +2251,8 @@ function exitEditModeForLayer(layerKey) {
             // Hide edit overlay and request a render; UI toggles update via EDIT_MODE_CHANGED/LAYER_VISIBILITY_CHANGED listeners
             hideEditOverlayProperly();
             try {
-                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
+                if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
                 } else if (map && typeof map.render === 'function') {
                     map.render();
                 }
@@ -2201,8 +2265,8 @@ function exitEditModeForLayer(layerKey) {
             try { if (map.canvas) map.canvas.style.cursor = 'grab'; } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.resetCursor'); }
             hideEditOverlayProperly();
             try {
-                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
+                if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'exitEditModeForLayer.emit RENDER_REQUESTED'); }
                 } else if (map && typeof map.render === 'function') {
                     map.render();
                 }
@@ -2258,22 +2322,33 @@ async function init() {
     // Initialize StorageService with consent checker
     try {
         if (typeof initializeStorageService !== 'undefined') {
-            initializeStorageService(window._mp4Storage.hasStorageConsent.bind(window._mp4Storage));
+            // Initialize storage service using any available provider-level consent checker
+            const consentChecker = () => {
+                try {
+                    if (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function') {
+                        const inst = window.storageProvider.getInstance();
+                        if (inst && typeof inst.hasConsent === 'function') return inst.hasConsent();
+                    }
+                } catch (__) {}
+                return false;
+            };
+            // Pass app-level errorHandler and eventBus so StorageService can emit events
+            initializeStorageService(consentChecker, this.errorHandler, this.eventBus);
         }
     } catch (e) {
         moduleErrorHandler.logWarn('Failed to initialize StorageService', 'InteractiveMap.init.StorageService', { error: e });
     }
 
-    // Create a StorageServiceProvider for DI and attach to map instance
+    // Attach StorageService instance to the provider (created earlier in constructor)
     try {
-        const svcInstance = (typeof getStorageService === 'function') ? getStorageService() : (typeof window !== 'undefined' ? window.storageService : null);
+        const svcInstance = (typeof getStorageService === 'function') ? getStorageService() : null;
         try {
-            this.storageProvider = new StorageServiceProvider(svcInstance);
+            if (this.storageProvider && typeof this.storageProvider.setInstance === 'function') this.storageProvider.setInstance(svcInstance);
         } catch (e) {
-            // Fallback: expose an object with getInstance
-            this.storageProvider = { getInstance: () => svcInstance };
+            // Fallback: set getInstance to return svcInstance
+            try { this.storageProvider = { getInstance: () => svcInstance, setInstance: () => {} }; } catch (__) {}
         }
-        // Expose globally for other modules that want to pick it up
+        // Expose globally for backward compatibility only
         if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
         // Propagate storage instance to existing state managers (if any)
         try {
@@ -2396,7 +2471,11 @@ async function init() {
                         if (map) {
                             try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - incrementGeneration'); }
                             try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - abortTileLoads'); }
-                            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset); } } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting'); }
+                            try {
+                                const _stor = getStorage();
+                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset);
+                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset);
+                            } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting'); }
                             try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - preloadImages'); }
                             try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - loadInitialImage'); }
                             // Rendering owned by RenderController; do not mark dirty/render here.
@@ -2409,7 +2488,11 @@ async function init() {
                         // Grayscale state has changed, trigger side effects
                         // NOTE: Do NOT call map.setTilesetGrayscale() here - it would emit the event again!
                         if (map) {
-                            try { if (window.storageService) { window.storageService.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0'); } } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - saveSetting'); }
+                            try {
+                                const _stor = getStorage();
+                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0');
+                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0');
+                            } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - saveSetting'); }
                             try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - incrementGeneration'); }
                             try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - abortTileLoads'); }
                             try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - preloadImages'); }
@@ -2423,8 +2506,12 @@ async function init() {
                     handler: (data) => {
                         // Display settings have changed — update persistence/UI as needed.
                         // Rendering decisions are owned by RenderController; do not markDirty/render here.
-                            if (map && typeof window.storageService !== 'undefined' && data && typeof data.persist === 'boolean') {
-                            try { window.storageService.saveSetting && window.storageService.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.logFallback', { message: 'DISPLAY_SETTINGS_CHANGED save failed' }); } catch (ignore) {} } }
+                            if (map && data && typeof data.persist === 'boolean') {
+                            try {
+                                const _stor = getStorage();
+                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data);
+                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data);
+                            } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.logFallback', { message: 'DISPLAY_SETTINGS_CHANGED save failed' }); } catch (ignore) {} } }
                         }
                     }
                 },
@@ -2442,8 +2529,11 @@ async function init() {
                             }
                         } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED.updateButton', { message: 'HEATMAP_VISIBILITY_CHANGED: Failed to update button state' }); }
 
-                        if (map && map.heatmapDisplayState && window.storageService) {
-                            try { map.heatmapDisplayState.saveToStorage(window.storageService); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED.saveStorage', { message: 'HEATMAP_VISIBILITY_CHANGED: Failed to save storage' }); }
+                        if (map && map.heatmapDisplayState) {
+                            try {
+                                const _stor = getStorage();
+                                if (_stor) map.heatmapDisplayState.saveToStorage(_stor);
+                            } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'EventBus:HEATMAP_VISIBILITY_CHANGED.saveStorage', { message: 'HEATMAP_VISIBILITY_CHANGED: Failed to save storage' }); }
                         }
                     }
                 },
@@ -2507,8 +2597,8 @@ async function init() {
                         // Edit mode changes require updating the overlay UI and then rendering
                         updateEditOverlay();
                         try {
-                            if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                                try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EDIT_MODE_CHANGED.emit RENDER_REQUESTED'); }
+                            if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EDIT_MODE_CHANGED.emit RENDER_REQUESTED'); }
                             } else if (map && typeof map.render === 'function') {
                                 map.render();
                             }
@@ -2580,8 +2670,8 @@ async function init() {
                             }
                             // Trigger render intent for view changes (map.mapState already has the new panX, panY, zoom)
                             // InteractiveMap handles state-side effects and then emits a render intent
-                            if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                                try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - emit RENDER_REQUESTED'); }
+                            if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:MAP_VIEW_CHANGED - emit RENDER_REQUESTED'); }
                             } else if (map && typeof map.render === 'function') {
                                 // Fallback: call direct render if no event bus is available
                                 map.render();
@@ -2730,22 +2820,32 @@ async function init() {
                             }
 
                             // Persist using available storage APIs
-                            if (window.storageService && window.storageService.hasConsent()) {
-                                window.storageService.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                                });
-                            } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent() && typeof StorageInterface !== 'undefined') {
-                                StorageInterface.saveMarkerScaling({
-                                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                                });
-                            }
+                            try {
+                                const _stor = getStorage();
+                                if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+                                    if (typeof _stor.set === 'function') {
+                                        _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                                            userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                            highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                        });
+                                    } else if (typeof _stor.saveSetting === 'function') {
+                                        _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
+                                            userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                            highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                        });
+                                    }
+                                } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
+                                    _stor.saveMarkerScaling({
+                                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                    });
+                                }
+                            } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'MARKER_SCALING_SAVE_REQUESTED.persist'); }
 
                             // Request a render so renderers pick up new settings (delegated to RenderController)
                             try {
-                                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                                    window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {});
+                                if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                                    this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {});
                                 } else if (map && typeof map.render === 'function') {
                                     map.render();
                                 }
@@ -2923,7 +3023,8 @@ async function init() {
                 highlightState: map.highlightState,
                 eventBus: eventBus,
                 config: MP4Config,
-                errorHandler: moduleErrorHandler
+                    errorHandler: moduleErrorHandler,
+                    storageProvider: this.storageProvider
             });
             await layerListController.init();
         }
@@ -2942,7 +3043,8 @@ async function init() {
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
-                map: map // For UI operations
+                map: map, // For UI operations
+                storageProvider: this.storageProvider
             });
             sidebarController.init();
         }
@@ -2954,7 +3056,8 @@ async function init() {
                 markerManager: map.markerManager,
                 eventBus: eventBus,
                 config: MP4Config,
-                errorHandler: moduleErrorHandler
+                errorHandler: moduleErrorHandler,
+                storageProvider: this.storageProvider
             });
             toolbarController.init();
         }
@@ -2969,7 +3072,8 @@ async function init() {
                 map: map,
                 eventBus: eventBus,
                 config: MP4Config,
-                errorHandler: moduleErrorHandler
+                errorHandler: moduleErrorHandler,
+                storageProvider: this.storageProvider
             });
             settingsController.init();
             // Load saved settings after controller is initialized
@@ -2981,18 +3085,19 @@ async function init() {
 
     // Load custom markers from storage if consent is given
     try {
-        // Use StorageService if available, otherwise fall back to legacy method
         let markers = null;
-        if (window.storageService && typeof window.storageService.loadSetting === 'function') {
-            markers = window.storageService.loadSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
-        } else {
-            // Fallback to legacy method
-            if (window._mp4Storage && typeof window._mp4Storage.loadSetting === 'function') {
-                markers = window._mp4Storage.loadSetting('mp4_customMarkers');
+        try {
+            const _stor = getStorage();
+            if (_stor && typeof _stor.loadSetting === 'function') {
+                markers = _stor.loadSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
+            } else if (_stor && typeof _stor.get === 'function') {
+                markers = _stor.get(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
             }
+        } catch (inner) {
+            // swallow - no legacy fallback
         }
+
         if (markers && Array.isArray(markers)) {
-            // Load markers into markerManager (should always be available in decoupled code)
             if (map.markerManager) {
                 map.markerManager.setMarkers(markers);
             } else {
@@ -3007,32 +3112,55 @@ async function init() {
     // NOTE: Layer visibility controls are now handled by SidebarController
     // Load markers from storage (consent-gated)
     try {
-        if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
-            if (map.markerManager && typeof map.markerManager.loadMarkers === 'function') {
-                map.markerManager.loadMarkers();
+        try {
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasStorageConsent === 'function' && _stor.hasStorageConsent()) {
+                if (map.markerManager && typeof map.markerManager.loadMarkers === 'function') {
+                    map.markerManager.loadMarkers();
+                }
             }
+        } catch (inner) {
+            // no legacy fallback
         }
     } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadMarkersFromStorage'); }
     // Attempt to restore a previously saved route (if any) - consent-gated
-    try { 
-        if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
-            map.loadRouteFromStorage(); 
+    try {
+        try {
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasStorageConsent === 'function' && _stor.hasStorageConsent()) {
+                map.loadRouteFromStorage();
+            }
+        } catch (inner) {
+            // no legacy fallback
         }
     } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadRouteFromStorage'); }
     // Load route looping preference independently (persisted separately from route data)
     // Note: routeManager.loadFromStorage() already loads the looping flag, so this is redundant
     try {
-        if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function' && window._mp4Storage.hasStorageConsent()) {
-            // Looping flag is already loaded by routeManager.loadFromStorage() above
-            // Update UI after loading loop state
-            try { map.updateLoopUI(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.updateLoopUI'); }
+        try {
+            const _stor = getStorage();
+            if (_stor && typeof _stor.hasStorageConsent === 'function' && _stor.hasStorageConsent()) {
+                try { map.updateLoopUI(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.updateLoopUI'); }
+            }
+        } catch (inner) {
+            // no legacy fallback
         }
     } catch (e) { /* default to false */ }
     // Attempt to restore saved map view (pan/zoom) when consent is present
     try {
-        const consent = (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') ? window._mp4Storage.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-        if (consent && map && typeof map.loadViewFromStorage === 'function') {
-            try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
+        try {
+            const _stor = getStorage();
+            const consent = (_stor && typeof _stor.hasStorageConsent === 'function') ? _stor.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
+            if (consent && map && typeof map.loadViewFromStorage === 'function') {
+                try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
+            }
+        } catch (inner) {
+            // Fallback: check if storage service has consent
+            const svc = getStorageService && typeof getStorageService === 'function' ? getStorageService() : null;
+            const consent = svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
+            if (consent && map && typeof map.loadViewFromStorage === 'function') {
+                try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
+            }
         }
     } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.restoreSavedMapView'); }
     // Wire the compact Save-data toggle and Clear button (consent-aware)
@@ -3336,15 +3464,15 @@ async function init() {
         if (confirmed) {
             // Heavy work runs in separate macrotask due to async confirmation
                 try {
-                    if (window.eventBus && window.EventTypes && window.EventTypes.MARKER_CLEAR_REQUESTED) {
+                    if (this.eventBus && window.EventTypes && window.EventTypes.MARKER_CLEAR_REQUESTED) {
                         try {
-                            window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
+                            this.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
                         } catch (e) {
                             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.clearMarkers', { message: 'Failed to emit MARKER_CLEAR_REQUESTED' });
                             // Fallback to direct call when emit fails
                             if (map.markerManager && typeof map.markerManager.clearMarkers === 'function') map.markerManager.clearMarkers();
                             else { moduleErrorHandler.logWarning('markerManager not available during clear markers', 'InteractiveMap.clearMarkers'); map.customMarkers = []; }
-                        }
+                    }
                     } else if (map.markerManager && typeof map.markerManager.clearMarkers === 'function') {
                         map.markerManager.clearMarkers();
                         // The clearMarkers method handles updating LAYERS and triggering callbacks
@@ -3355,7 +3483,7 @@ async function init() {
                     }
                     // Layer counts will be updated via MARKER_REMOVED event
                     // Exit marker edit mode via canonical helper so visuals/overlay are cleaned up
-                    if (window.eventBus) window.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' });
+                    if (this.eventBus) this.eventBus.emit(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, { mode: 'customMarkers' });
                     map._draggingCandidate = null;
                     map._draggingMarker = null;
                     map.canvas.style.cursor = 'grab';
@@ -3380,7 +3508,8 @@ async function init() {
                 eventBus: eventBus,
                 config: MP4Config,
                 routeManager: map.routeManager,
-                errorHandler: moduleErrorHandler
+                errorHandler: moduleErrorHandler,
+                storageProvider: this.storageProvider
             });
             routeComputeController.init();
         } else {
@@ -3586,8 +3715,8 @@ async function init() {
             await waitForInitialImage(500);
             // Do one overlay render now that the initial image is available
             try {
-                if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
-                    try { window.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'init.emit RENDER_REQUESTED'); }
+                if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_REQUESTED) {
+                    try { this.eventBus.emit(window.EventTypes.RENDER_REQUESTED, {}); } catch (e) { moduleErrorHandler.logError(e, 'init.emit RENDER_REQUESTED'); }
                 } else if (map && typeof map.render === 'function') {
                     map.render();
                 }

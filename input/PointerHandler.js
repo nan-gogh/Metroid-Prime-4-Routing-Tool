@@ -11,7 +11,7 @@
         this.markerManager = map.markerManager;
           this.config = config || (global.MP4Config || {});
           this.errorHandler = map.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
-      this.eventBus = eventBus || window.eventBus;
+      this.eventBus = eventBus || null;
       this.eventTypes = window.EventTypes || {};
       this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
       this.bound = false;

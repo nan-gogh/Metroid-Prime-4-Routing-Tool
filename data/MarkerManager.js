@@ -10,7 +10,7 @@ class MarkerManager {
         this.config = config || { maxMarkers: 50, layerPrefix: 'cm' };
         this.storage = storage;
         this.notifications = notifications;
-        this.eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
+        this.eventBus = eventBus || null;
         
         // Error handling (constructor-injected)
         this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
@@ -116,27 +116,49 @@ class MarkerManager {
     // Load markers from storage
     loadFromStorage() {
         try {
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_STARTED, { entity: 'markers' });
             const markers = this.storage.loadMarkers();
             if (Array.isArray(markers)) {
                 // Validate and filter markers
                 this.markers = markers.filter(marker => MarkerUtilsCore.validateMarker(marker));
+                this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { entity: 'markers' });
                 return true;
             }
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { entity: 'markers' });
         } catch (e) {
             this.errorHandler.logWarning(e, 'MarkerManager.loadFromStorage.failed', {});
+            this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_FAILED, { entity: 'markers', error: e.message });
         }
         return false;
     }
 
-    // Save markers to storage
+    // Save markers to storage (unified pattern)
     saveToStorage() {
         try {
-            // Use injected storage interface
-            if (this.storage && typeof this.storage.saveMarkers === 'function') {
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'markers' });
+            
+            // Get storage key from config
+            const key = this.config && this.config.STORAGE_KEYS 
+                ? this.config.STORAGE_KEYS.CUSTOM_MARKERS 
+                : 'mp4_customMarkers';
+            
+            // Use injected storage (StorageService or fallback)
+            if (this.storage && typeof this.storage.set === 'function') {
+                this.storage.set(key, this.markers);
+            } else if (this.storage && typeof this.storage.saveMarkers === 'function') {
                 this.storage.saveMarkers(this.markers);
             }
+            
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 
+                entity: 'markers',
+                count: this.markers.length
+            });
         } catch (e) {
-            this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.failed', {});
+            this.errorHandler.logError(e, 'MarkerManager.saveToStorage');
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { 
+                entity: 'markers', 
+                error: e.message 
+            });
         }
     }
 
@@ -205,7 +227,8 @@ class MarkerManager {
         const index = this.findMarkerIndex(uid);
         if (index === -1) return false;
 
-        // Update position
+        // Update position (record old for diagnostics)
+        const oldPos = { x: this.markers[index].x, y: this.markers[index].y };
         this.markers[index].x = Number(x);
         this.markers[index].y = Number(y);
 

@@ -81,9 +81,9 @@ const RouteAnimation = {
             try {
                 if (map.markRendererDirty) {
                     map.markRendererDirty('RouteRenderer');
-                } else if (window.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) {
+                } else if (map.eventBus && EventTypes && EventTypes.RENDER_SELECTIVE_REQUESTED) {
                     try {
-                        window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] });
+                        map.eventBus.emit(EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] });
                     } catch (e) {
                         try {
                             RouteAnimation._errorHandler.logError(e, 'RouteAnimation.emitRenderIntent');

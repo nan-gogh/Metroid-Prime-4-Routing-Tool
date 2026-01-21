@@ -19,7 +19,7 @@
       this.showTooltip = showTooltip;
       this.hideTooltip = hideTooltip;
       this.config = config || (global.MP4Config || {});
-      this.eventBus = eventBus || window.eventBus;
+      this.eventBus = eventBus || null;
       this.eventTypes = window.EventTypes || {};
       this.errorHandler = errorHandler || globalThis.NOOP_ERROR_HANDLER;
 

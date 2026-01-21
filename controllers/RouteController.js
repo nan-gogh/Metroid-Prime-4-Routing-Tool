@@ -13,7 +13,7 @@
       this.dragState = dragState;
       this.mapState = mapState;
       this.config = config || (global.MP4Config || {});
-      this.eventBus = eventBus || window.eventBus;
+      this.eventBus = eventBus || null;
       this.eventTypes = window.EventTypes || {};
       this.errorHandler = errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 

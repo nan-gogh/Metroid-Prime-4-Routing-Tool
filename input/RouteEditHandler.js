@@ -12,7 +12,7 @@
       this.map = map;
       this.config = config || (global.MP4Config || {});
       this.errorHandler = map.errorHandler || globalThis.NOOP_ERROR_HANDLER;
-      this.eventBus = eventBus || window.eventBus;
+      this.eventBus = eventBus || null;
       this.dragState = dragState;
 
       // Get state managers from map

@@ -37,6 +37,7 @@
       this.config = config || (global.MP4Config || {});
       this.routeColor = routeColor || ((global.LAYERS && global.LAYERS.route) ? global.LAYERS.route.color : '#00ffb7ff');
       this.errorHandler = options && options.errorHandler ? options.errorHandler : globalThis.NOOP_ERROR_HANDLER;
+      this.eventBus = options.eventBus || null;
       this._lastRenderTime = 0;
       this._renderCount = 0;
       this._cachedPath = null;
@@ -99,12 +100,12 @@
      */
     _setupEventListeners() {
       // Listen for route updates to invalidate caches
-      if (window.eventBus && window.EventTypes) {
+      if (this.eventBus && window.EventTypes) {
         try {
           // Use EventUtils for standardized event handling if available
           if (typeof window.EventUtils !== 'undefined' && window.EventUtils.createEventManager) {
             const eventManager = window.EventUtils.createEventManager(this);
-            eventManager.setup(window.eventBus, [
+            eventManager.setup(this.eventBus, [
               {
                 event: window.EventTypes.ROUTE_UPDATED,
                 handler: () => {
@@ -122,12 +123,12 @@
             // Fallback: direct event listener setup
             this._eventUnsubscribers = this._eventUnsubscribers || [];
 
-            const routeUpdatedUnsub = window.eventBus.on(window.EventTypes.ROUTE_UPDATED, () => {
+            const routeUpdatedUnsub = this.eventBus.on(window.EventTypes.ROUTE_UPDATED, () => {
               this.invalidateCache();
             });
             this._eventUnsubscribers.push(routeUpdatedUnsub);
 
-            const routeClearedUnsub = window.eventBus.on(window.EventTypes.ROUTE_CLEARED, () => {
+            const routeClearedUnsub = this.eventBus.on(window.EventTypes.ROUTE_CLEARED, () => {
               this.invalidateCache();
             });
             this._eventUnsubscribers.push(routeClearedUnsub);

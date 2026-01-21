@@ -13,16 +13,17 @@
       this.animationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
       this.lineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
       this.animationDirection = 1; // 1 for forward, -1 for reverse
-      // Injected services (prefer DI, fall back to globals for compatibility)
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      // Injected services (prefer DI/provider, fall back to globals for compatibility)
+      // Prefer explicit storage option, then storageProvider passed via options
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     // Animation offset management
     setAnimationOffset(offset) {
       try {
         this.animationOffset = offset;
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_OFFSET_CHANGED, { offset });
+        this._emitChange(EventTypes.ROUTE_ANIMATION_OFFSET_CHANGED, { offset });
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationOffset failed', 'RouteAnimationState.setAnimationOffset', { error: e });
       }
@@ -36,7 +37,7 @@
     setAnimationFrameId(rafId) {
       try {
         this.animationFrameId = rafId;
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: rafId });
+        this._emitChange(EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: rafId });
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationFrameId failed', 'RouteAnimationState.setAnimationFrameId', { error: e });
       }
@@ -51,7 +52,7 @@
         if (this.animationFrameId) {
           cancelAnimationFrame(this.animationFrameId);
           this.animationFrameId = null;
-          this._emitChange(window.EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: null });
+          this._emitChange(EventTypes.ROUTE_ANIMATION_FRAME_CHANGED, { frameId: null });
         }
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.clearAnimationFrameId failed', 'RouteAnimationState.clearAnimationFrameId', { error: e });
@@ -75,7 +76,7 @@
     setAnimationSpeed(speed) {
       try {
         this.animationSpeed = Math.max(1, speed); // Minimum 1 pixel/second
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_SPEED_CHANGED, { speed: this.animationSpeed });
+        this._emitChange(EventTypes.ROUTE_ANIMATION_SPEED_CHANGED, { speed: this.animationSpeed });
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationSpeed failed', 'RouteAnimationState.setAnimationSpeed', { error: e });
       }
@@ -89,7 +90,7 @@
     setLineWidth(width) {
       try {
         this.lineWidth = Math.max(1, width); // Minimum 1 pixel
-        this._emitChange(window.EventTypes.ROUTE_LINE_WIDTH_CHANGED, { width: this.lineWidth });
+        this._emitChange(EventTypes.ROUTE_LINE_WIDTH_CHANGED, { width: this.lineWidth });
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setLineWidth failed', 'RouteAnimationState.setLineWidth', { error: e });
       }
@@ -103,7 +104,7 @@
     setAnimationDirection(direction) {
       try {
         this.animationDirection = direction === -1 ? -1 : 1;
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_DIRECTION_CHANGED, { direction: this.animationDirection });
+        this._emitChange(EventTypes.ROUTE_ANIMATION_DIRECTION_CHANGED, { direction: this.animationDirection });
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.setAnimationDirection failed', 'RouteAnimationState.setAnimationDirection', { error: e });
       }
@@ -116,7 +117,7 @@
     // Animation control
     startAnimation() {
       try {
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_STARTED);
+        this._emitChange(EventTypes.ROUTE_ANIMATION_STARTED);
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.startAnimation failed', 'RouteAnimationState.startAnimation', { error: e });
       }
@@ -125,7 +126,7 @@
     stopAnimation() {
       try {
         this.clearAnimationFrameId();
-        this._emitChange(window.EventTypes.ROUTE_ANIMATION_STOPPED);
+        this._emitChange(EventTypes.ROUTE_ANIMATION_STOPPED);
       } catch (e) {
         this.errorHandler && this.errorHandler.logDebug('RouteAnimationState.stopAnimation failed', 'RouteAnimationState.stopAnimation', { error: e });
       }
@@ -135,37 +136,36 @@
       return this.animationFrameId !== null;
     }
 
-    // Unified persistence methods — use injected storage when available and emit storage events
+    // Unified persistence methods — use injected storage and emit storage events (RouteAnimationState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.ROUTE_ANIMATION : 'mp4_route_animation_state';
+        const key = (this.config?.STORAGE_KEYS?.ROUTE_ANIMATION_STATE) || 'mp4_routeAnimationState';
         const payload = {
           animationSpeed: this.animationSpeed,
           lineWidth: this.lineWidth,
           animationDirection: this.animationDirection
         };
 
-        try {
-          this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'routeAnimation' });
-        } catch (evErr) {
-          /* non-fatal */
-        }
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'routeAnimation' });
 
         if (this.storage && typeof this.storage.set === 'function') {
           this.storage.set(key, payload);
-        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveRouteAnimation === 'function') {
-          StorageUtils.saveRouteAnimation(payload);
         } else if (typeof localStorage !== 'undefined') {
           // last-resort fallback (consent not checked here because higher-level consent manager should gate calls)
           try { localStorage.setItem(key, JSON.stringify(payload)); } catch (_) {}
         }
 
-        try {
-          this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'routeAnimation' });
-        } catch (evErr) { /* non-fatal */ }
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { 
+          entity: 'routeAnimation',
+          animationSpeed: this.animationSpeed,
+          lineWidth: this.lineWidth
+        });
       } catch (e) {
-        this.errorHandler && this.errorHandler.logError(e, 'RouteAnimationState.saveToStorage');
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { entity: 'routeAnimation', error: e && e.message ? e.message : String(e) }); } catch (__) {}
+        this.errorHandler?.logError?.(e, 'RouteAnimationState.saveToStorage');
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { 
+          entity: 'routeAnimation', 
+          error: e?.message || String(e) 
+        });
       }
     }
 
@@ -176,8 +176,6 @@
 
         if (this.storage && typeof this.storage.get === 'function') {
           data = this.storage.get(key);
-        } else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadRouteAnimation === 'function') {
-          data = StorageUtils.loadRouteAnimation();
         } else if (typeof localStorage !== 'undefined') {
           try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
         }

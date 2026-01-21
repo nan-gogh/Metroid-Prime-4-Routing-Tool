@@ -13,15 +13,12 @@
       this.mapState = options.mapState;
       this.markerManager = options.markerManager;
       this.routeManager = options.routeManager;
-      this.eventBus = options.eventBus || window.eventBus;
+      this.eventBus = options.eventBus || null;
       this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
-      this.storageUtils = options.storageUtils || {
-        StorageInterface: global.StorageInterface,
-        NotificationInterface: global.NotificationInterface
-      };
+      this.notificationInterface = options.notificationInterface || global.NotificationInterface || null;
       // Optional storage provider for DI
       this.storageProvider = options.storageProvider || (typeof window !== 'undefined' ? window.storageProvider : null);
 
@@ -71,9 +68,6 @@
         storageInstance = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
       } catch (e) {
         storageInstance = null;
-      }
-      if (!storageInstance) {
-        storageInstance = this.storageUtils && this.storageUtils.StorageInterface ? this.storageUtils.StorageInterface : (typeof window !== 'undefined' ? window.storageService || window._mp4Storage : null);
       }
 
       const cfgKeys = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS : {};
@@ -150,12 +144,12 @@
 
       // Create MarkerManager
       if (!this.markerManager && typeof MarkerManager !== 'undefined' &&
-        storageAdapter && this.storageUtils.NotificationInterface) {
+        storageAdapter) {
 
         this._markerManager = new MarkerManager(
           { maxMarkers: 50, layerPrefix: 'cm' },
           storageAdapter,
-          this.storageUtils.NotificationInterface,
+          this.notificationInterface,
           this.eventBus,
           { errorHandler: this.errorHandler }
         );
@@ -169,7 +163,7 @@
           this._routeManager = new RouteManager(
             this._markerManager,
             storageAdapter,
-            this.storageUtils.NotificationInterface,
+            this.notificationInterface,
             this.eventBus,
             { errorHandler: this.errorHandler }
           );
@@ -219,7 +213,7 @@
     async _loadStoredData() {
       // Load marker scaling configuration
       try {
-        const storage = this._storageAdapter || (this.storageUtils && this.storageUtils.StorageInterface) || (typeof window !== 'undefined' ? window.storageService : null);
+        const storage = this._storageAdapter || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
         if (storage && typeof storage.loadSetting === 'function' && storage.loadSetting) {
           const savedScaling = storage.loadSetting(this.config.STORAGE_KEYS.MARKER_SCALING);
           if (savedScaling) {

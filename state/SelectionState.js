@@ -17,8 +17,8 @@
       this.selectedMarkerLayer = null;
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
 
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
 
       // Set up event listeners
       this._setupEventListeners();
@@ -182,20 +182,37 @@
       return this.multiSelectedMarkers.size;
     }
 
-    // Unified persistence
+    // Unified persistence (SelectionState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.SELECTION_STATE : 'mp4_selection_state';
+        const key = (this.config?.STORAGE_KEYS?.SELECTION_STATE) || 'mp4_selectionState';
         const payload = {
           selectedMarker: this.selectedMarker ? { uid: this.selectedMarker.uid, x: this.selectedMarker.x, y: this.selectedMarker.y } : null,
           selectedMarkerLayer: this.selectedMarkerLayer,
           multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
         };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'selection' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'selection' }); } catch (__) {}
-      } catch (e) { try { this.errorHandler.logWarning('SelectionState.saveToStorage failed', 'SelectionState.saveToStorage', { error: e }); } catch (ignore) {} }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'selection' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'selection',
+          selectedCount: this.multiSelectedMarkers.size
+        });
+      } catch (e) {
+        try { 
+          this.errorHandler?.logError?.(e, 'SelectionState.saveToStorage');
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+            entity: 'selection',
+            error: e.message
+          });
+        } catch (ignore) {}
+      }
     }
 
     loadFromStorage() {

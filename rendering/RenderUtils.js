@@ -74,7 +74,7 @@
     // Draw a rounded rectangle
     drawRoundedRect(ctx, x, y, w, h, r = 6, fillStyle = null, strokeStyle = null) {
       if (!ctx) return;
-      const h = moduleErrorHandler;
+      const logger = moduleErrorHandler;
       try {
         const radius = Math.min(r, w / 2, h / 2);
         ctx.beginPath();
@@ -93,7 +93,7 @@
           ctx.stroke();
         }
       } catch (e) {
-        try { h.logWarning('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e }); } catch (__) { }
+        try { logger.logWarning('RenderUtils.drawRoundedRect failed', 'RenderUtils.drawRoundedRect', { error: e }); } catch (__) { }
       }
     },
 

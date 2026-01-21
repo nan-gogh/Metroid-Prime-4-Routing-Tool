@@ -11,7 +11,7 @@
     constructor(options) {
       // Required dependencies
       this.map = options.map; // Reference to InteractiveMap instance
-      this.eventBus = options.eventBus || window.eventBus;
+      this.eventBus = options.eventBus || null;
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
 
       // Optional dependencies

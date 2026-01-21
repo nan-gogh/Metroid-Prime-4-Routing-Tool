@@ -63,10 +63,15 @@ const MP4Config = {
         // UI state
         TILESET: 'mp4_tileset',
         TILESET_GRAYSCALE: 'mp4_tileset_grayscale',
+        TILESET_STATE: 'mp4_tileset_state',
         GRID_VISIBLE: 'mp4_grid_visible',
         GRID_HEATMAP: 'mp4_grid_heatmap',
         LAYER_VISIBILITY: 'mp4_layerVisibility',
         HIGHLIGHT_MULTIPLIER: 'mp4_highlightMultiplier',
+        EDIT_MODE_STATE: 'mp4_editModeState',
+        HEATMAP_DISPLAY_STATE: 'mp4_heatmapDisplayState',
+        HIGHLIGHT_STATE: 'mp4_highlightState',
+        ROUTE_ANIMATION_STATE: 'mp4_routeAnimationState',
 
         // Map view
         MAP_VIEW: 'mp4_map_view',

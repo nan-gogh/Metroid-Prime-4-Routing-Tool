@@ -13,7 +13,7 @@
      */
     constructor(config, options = {}) {
       this.config = config || (global.MP4Config || {});
-      this.eventBus = options.eventBus || (typeof window !== 'undefined' ? window.eventBus : null) || (typeof global !== 'undefined' ? global.eventBus : null);
+      this.eventBus = options.eventBus || null;
       this.errorHandler = options.errorHandler || new ErrorHandler();
     }
 

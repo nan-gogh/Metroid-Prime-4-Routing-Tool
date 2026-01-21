@@ -110,7 +110,6 @@
 
     finalizeDraggingMarker() {
       if (!this.draggingMarker) return;
-
       this._emitChange(window.EventTypes.MARKER_DRAG_ENDED, { marker: this.draggingMarker });
       this.draggingMarker = null;
     }

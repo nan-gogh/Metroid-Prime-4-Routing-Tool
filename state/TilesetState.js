@@ -15,8 +15,8 @@
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.tileset = 'sat'; // Default tileset
       this.grayscale = false;
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     // Tileset management
@@ -64,16 +64,34 @@
       }
     }
 
-    // Unified persistence
+    // Unified persistence (TilesetState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.TILESET_STATE : 'mp4_tileset_state';
+        const key = (this.config?.STORAGE_KEYS?.TILESET_STATE) || 'mp4_tileset_state';
         const payload = { tileset: this.tileset, grayscale: this.grayscale };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'tileset' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'tileset' }); } catch (__) {}
-      } catch (e) { try { this.errorHandler.logWarning('TilesetState.saveToStorage failed', 'TilesetState.saveToStorage', { error: e }); } catch (ignore) {} }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'tileset' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'tileset',
+          tileset: this.tileset,
+          grayscale: this.grayscale
+        });
+      } catch (e) {
+        try { 
+          this.errorHandler?.logError?.(e, 'TilesetState.saveToStorage');
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+            entity: 'tileset',
+            error: e.message
+          });
+        } catch (ignore) {}
+      }
     }
 
     loadFromStorage() {

@@ -12,7 +12,7 @@
     /**
      * Creates a new HeatmapDisplayState for managing heatmap visibility independently
      * @param {Object} config - Configuration object (defaults to global MP4Config)
-     * @param {Object} options - Options object with eventBus and errorHandler (defaults to window.eventBus)
+    * @param {Object} options - Options object with eventBus and errorHandler (expects `eventBus` via DI)
      */
     constructor(config, options = {}) {
       super(config, options);
@@ -49,9 +49,9 @@
         this._heatmapVisible = visible;
 
         // Emit event for subscribers (UI updates, rendering)
-        if (this.eventBus && window.EventTypes && window.EventTypes.HEATMAP_VISIBILITY_CHANGED) {
+        if (this.eventBus && EventTypes && EventTypes.HEATMAP_VISIBILITY_CHANGED) {
           try {
-            this.eventBus.emit(window.EventTypes.HEATMAP_VISIBILITY_CHANGED, {
+            this.eventBus.emit(EventTypes.HEATMAP_VISIBILITY_CHANGED, {
               visible: visible,
               triggeredBy: 'heatmap-display-state'
             });
@@ -89,31 +89,51 @@
       try {
         if (!storageService) return this._heatmapVisible;
 
+        this.eventBus?.emit(EventTypes.STORAGE_LOAD_STARTED, { entity: 'heatmapDisplay' });
         const stored = storageService.loadSetting(this.config.STORAGE_KEYS?.GRID_HEATMAP);
         const loaded = stored === '1' || stored === 1 || stored === true;
         this._heatmapVisible = loaded;
+        this.eventBus?.emit(EventTypes.STORAGE_LOAD_COMPLETED, { entity: 'heatmapDisplay' });
         return loaded;
       } catch (e) {
         try { h.logWarning('HeatmapDisplayState.loadFromStorage failed', 'HeatmapDisplayState.loadFromStorage', { error: e }); } catch (ignore) {}
+        this.eventBus?.emit(EventTypes.STORAGE_LOAD_FAILED, { entity: 'heatmapDisplay', error: e.message });
         return this._heatmapVisible;
       }
     }
 
     /**
-     * Save heatmap visibility to storage
-     * @param {Object} storageService - Storage service for persisting state
+     * Save heatmap visibility to storage (unified pattern)
+     * @param {Object} storageService - Storage service for persisting state (optional, uses injected this.storage)
      */
     saveToStorage(storageService) {
-      const h = this.errorHandler;
       try {
-        if (!storageService) return;
+        const storage = storageService || this.storage;
+        if (!storage) return;
 
-        storageService.saveSetting(
-          this.config.STORAGE_KEYS?.GRID_HEATMAP,
-          this._heatmapVisible ? '1' : '0'
-        );
+        const key = (this.config?.STORAGE_KEYS?.GRID_HEATMAP) || 'mp4_grid_heatmap';
+        const value = this._heatmapVisible ? '1' : '0';
+        
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'heatmapDisplay' });
+        
+        if (typeof storage.set === 'function') {
+          storage.set(key, value);
+        } else if (typeof storage.saveSetting === 'function') {
+          storage.saveSetting(key, value);
+        }
+        
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { 
+          entity: 'heatmapDisplay',
+          visible: this._heatmapVisible
+        });
       } catch (e) {
-        try { h.logWarning('HeatmapDisplayState.saveToStorage failed', 'HeatmapDisplayState.saveToStorage', { error: e }); } catch (ignore) {}
+        try { 
+          this.errorHandler?.logError?.(e, 'HeatmapDisplayState.saveToStorage');
+          this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { 
+            entity: 'heatmapDisplay', 
+            error: e.message 
+          });
+        } catch (ignore) {}
       }
     }
 

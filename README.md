@@ -314,7 +314,7 @@ Toggle in the Dev Tools panel to reduce resource usage on constrained devices:
 │   ├── MarkerManager.js     # Authoritative marker state, persistence, import/export
 │   ├── routeMath.js        # Pure route utilities (math, distances, insertion helpers)
 │   ├── RouteManager.js     # Stateful route operations (create/set/export routes)
-│   ├── storageUtils.js    # LocalStorage consent gating (consolidated)
+│   ├── StorageService.js    # LocalStorage consent-gated service (consolidated)
 │   └── layers/
 │       ├── geCrystallization1.js   # GE Crystal Phase 1 (84 markers, gc1_ UIDs)
 │       ├── geCrystallization2.js   # GE Crystal Phase 2 (135 markers, gc2_ UIDs)

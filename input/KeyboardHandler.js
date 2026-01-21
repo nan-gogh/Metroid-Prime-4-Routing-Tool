@@ -11,7 +11,7 @@
     constructor(map, config, eventBus) {
       this.map = map;
       this.config = config || (global.MP4Config || {});
-      this.eventBus = eventBus || window.eventBus;
+      this.eventBus = eventBus || null;
       this.eventTypes = window.EventTypes || {};
       this.bound = false;
 
@@ -85,8 +85,8 @@
         if (ev.code === 'Space' || ev.key === ' ') {
           try {
             // Emit event to toggle sidebar visibility
-            if (window.eventBus) {
-              window.eventBus.emit(window.EventTypes.SIDEBAR_VISIBILITY_TOGGLE_REQUESTED);
+            if (this.eventBus) {
+              this.eventBus.emit(window.EventTypes.SIDEBAR_VISIBILITY_TOGGLE_REQUESTED);
             } else {
               // Fallback to direct manipulation if eventBus not available
               const app = document.querySelector('.app-container');

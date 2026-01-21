@@ -6,7 +6,7 @@ class StorageService {
         this._consentChecker = consentChecker;
         this._errorHandler = errorHandler || new ErrorHandler();
         this._cache = new Map();
-        this._eventBus = eventBus || (typeof window !== 'undefined' ? window.eventBus : null);
+        this._eventBus = eventBus || null;
     }
 
     /**
@@ -145,6 +145,177 @@ class StorageService {
     saveSetting(key, value) {
         return this.set(key, value);
     }
+
+    // ===== STORAGEINTERFACE CONSOLIDATION METHODS =====
+    // These replace the deprecated StorageInterface.js module
+
+    /**
+     * Save markers to storage (from StorageInterface.saveMarkers)
+     * @param {Array} markers - Markers array to save
+     * @returns {boolean} True if successful
+     */
+    saveMarkers(markers) {
+        try {
+            if (!this.hasConsent()) {
+                this._errorHandler.logDebug('StorageService.saveMarkers: No consent', 'StorageService.saveMarkers');
+                return false;
+            }
+            return this.set('mp4_customMarkers', markers);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to save markers to storage', 'StorageService.saveMarkers', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Load markers from storage (from StorageInterface.loadMarkers)
+     * @returns {Array} Markers array or empty array if not found
+     */
+    loadMarkers() {
+        try {
+            if (!this.hasConsent()) {
+                return [];
+            }
+            const data = this.get('mp4_customMarkers');
+            return Array.isArray(data) ? data : [];
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to load markers from storage', 'StorageService.loadMarkers', { error: e });
+            return [];
+        }
+    }
+
+    /**
+     * Save route data to storage (from StorageInterface.saveRoute)
+     * @param {Object} routeData - Route data to save
+     * @returns {boolean} True if successful
+     */
+    saveRoute(routeData) {
+        try {
+            if (!this.hasConsent()) {
+                return false;
+            }
+            return this.set('mp4_route', routeData);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to save route to storage', 'StorageService.saveRoute', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Load route data from storage (from StorageInterface.loadRoute)
+     * @returns {Object|null} Route data or null if not found
+     */
+    loadRoute() {
+        try {
+            if (!this.hasConsent()) {
+                return null;
+            }
+            return this.get('mp4_route', null);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to load route from storage', 'StorageService.loadRoute', { error: e });
+            return null;
+        }
+    }
+
+    /**
+     * Save route looping flag (from StorageInterface.saveRouteLoopingFlag)
+     * @param {boolean} looping - Whether route should loop
+     * @returns {boolean} True if successful
+     */
+    saveRouteLoopingFlag(looping) {
+        try {
+            if (!this.hasConsent()) {
+                return false;
+            }
+            return this.set('mp4_routeLooping', looping);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to save route looping flag', 'StorageService.saveRouteLoopingFlag', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Load route looping flag (from StorageInterface.loadRouteLoopingFlag)
+     * @returns {boolean} Looping flag or false if not set
+     */
+    loadRouteLoopingFlag() {
+        try {
+            if (!this.hasConsent()) {
+                return false;
+            }
+            return this.get('mp4_routeLooping', false);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to load route looping flag', 'StorageService.loadRouteLoopingFlag', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Save settings object (from StorageInterface.saveSettings)
+     * @param {Object} settings - Settings object to save
+     * @returns {boolean} True if successful
+     */
+    saveSettings(settings) {
+        try {
+            if (!this.hasConsent()) {
+                return false;
+            }
+            return this.set('mp4_settings', settings);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to save settings to storage', 'StorageService.saveSettings', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Load settings object (from StorageInterface.loadSettings)
+     * @returns {Object} Settings object or empty object if not found
+     */
+    loadSettings() {
+        try {
+            if (!this.hasConsent()) {
+                return {};
+            }
+            const data = this.get('mp4_settings', null);
+            return (data && typeof data === 'object') ? data : {};
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to load settings from storage', 'StorageService.loadSettings', { error: e });
+            return {};
+        }
+    }
+
+    /**
+     * Save marker scaling configuration (from StorageInterface.saveMarkerScaling)
+     * @param {Object} config - Scaling config object
+     * @returns {boolean} True if successful
+     */
+    saveMarkerScaling(config) {
+        try {
+            if (!this.hasConsent()) {
+                return false;
+            }
+            return this.set('mp4_markerScaling', config);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to save marker scaling to storage', 'StorageService.saveMarkerScaling', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Load marker scaling configuration (from StorageInterface.loadMarkerScaling)
+     * @returns {Object|null} Scaling config or null if not set
+     */
+    loadMarkerScaling() {
+        try {
+            if (!this.hasConsent()) {
+                return null;
+            }
+            return this.get('mp4_markerScaling', null);
+        } catch (e) {
+            this._errorHandler.logWarning('Failed to load marker scaling from storage', 'StorageService.loadMarkerScaling', { error: e });
+            return null;
+        }
+    }
 }
 
 // Global storage service instance
@@ -156,8 +327,9 @@ let storageService = null;
  * @param {Function} consentChecker - Function that returns true if user has storage consent
  * @param {ErrorHandler} errorHandler - Error handler instance
  */
-function initializeStorageService(consentChecker, errorHandler = null) {
-    storageService = new StorageService(consentChecker, errorHandler);
+function initializeStorageService(consentChecker, errorHandler = null, eventBus = null) {
+    // Allow passing an app-level eventBus so StorageService can emit storage lifecycle events
+    storageService = new StorageService(consentChecker, errorHandler, eventBus);
     return storageService;
 }
 
@@ -179,5 +351,4 @@ if (typeof window !== 'undefined') {
     window.StorageService = StorageService;
     window.initializeStorageService = initializeStorageService;
     window.getStorageService = getStorageService;
-    window.storageService = storageService; // Global instance
 }

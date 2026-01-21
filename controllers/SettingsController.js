@@ -24,6 +24,8 @@
       
       // Optional map reference for operations that previously called map methods
       this.map = options.map || null;
+      // Optional storage provider for DI
+      this.storageProvider = options.storageProvider || (typeof window !== 'undefined' ? window.storageProvider : null);
       // Event listener cleanup
       this._eventUnsubscribers = [];
     }
@@ -471,12 +473,15 @@
      */
     _getStorageConsent() {
       try {
-        if (window.storageService) {
-          return window.storageService.hasConsent();
-        } else if (window._mp4Storage && typeof window._mp4Storage.hasStorageConsent === 'function') {
-          return window._mp4Storage.hasStorageConsent();
+        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        if (storage && typeof storage.hasConsent === 'function') {
+          return storage.hasConsent();
+        } else if (storage && typeof storage.hasStorageConsent === 'function') {
+          return storage.hasStorageConsent();
         }
-        return localStorage.getItem('mp4_storage_consent') === '1';
+        // Fallback: check storage service via global function
+        const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+        return svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
       } catch (e) {
         return false;
       }
@@ -488,19 +493,18 @@
      */
     _setStorageConsent(consent) {
       try {
-        if (window.storageService) {
-          if (consent) {
-            window.storageService.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
-          } else {
-            window.storageService.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
-          }
-        } else if (window._mp4Storage && typeof window._mp4Storage.setStorageConsent === 'function') {
-          window._mp4Storage.setStorageConsent(consent);
+        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        if (storage && typeof storage.set === 'function') {
+          if (consent) storage.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
+          else storage.remove && storage.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
+        } else if (storage && typeof storage.setStorageConsent === 'function') {
+          storage.setStorageConsent(consent);
         } else {
-          if (consent) {
-            localStorage.setItem('mp4_storage_consent', '1');
-          } else {
-            localStorage.removeItem('mp4_storage_consent');
+          // Fallback to storage service via global function
+          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+          if (svc && typeof svc.set === 'function') {
+            if (consent) svc.set('mp4_storage_consent', '1');
+            else svc.remove && svc.remove('mp4_storage_consent');
           }
         }
       } catch (e) {
@@ -589,18 +593,23 @@
           gridVisible: this.layerState ? this.layerState.isGridVisible() : false
         };
 
-        if (window.storageService) {
-          window.storageService.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
-          window.storageService.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
-          window.storageService.set(this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0');
-        } else if (window._mp4Storage && typeof window._mp4Storage.saveSetting === 'function') {
-          window._mp4Storage.saveSetting('mp4_tileset', settings.tileset);
-          window._mp4Storage.saveSetting('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-          window._mp4Storage.saveSetting('mp4_grid_visible', settings.gridVisible ? '1' : '0');
+        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        if (storage && typeof storage.set === 'function') {
+          storage.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
+          storage.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
+          storage.set(this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0');
+        } else if (storage && typeof storage.saveSetting === 'function') {
+          storage.saveSetting('mp4_tileset', settings.tileset);
+          storage.saveSetting('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
+          storage.saveSetting('mp4_grid_visible', settings.gridVisible ? '1' : '0');
         } else {
-          localStorage.setItem('mp4_tileset', settings.tileset);
-          localStorage.setItem('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-          localStorage.setItem('mp4_grid_visible', settings.gridVisible ? '1' : '0');
+          // Fallback to global storage service
+          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+          if (svc && typeof svc.set === 'function') {
+            svc.set('mp4_tileset', settings.tileset);
+            svc.set('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
+            svc.set('mp4_grid_visible', settings.gridVisible ? '1' : '0');
+          }
         }
       } catch (e) {
         this.errorHandler.logWarning('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });
@@ -612,17 +621,20 @@
      */
     _clearAllSavedData() {
       try {
-        if (window.storageService) {
+        const storage = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+        if (storage && typeof storage.remove === 'function') {
           // Clear all storage keys using StorageService
           const keys = Object.values(this.config.STORAGE_KEYS);
           keys.forEach(key => {
             try {
-              window.storageService.remove(key);
+              storage.remove(key);
             } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'SettingsController._clearSavedData.removeItem'); }
           });
-        } else if (window._mp4Storage && typeof window._mp4Storage.clearSavedData === 'function') {
-          window._mp4Storage.clearSavedData(true);
+        } else if (storage && typeof storage.clearSavedData === 'function') {
+          storage.clearSavedData(true);
         } else {
+          // Fallback to global storage service
+          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
           const keys = [
             'mp4_customMarkers', 'mp4_saved_route', 'mp4_layerVisibility',
             'mp4_tileset', 'mp4_tileset_grayscale', 'mp4_grid_heatmap',
@@ -631,7 +643,9 @@
           ];
           keys.forEach(key => {
             try {
-              localStorage.removeItem(key);
+              if (svc && typeof svc.remove === 'function') {
+                svc.remove(key);
+              }
             } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'SettingsController._clearSavedData.removeItem'); }
           });
         }

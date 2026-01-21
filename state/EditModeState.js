@@ -12,7 +12,7 @@
     /**
      * Creates a new EditModeState for managing edit mode state
      * @param {Object} config - Configuration object (defaults to global MP4Config)
-     * @param {Object} options - Options object with eventBus and errorHandler (defaults to window.eventBus)
+    * @param {Object} options - Options object with eventBus and errorHandler (expects `eventBus` via DI)
      */
     constructor(config, options = {}) {
       super(config, options);
@@ -20,9 +20,9 @@
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.editMarkersMode = false;
       this.editRouteMode = false;
-      // Injected services
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      // Injected services (prefer provider when available)
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     // Edit mode management
@@ -35,7 +35,7 @@
           this.setEditRouteMode(false);
         }
         this.editMarkersMode = !!enabled;
-        this._emitChange(window.EventTypes.EDIT_MODE_CHANGED, {
+        this._emitChange(EventTypes.EDIT_MODE_CHANGED, {
           mode: !!enabled ? 'markers' : null,
           enabled: !!enabled,
           markersEnabled: !!enabled,
@@ -45,11 +45,11 @@
         
         // Emit enter/exit events for UI effects (layer highlighting)
         if (enabled) {
-          this._emitChange(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, {
+          this._emitChange(EventTypes.EDIT_MODE_ENTER_REQUESTED, {
             mode: 'customMarkers'
           });
         } else {
-          this._emitChange(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, {
+          this._emitChange(EventTypes.EDIT_MODE_EXIT_REQUESTED, {
             mode: 'customMarkers'
           });
         }
@@ -67,7 +67,7 @@
           this.setEditMarkersMode(false);
         }
         this.editRouteMode = !!enabled;
-        this._emitChange(window.EventTypes.EDIT_MODE_CHANGED, {
+        this._emitChange(EventTypes.EDIT_MODE_CHANGED, {
           mode: !!enabled ? 'route' : null,
           enabled: !!enabled,
           markersEnabled: this.editMarkersMode,
@@ -77,11 +77,11 @@
         
         // Emit enter/exit events for UI effects (layer highlighting)
         if (enabled) {
-          this._emitChange(window.EventTypes.EDIT_MODE_ENTER_REQUESTED, {
+          this._emitChange(EventTypes.EDIT_MODE_ENTER_REQUESTED, {
             mode: 'route'
           });
         } else {
-          this._emitChange(window.EventTypes.EDIT_MODE_EXIT_REQUESTED, {
+          this._emitChange(EventTypes.EDIT_MODE_EXIT_REQUESTED, {
             mode: 'route'
           });
         }
@@ -133,16 +133,32 @@
       }
     }
 
-    // Unified persistence
+    // Unified persistence (EditModeState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.EDIT_MODE_STATE : 'mp4_edit_mode_state';
+        const key = (this.config?.STORAGE_KEYS?.EDIT_MODE_STATE) || 'mp4_editModeState';
         const payload = { editMarkersMode: this.editMarkersMode, editRouteMode: this.editRouteMode };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'editMode' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'editMode' }); } catch (__) {}
-      } catch (e) { this.errorHandler && this.errorHandler.logWarning('EditModeState.saveToStorage failed', 'EditModeState.saveToStorage', { error: e }); }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'editMode' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'editMode',
+          editMarkersMode: this.editMarkersMode,
+          editRouteMode: this.editRouteMode
+        });
+      } catch (e) { 
+        this.errorHandler?.logError?.(e, 'EditModeState.saveToStorage');
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+          entity: 'editMode',
+          error: e.message
+        });
+      }
     }
 
     loadFromStorage() {

@@ -17,8 +17,8 @@
       this.highlightConfig = {}; // layerKey -> { scale }
       this.highlightScaleMultiplier = 1.0;
       this._previousHighlights = new Map(); // layerKey -> wasHighlighted
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     // Layer highlighting management
@@ -135,16 +135,37 @@
       }
     }
 
-    // Unified persistence
+    // Unified persistence (HighlightState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.HIGHLIGHT_STATE : 'mp4_highlight_state';
-        const payload = { highlightedLayers: Array.from(this.highlightedLayers), highlightConfig: this.highlightConfig, highlightScaleMultiplier: this.highlightScaleMultiplier };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'highlight' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'highlight' }); } catch (__) {}
-      } catch (e) { try { this.errorHandler.logWarning('HighlightState.saveToStorage failed', 'HighlightState.saveToStorage', { error: e }); } catch (ignore) {} }
+        const key = (this.config?.STORAGE_KEYS?.HIGHLIGHT_STATE) || 'mp4_highlightState';
+        const payload = { 
+          highlightedLayers: Array.from(this.highlightedLayers), 
+          highlightConfig: this.highlightConfig, 
+          highlightScaleMultiplier: this.highlightScaleMultiplier 
+        };
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'highlight' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'highlight',
+          highlightedCount: this.highlightedLayers.size
+        });
+      } catch (e) {
+        try { 
+          this.errorHandler?.logError?.(e, 'HighlightState.saveToStorage');
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+            entity: 'highlight',
+            error: e.message
+          });
+        } catch (ignore) {}
+      }
     }
 
     loadFromStorage() {

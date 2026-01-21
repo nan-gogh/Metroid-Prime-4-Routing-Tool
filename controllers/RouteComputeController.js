@@ -260,6 +260,7 @@ class RouteComputeController {
                         } catch (e) {
                             h.logError(e, 'RouteComputeController.computeImprovedRoute.getRouteLength');
                             length = 0;
+                        }
                         this.routeManager.setRoute(finalTour, length, sources);
                         // Do not change looping preference when computing a route; looping is explicit via UI.
                         // Deselect the marker after route is computed

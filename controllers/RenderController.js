@@ -13,7 +13,7 @@
       this.mapState = options.mapState;
       this.tilesetState = options.tilesetState;
       this.imageState = options.imageState;
-      this.eventBus = options.eventBus || window.eventBus;
+      this.eventBus = options.eventBus || null;
       this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
 
       // Optional dependencies
@@ -191,7 +191,7 @@
           this.highlightState,
           this.config,
           routeColor,
-          { errorHandler: this.errorHandler }
+          { errorHandler: this.errorHandler, eventBus: this.eventBus }
         );
         try {
           await this.routeRenderer.init();
@@ -242,7 +242,7 @@
           this.routeRenderer,
           this.overlayRenderer,
           compositeStage
-        ].filter(Boolean), renderContext, this.mapState);
+        ].filter(Boolean), renderContext, this.mapState, { eventBus: this.eventBus, errorHandler: this.errorHandler });
       }
     }
 

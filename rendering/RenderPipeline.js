@@ -14,8 +14,9 @@
      * @param {RenderContext} renderContext - The render context providing canvas access
      * @param {MapState} [mapState] - Optional MapState for creating ViewportContext
      */
-    constructor(stages, renderContext, mapState) {
+    constructor(stages, renderContext, mapState, options = {}) {
       this.errorHandler = global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+      this.eventBus = options.eventBus || null;
       this.stages = stages || [];
       this.renderContext = renderContext; // Store render context for passing to renderers
       this.mapState = mapState; // Store mapState for creating ViewportContext during render
@@ -54,8 +55,8 @@
     markDirty(rendererName) {
       this._dirtyFlags.add(rendererName);
       // Emit event to notify other modules that a renderer needs updating
-      if (window.eventBus) {
-        window.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: rendererName });
+      if (this.eventBus) {
+        this.eventBus.emit(window.EventTypes.RENDER_PIPELINE_DIRTY, { renderer: rendererName });
       }
       this._scheduleRender();
       return this;
@@ -216,8 +217,8 @@
       this._renderCount++;
 
       // Emit event when selective rendering is requested
-      if (dirtyOnly && window.eventBus) {
-        window.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: Array.from(dirtyOnly) });
+      if (dirtyOnly && this.eventBus) {
+        this.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: Array.from(dirtyOnly) });
       }
 
       // Use custom order if set, otherwise use original stages array

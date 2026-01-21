@@ -25,8 +25,8 @@
 
       // Initialize layer configuration
       this._initializeLayerConfig();
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     _initializeLayers(layerKeys) {
@@ -307,16 +307,37 @@
       }
     }
 
-    // Unified persistence
+    // Unified persistence (LayerState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.LAYER_STATE : 'mp4_layer_state';
-        const payload = { layerVisibility: { ...this.layerVisibility }, showGridHeatmap: this._showGridHeatmap };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'layerState' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'layerState' }); } catch (__) {}
-      } catch (e) { try { this.errorHandler.logWarning('LayerState.saveToStorage failed', 'LayerState.saveToStorage', { error: e }); } catch (ignore) {} }
+        const key = (this.config?.STORAGE_KEYS?.LAYER_STATE) || 'mp4_layerState';
+        const payload = { 
+          layerVisibility: { ...this.layerVisibility }, 
+          showGridHeatmap: this._showGridHeatmap 
+        };
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'layerState' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'layerState',
+          layerCount: Object.keys(this.layerVisibility).length,
+          gridHeatmapVisible: this._showGridHeatmap
+        });
+      } catch (e) {
+        try { 
+          this.errorHandler?.logError?.(e, 'LayerState.saveToStorage');
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+            entity: 'layerState',
+            error: e.message
+          });
+        } catch (ignore) {}
+      }
     }
 
     loadFromStorage() {

@@ -28,8 +28,8 @@
       this.minZoom = this.config.ZOOM ? this.config.ZOOM.DEFAULT_MIN || 0.05 : 0.05;
       this.maxZoom = this.config.ZOOM ? this.config.ZOOM.MAX || 4 : 4;
       this.mapSize = this.config.MAP_SIZE || 8192;
-      this.storage = (options && options.storage) ? options.storage : (typeof window !== 'undefined' ? window.storageService : null);
-      this.eventBus = (options && options.eventBus) ? options.eventBus : (typeof window !== 'undefined' ? window.eventBus : null);
+      this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.eventBus = options.eventBus || null;
     }
 
     // Canvas dimension management
@@ -272,17 +272,35 @@
              screen.y <= this.canvasHeight + padding;
     }
 
-    // Unified persistence
+    // Unified persistence (MapState)
     saveToStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.MAP_VIEW : 'mp4_map_view';
+        const key = (this.config?.STORAGE_KEYS?.MAP_VIEW) || 'mp4_map_view';
         const payload = { panX: this.panX, panY: this.panY, zoom: this.zoom };
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'mapView' }); } catch (__) {}
-        if (this.storage && typeof this.storage.set === 'function') this.storage.set(key, payload);
-        else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.saveMapView === 'function') StorageUtils.saveMapView(payload);
-        else if (typeof localStorage !== 'undefined') { try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {} }
-        try { this.eventBus && this.eventBus.emit && this.eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'mapView' }); } catch (__) {}
-      } catch (e) { try { this.errorHandler.logWarning('MapState.saveToStorage failed', 'MapState.saveToStorage', { error: e }); } catch (ignore) {} }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'mapView' });
+        
+        if (this.storage && typeof this.storage.set === 'function') {
+          this.storage.set(key, payload);
+        } else if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(key, JSON.stringify(payload)); } catch (__) {}
+        }
+        
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
+          entity: 'mapView',
+          zoom: this.zoom,
+          panX: this.panX,
+          panY: this.panY
+        });
+      } catch (e) {
+        try { 
+          this.errorHandler?.logError?.(e, 'MapState.saveToStorage');
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { 
+            entity: 'mapView',
+            error: e.message
+          });
+        } catch (ignore) {}
+      }
     }
 
     loadFromStorage() {
@@ -290,7 +308,6 @@
         const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.MAP_VIEW : 'mp4_map_view';
         let data = null;
         if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
-        else if (typeof StorageUtils !== 'undefined' && typeof StorageUtils.loadMapView === 'function') data = StorageUtils.loadMapView();
         else if (typeof localStorage !== 'undefined') { try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (__) { data = null; } }
         if (data && typeof data === 'object') {
           const minZoom = this.minZoom; const maxZoom = this.maxZoom;

@@ -42,10 +42,11 @@ const MarkerUtils = {
     getManager() {
         if (!this._manager) {
             // Try to create manager if dependencies are available
-            if (typeof MarkerManager !== 'undefined' && typeof StorageInterface !== 'undefined' && typeof NotificationInterface !== 'undefined') {
+            if (typeof MarkerManager !== 'undefined' && typeof getStorageService === 'function' && typeof NotificationInterface !== 'undefined') {
                 try {
                     const h = this._errorHandler;
-                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, StorageInterface, NotificationInterface, window.eventBus, { errorHandler: this._errorHandler });
+                    const storageService = getStorageService();
+                    this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, storageService || {}, NotificationInterface, null, { errorHandler: this._errorHandler });
 
                     // Set up route cleanup callback
                     this._manager.onCleanupRouteReferences = (uid) => {
@@ -64,7 +65,7 @@ const MarkerUtils = {
                     throw new Error('MarkerManager creation failed: ' + e.message);
                 }
             } else {
-                throw new Error('MarkerManager dependencies not available. Required: MarkerManager, StorageInterface, NotificationInterface');
+                throw new Error('MarkerManager dependencies not available. Required: MarkerManager, StorageService, NotificationInterface');
             }
         }
         return this._manager;
@@ -112,14 +113,21 @@ const MarkerUtils = {
     // Delete all custom markers - delegates to manager
     clearCustomMarkers() {
         // Prefer event-driven clear so MarkerManager remains authoritative.
-        if (window.eventBus && window.EventTypes && window.EventTypes.MARKER_CLEAR_REQUESTED) {
-            try {
-                window.eventBus.emit(window.EventTypes.MARKER_CLEAR_REQUESTED);
-                return;
-            } catch (e) {
-                this._errorHandler.logWarning('MarkerUtils.clearCustomMarkers emit failed', 'MarkerUtils.clearCustomMarkers', { error: e });
-                // Fall through to direct call
+        // Prefer emitting via manager's injected eventBus if available
+        try {
+            const storageService = getStorageService && typeof getStorageService === 'function' ? getStorageService() : {};
+            const mgr = this._manager || (this._manager = (typeof MarkerManager !== 'undefined' ? new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, storageService || {}, NotificationInterface, null, { errorHandler: this._errorHandler }) : null));
+            if (mgr && mgr.eventBus && EventTypes && EventTypes.MARKER_CLEAR_REQUESTED) {
+                try {
+                    mgr.eventBus.emit(EventTypes.MARKER_CLEAR_REQUESTED);
+                    return;
+                } catch (e) {
+                    this._errorHandler.logWarning('MarkerUtils.clearCustomMarkers emit failed', 'MarkerUtils.clearCustomMarkers', { error: e });
+                    // Fall through to direct call
+                }
             }
+        } catch (e) {
+            // Silence manager creation errors here and fall back
         }
         return this.getManager().clearMarkers();
     },
