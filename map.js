@@ -63,17 +63,29 @@ class InteractiveMap {
             this.eventBus.setErrorHandler(this.errorHandler);
         }
 
-        // Initialize state managers (storage will be obtained from global getStorageService() when needed)
-        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
-        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        // Initialize storage provider for dependency injection (preferred) with legacy fallbacks
+        try {
+            const globalStorage = (typeof getStorageService === 'function') ? getStorageService() : (typeof window !== 'undefined' ? window.storageService : null);
+            if (typeof StorageServiceProvider !== 'undefined') {
+                this.storageProvider = new StorageServiceProvider(globalStorage, this.errorHandler);
+            } else {
+                // Fallback minimal provider
+                this.storageProvider = { getInstance: function() { return globalStorage; }, setInstance: function(s) { globalStorage = s; } };
+            }
+            if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
+        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.constructor.storageProvider', { message: 'Failed to initialize storageProvider' }); }
+
+        // Initialize state managers
+        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
         this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
 
         // State managers initialized
@@ -3042,15 +3054,17 @@ async function init() {
         let consentManager = null;
         let dataExportController = null;
         
-        // Retrieve StorageService from global getStorageService() function
+        // Retrieve StorageService from injected storageProvider (preferred) or global getStorageService() function
         let storageService = null;
-                try {
-                    if (typeof getStorageService === 'function') {
-                        storageService = getStorageService();
-                    }
-                } catch (e) {
-                    moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService' });
-                }
+        try {
+            if (map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') {
+                storageService = map.storageProvider.getInstance();
+            } else if (typeof getStorageService === 'function') {
+                storageService = getStorageService();
+            }
+        } catch (e) {
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService' });
+        }
         
                 // Phase 5 initialization diagnostics removed
         
