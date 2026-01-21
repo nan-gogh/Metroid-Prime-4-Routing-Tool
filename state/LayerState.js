@@ -63,9 +63,10 @@
     _loadGridVisibility() {
       const h = this.errorHandler;
       try {
-        if (window.storageService) {
-          const stored = window.storageService.get(this.config.STORAGE_KEYS.GRID_VISIBLE);
-          if (stored !== null) {
+        // Prefer injected storage (StorageService) when available
+        if (this.storage && typeof this.storage.get === 'function') {
+          const stored = this.storage.get(this.config.STORAGE_KEYS.GRID_VISIBLE);
+          if (stored !== null && typeof stored !== 'undefined') {
             this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === true);
           } else {
             this.layerVisibility.grid = false; // Default to hidden
@@ -75,7 +76,7 @@
           if (consent) {
             const stored = localStorage.getItem('mp4_grid_visible');
             if (stored !== null) {
-              this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === 'true');
+              this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === true);
             } else {
               this.layerVisibility.grid = false; // Default to hidden
             }
