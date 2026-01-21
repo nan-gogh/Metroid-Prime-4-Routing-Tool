@@ -64,13 +64,97 @@
      * @private
      */
     async _createManagers() {
+      // Build a storage adapter that adapts either the injected StorageService
+      // or the legacy StorageInterface to the methods expected by managers.
+      let storageInstance = null;
+      try {
+        storageInstance = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : null;
+      } catch (e) {
+        storageInstance = null;
+      }
+      if (!storageInstance) {
+        storageInstance = this.storageUtils && this.storageUtils.StorageInterface ? this.storageUtils.StorageInterface : (typeof window !== 'undefined' ? window.storageService || window._mp4Storage : null);
+      }
+
+      const cfgKeys = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS : {};
+
+      const storageAdapter = {
+        // Markers
+        saveMarkers: (markers) => {
+          try {
+            if (storageInstance && typeof storageInstance.set === 'function') {
+              return storageInstance.set(cfgKeys.MARKERS || 'mp4_markers', markers);
+            }
+            if (storageInstance && typeof storageInstance.saveMarkers === 'function') {
+              return storageInstance.saveMarkers(markers);
+            }
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveMarkers', {}); }
+          return false;
+        },
+        loadMarkers: () => {
+          try {
+            if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.MARKERS || 'mp4_markers', []);
+            if (storageInstance && typeof storageInstance.loadMarkers === 'function') return storageInstance.loadMarkers();
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadMarkers', {}); }
+          return [];
+        },
+        // Route
+        saveRoute: (routeData) => {
+          try {
+            if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(cfgKeys.ROUTE || 'mp4_route', routeData);
+            if (storageInstance && typeof storageInstance.saveRoute === 'function') return storageInstance.saveRoute(routeData);
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveRoute', {}); }
+          return false;
+        },
+        loadRoute: () => {
+          try {
+            if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.ROUTE || 'mp4_route', null);
+            if (storageInstance && typeof storageInstance.loadRoute === 'function') return storageInstance.loadRoute();
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadRoute', {}); }
+          return null;
+        },
+        // Route looping flag
+        saveRouteLoopingFlag: (flag) => {
+          try {
+            if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', !!flag);
+            if (storageInstance && typeof storageInstance.saveRouteLoopingFlag === 'function') return storageInstance.saveRouteLoopingFlag(!!flag);
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveRouteLoopingFlag', {}); }
+          return false;
+        },
+        loadRouteLoopingFlag: () => {
+          try {
+            if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', false);
+            if (storageInstance && typeof storageInstance.loadRouteLoopingFlag === 'function') return storageInstance.loadRouteLoopingFlag();
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadRouteLoopingFlag', {}); }
+          return false;
+        },
+        // Generic setting access for legacy code
+        loadSetting: (key) => {
+          try {
+            if (storageInstance && typeof storageInstance.loadSetting === 'function') return storageInstance.loadSetting(key);
+            if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(key, null);
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadSetting', {}); }
+          return null;
+        },
+        saveSetting: (key, val) => {
+          try {
+            if (storageInstance && typeof storageInstance.saveSetting === 'function') return storageInstance.saveSetting(key, val);
+            if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(key, val);
+          } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveSetting', {}); }
+          return false;
+        }
+      };
+
+      // Keep adapter available for other methods
+      this._storageAdapter = storageAdapter;
+
       // Create MarkerManager
-        if (!this.markerManager && typeof MarkerManager !== 'undefined' &&
-          this.storageUtils.StorageInterface && this.storageUtils.NotificationInterface) {
+      if (!this.markerManager && typeof MarkerManager !== 'undefined' &&
+        storageAdapter && this.storageUtils.NotificationInterface) {
 
         this._markerManager = new MarkerManager(
           { maxMarkers: 50, layerPrefix: 'cm' },
-          this.storageUtils.StorageInterface,
+          storageAdapter,
           this.storageUtils.NotificationInterface,
           this.eventBus,
           { errorHandler: this.errorHandler }
@@ -84,7 +168,7 @@
         try {
           this._routeManager = new RouteManager(
             this._markerManager,
-            this.storageUtils.StorageInterface,
+            storageAdapter,
             this.storageUtils.NotificationInterface,
             this.eventBus,
             { errorHandler: this.errorHandler }
@@ -135,8 +219,15 @@
     async _loadStoredData() {
       // Load marker scaling configuration
       try {
-        if (this.storageUtils.StorageInterface && typeof this.storageUtils.StorageInterface.hasConsent === 'function' && this.storageUtils.StorageInterface.hasConsent()) {
-          const savedScaling = this.storageUtils.StorageInterface.get(this.config.STORAGE_KEYS.MARKER_SCALING);
+        const storage = this._storageAdapter || (this.storageUtils && this.storageUtils.StorageInterface) || (typeof window !== 'undefined' ? window.storageService : null);
+        if (storage && typeof storage.loadSetting === 'function' && storage.loadSetting) {
+          const savedScaling = storage.loadSetting(this.config.STORAGE_KEYS.MARKER_SCALING);
+          if (savedScaling) {
+            this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
+            this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
+          }
+        } else if (storage && typeof storage.get === 'function') {
+          const savedScaling = storage.get(this.config.STORAGE_KEYS.MARKER_SCALING);
           if (savedScaling) {
             this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
             this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
