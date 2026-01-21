@@ -1,5 +1,6 @@
 // controllers/DataExportController.js
-// Implements GDPR data export functionality for user privacy
+// CORE ARCHITECTURE: Implements GDPR data export functionality for user privacy
+// This is a REQUIRED component for GDPR compliance and data portability
 // Allows users to export all their stored data in JSON format
 
 (function (global) {

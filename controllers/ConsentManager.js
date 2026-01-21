@@ -1,5 +1,6 @@
 // controllers/ConsentManager.js
-// Manages user consent for storage operations and privacy preferences
+// CORE ARCHITECTURE: Manages user consent for storage operations and privacy preferences
+// This is a REQUIRED component for GDPR compliance and privacy management
 // Handles consent state, events, and lifecycle
 
 (function (global) {

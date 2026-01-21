@@ -22,9 +22,23 @@
       this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventTypes = window.EventTypes || {};
       
-      // Optional managers for Phase 5 privacy features
-      this.consentManager = options.consentManager || null;
-      this.dataExportController = options.dataExportController || null;
+      // REQUIRED managers for Phase 5 privacy features (core architecture)
+      this.consentManager = options.consentManager;
+      this.dataExportController = options.dataExportController;
+      
+      // Validate required managers
+      if (!this.consentManager) {
+        this.errorHandler.logWarning(
+          'SettingsController: ConsentManager not provided (required)',
+          'SettingsController.constructor'
+        );
+      }
+      if (!this.dataExportController) {
+        this.errorHandler.logWarning(
+          'SettingsController: DataExportController not provided (required)',
+          'SettingsController.constructor'
+        );
+      }
       
       // Optional map reference for operations that previously called map methods
       this.map = options.map || null;
@@ -708,14 +722,24 @@
     }
 
     /**
-     * Bind data export controls (GDPR compliance - Phase 5)
+     * Bind data export controls (GDPR compliance - Phase 5 - CORE ARCHITECTURE)
+     * ConsentManager and DataExportController are REQUIRED dependencies
      * @private
      */
     _bindDataExportControls() {
       try {
+        // Verify required managers are available
+        if (!this.dataExportController || !this.consentManager) {
+          this.errorHandler.logWarning(
+            'SettingsController: Cannot bind export controls - required managers missing',
+            'SettingsController._bindDataExportControls'
+          );
+          return;
+        }
+
         // Look for export data button
         const exportBtn = document.getElementById('exportDataButton');
-        if (exportBtn && this.dataExportController) {
+        if (exportBtn) {
           exportBtn.addEventListener('click', async (ev) => {
             try {
               ev.preventDefault();
