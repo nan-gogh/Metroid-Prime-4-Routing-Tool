@@ -3125,7 +3125,8 @@ async function init() {
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
                 consentManager: consentManager,
-                dataExportController: dataExportController
+                dataExportController: dataExportController,
+                storageProvider: map.storageProvider
             });
             settingsController.init();
             // Load saved settings after controller is initialized

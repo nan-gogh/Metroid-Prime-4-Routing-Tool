@@ -25,6 +25,8 @@
       // REQUIRED managers for Phase 5 privacy features (core architecture)
       this.consentManager = options.consentManager;
       this.dataExportController = options.dataExportController;
+      // Optional storage provider for dependency injection
+      this.storageProvider = options.storageProvider || null;
       
       // Validate required managers
       if (!this.consentManager) {
@@ -57,6 +59,22 @@
       this._bindEventListeners();
       this._bindDataExportControls();
       this._updateSidebarHandleEmphasis();
+    }
+
+    /**
+     * Helper to obtain the underlying StorageService instance.
+     * Prefers injected storageProvider, falls back to global getStorageService().
+     */
+    _getStorageInstance() {
+      try {
+        if (this.storageProvider && typeof this.storageProvider.getInstance === 'function') {
+          return this.storageProvider.getInstance();
+        }
+        if (typeof getStorageService === 'function') return getStorageService();
+      } catch (e) {
+        // ignore and return null
+      }
+      return null;
     }
 
     /**
@@ -490,7 +508,7 @@
      */
     _getStorageConsent() {
       try {
-        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
+        const storage = this._getStorageInstance();
         if (storage && typeof storage.hasConsent === 'function') {
           return storage.hasConsent();
         } else if (storage && typeof storage.hasStorageConsent === 'function') {
@@ -508,7 +526,7 @@
      */
     _setStorageConsent(consent) {
       try {
-        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
+        const storage = this._getStorageInstance();
         if (storage && typeof storage.set === 'function') {
           if (consent) storage.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
           else storage.remove && storage.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
@@ -601,7 +619,7 @@
           gridVisible: this.layerState ? this.layerState.isGridVisible() : false
         };
 
-        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
+        const storage = this._getStorageInstance();
         if (storage && typeof storage.set === 'function') {
           storage.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
           storage.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
@@ -612,7 +630,7 @@
           storage.saveSetting('mp4_grid_visible', settings.gridVisible ? '1' : '0');
         } else {
           // Fallback to global storage service
-          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+          const svc = this._getStorageInstance();
           if (svc && typeof svc.set === 'function') {
             svc.set('mp4_tileset', settings.tileset);
             svc.set('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
@@ -629,7 +647,7 @@
      */
     _clearAllSavedData() {
       try {
-        const storage = (typeof getStorageService === 'function') ? getStorageService() : null;
+        const storage = this._getStorageInstance();
         if (storage && typeof storage.remove === 'function') {
           // Clear all storage keys using StorageService
           const keys = Object.values(this.config.STORAGE_KEYS);
@@ -642,7 +660,7 @@
           storage.clearSavedData(true);
         } else {
           // Fallback to global storage service
-          const svc = (typeof getStorageService === 'function') ? getStorageService() : null;
+          const svc = this._getStorageInstance();
           const keys = [
             'mp4_customMarkers', 'mp4_saved_route', 'mp4_layerVisibility',
             'mp4_tileset', 'mp4_tileset_grayscale', 'mp4_grid_heatmap',
