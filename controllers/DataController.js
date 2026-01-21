@@ -22,6 +22,8 @@
         StorageInterface: global.StorageInterface,
         NotificationInterface: global.NotificationInterface
       };
+      // Optional storage provider for DI
+      this.storageProvider = options.storageProvider || (typeof window !== 'undefined' ? window.storageProvider : null);
 
       // Manager instances (will be created in init)
       this._markerManager = null;
