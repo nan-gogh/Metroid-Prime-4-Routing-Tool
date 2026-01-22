@@ -298,10 +298,43 @@ class RouteComputeController {
     }
 
     expandRouteNearby() {
-        if (typeof RouteComputation !== 'undefined') {
-            RouteComputation.expandRouteNearby(this.map, beginRouteCompute, endRouteCompute, LAYERS, this.config.MAP_SIZE);
-        } else {
+        if (typeof RouteComputation === 'undefined') {
             this.errorHandler.logError('RouteComputation module not available', 'RouteComputeController.expandRouteNearby');
+            return;
+        }
+
+        // Begin UI route-compute overlay
+        try {
+            if (typeof beginRouteCompute === 'function') beginRouteCompute();
+        } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.expandRouteNearby.beginRouteCompute'); }
+
+        try {
+            // Cancel active drags if present before computing
+            const hasActiveDrags = (this.routeEditState && (this.routeEditState.hasRouteInsert && this.routeEditState.hasRouteInsert())) ||
+                (this.routeEditState && (this.routeEditState.hasRouteNodeCandidate && this.routeEditState.hasRouteNodeCandidate())) ||
+                (this.pointerHandler && this.pointerHandler._draggingMarker);
+            if (hasActiveDrags && this.pointerHandler && typeof this.pointerHandler._cancelRouteDragOperations === 'function') {
+                try { this.pointerHandler._cancelRouteDragOperations('Route expansion'); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.expandRouteNearby.cancelDrags'); }
+            }
+
+            const result = RouteComputation.expandRouteNearby({
+                routeManager: this.routeManager,
+                routeEditState: this.routeEditState,
+                layerState: this.layerState,
+                LAYERS: (typeof LAYERS !== 'undefined' ? LAYERS : {}),
+                MAP_SIZE: this.config.MAP_SIZE,
+                errorHandler: this.errorHandler
+            });
+
+            if (result && result.sources && result.sources.length > 0) {
+                try {
+                    this.routeManager.setRoute(result.indices, result.length, result.sources);
+                } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.expandRouteNearby.setRoute'); }
+            }
+        } catch (e) {
+            this.errorHandler.logError(e, 'RouteComputeController.expandRouteNearby');
+        } finally {
+            try { if (typeof endRouteCompute === 'function') endRouteCompute(); } catch (e) { this.errorHandler.logError(e, 'RouteComputeController.expandRouteNearby.endRouteCompute'); }
         }
     }
 

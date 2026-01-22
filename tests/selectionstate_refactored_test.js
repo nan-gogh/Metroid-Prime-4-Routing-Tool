@@ -12,18 +12,14 @@
   // Mock Storage API
   global.Storage = function() {};
 
-  // Mock localStorage for testing
-  const mockLocalStorage = {
+  // Mock storage (StorageService-like) for testing
+  const mockStorage = {
     data: {},
-    getItem: function(key) { return this.data[key] || null; },
-    setItem: function(key, value) { this.data[key] = value; },
-    removeItem: function(key) { delete this.data[key]; },
+    get: function(key) { return (key in this.data) ? this.data[key] : null; },
+    set: function(key, value) { this.data[key] = value; },
+    remove: function(key) { delete this.data[key]; },
     clear: function() { this.data = {}; }
   };
-  global.localStorage = mockLocalStorage;
-
-  // Mock checkStorageConsent function
-  global.checkStorageConsent = function() { return true; };
 
   // Mock EventTypes
   global.EventTypes = {
@@ -36,24 +32,39 @@
   const path = require('path');
 
   // Load ErrorHandler first
-  const errorHandlerScript = fs.readFileSync(path.join(__dirname, '../utils/ErrorHandler.js'), 'utf8');
-  eval(errorHandlerScript);
-
-  // Make ErrorHandler globally available
-  global.ErrorHandler = eval('ErrorHandler');
+  // Load ErrorHandler module and make available
+  const { ErrorHandler } = require(path.join(__dirname, '../utils/ErrorHandler.js'));
+  global.ErrorHandler = ErrorHandler;
+  // Provide an ErrorHandler instance for tests
+  global.errorHandler = new ErrorHandler();
 
   // Load SelectionState
+  // Ensure BaseStateManager is loaded (SelectionState depends on it)
+  require(path.join(__dirname, '../state/BaseStateManager.js'));
+  // Read and eval the SelectionState source with a local BaseStateManager binding
   const script = fs.readFileSync(path.join(__dirname, '../state/SelectionState.js'), 'utf8');
-  eval(script);
+  // Extract the class body and eval it in the test scope so BaseStateManager is visible
+  const classStart = script.indexOf('class SelectionState');
+  const registerMarker = '\n  // Register globally';
+  const registerIndex = script.indexOf(registerMarker, classStart);
+  let classSource;
+  if (classStart !== -1 && registerIndex !== -1) {
+    classSource = script.substring(classStart, registerIndex);
+  } else {
+    classSource = script;
+  }
 
-  // Make SelectionState globally available
-  global.SelectionState = eval('SelectionState');
+  const BaseStateManager = global.BaseStateManager;
+  var SelectionState;
+  eval(classSource);
+  global.SelectionState = SelectionState;
 
   class SelectionStateRefactoredTest {
     constructor() {
       this.tests = [];
       this.passed = 0;
       this.failed = 0;
+      this.errorHandler = (typeof global !== 'undefined' && global.errorHandler) ? global.errorHandler : new ErrorHandler();
     }
 
     test(name, fn) {
@@ -82,14 +93,14 @@
 
   // Test basic marker selection
   testSuite.test('constructor initializes default state', () => {
-    const state = new SelectionState();
+    const state = new global.SelectionState({}, { storage: mockStorage, errorHandler: ErrorHandler });
     if (state.selectedMarker !== null) throw new Error('selectedMarker should be null');
     if (state.selectedMarkerLayer !== null) throw new Error('selectedMarkerLayer should be null');
     if (!(state.multiSelectedMarkers instanceof Set)) throw new Error('multiSelectedMarkers should be a Set');
   });
 
   testSuite.test('setSelectedMarker and clearSelectedMarker', () => {
-    const state = new SelectionState();
+    const state = new global.SelectionState({}, { storage: mockStorage, errorHandler: ErrorHandler });
     const mockMarker = { uid: 'test-marker' };
 
     // Set marker
@@ -104,7 +115,7 @@
   });
 
   testSuite.test('isMarkerSelected', () => {
-    const state = new SelectionState();
+    const state = new global.SelectionState({}, { storage: mockStorage, errorHandler: ErrorHandler });
     const mockMarker1 = { uid: 'marker1' };
     const mockMarker2 = { uid: 'marker2' };
 
@@ -116,7 +127,7 @@
   });
 
   testSuite.test('multi-selection support', () => {
-    const state = new SelectionState();
+    const state = new SelectionState({}, { storage: mockStorage, errorHandler: ErrorHandler });
     const mockMarker1 = { uid: 'marker1' };
     const mockMarker2 = { uid: 'marker2' };
 

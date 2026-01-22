@@ -92,11 +92,8 @@ const mockMap = {
     ctx: document.createElement('canvas').getContext('2d')
 };
 
-// Provide a global `map` object because RouteRenderer references global `map` in some paths
-global.map = mockMap;
-global.map.routeLooping = false;
-global.map._routeDashOffset = 0;
-global.map.getRouteNodeSize = () => 6;
+// Note: tests previously set a global `map`; RouteRenderer now accepts
+// injected dependencies. We assign the mock map to the renderer instance below.
 
 // Additional mocked dependencies expected by RouteRenderer
 const mockRouteAnimationState = { getLineWidth: () => 3 };
@@ -113,13 +110,17 @@ const renderContext = {
     ctxRoute: document.createElement('canvas').getContext('2d')
 };
 
+// Create a viewportContext matching mockMapState
+const viewportContext = (typeof ViewportContext !== 'undefined' && ViewportContext.fromMapState) ?
+    ViewportContext.fromMapState(mockMapState) : { zoom: mockMapState.zoom, panX: mockMapState.panX, panY: mockMapState.panY };
+
 this.errorHandler.logError('RouteRenderer instance created', 'require');
 
 // Test cache functionality
 this.errorHandler.logError('Testing cache functionality...', 'require');
 
 // First render should compute path data
-routeRenderer.render(renderContext);
+routeRenderer.render(renderContext, viewportContext);
 this.errorHandler.logError('First render completed', 'require');
 
 // Check if cache exists (RouteRenderer stores cached path in `_cachedPath`)
@@ -127,7 +128,7 @@ const cachePresent = !!routeRenderer._cachedPath;
 console.log(`Cached path present after first render: ${cachePresent}`);
 
 // Second render should use cache
-routeRenderer.render(renderContext);
+routeRenderer.render(renderContext, viewportContext);
 this.errorHandler.logError('Second render completed (should use cache)', 'require');
 
 // Modify marker position
@@ -135,7 +136,8 @@ mockMap._routeSources[1].marker.x = 0.6;
 this.errorHandler.logError('Modified marker position', 'require');
 
 // Third render should recompute due to position change
-routeRenderer.render(renderContext);
+// Update viewport if pan/zoom changed (none in this test)
+routeRenderer.render(renderContext, viewportContext);
 this.errorHandler.logError('Third render completed (should recompute due to position change)', 'require');
 
 // Test cache invalidation
@@ -143,7 +145,7 @@ routeRenderer.invalidateCache();
 this.errorHandler.logError('Cache invalidated', 'require');
 
 // Fourth render should recompute
-routeRenderer.render(renderContext);
+routeRenderer.render(renderContext, viewportContext);
 this.errorHandler.logError('Fourth render completed after cache invalidation', 'require');
 
 this.errorHandler.logError('All tests passed! RouteRenderer caching works correctly.', 'require');

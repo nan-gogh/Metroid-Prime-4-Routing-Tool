@@ -9,10 +9,41 @@
 
   class InputController {
     constructor(options) {
-      // Required dependencies
-      this.map = options.map; // Reference to InteractiveMap instance
+      // Required dependencies (accept explicit small services instead of full `map`)
       this.eventBus = options.eventBus || null;
       this.errorHandler = options.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+
+      // Build a lightweight map-like object for legacy handlers that still expect `map`
+      this._mapLike = {
+        mapState: options.mapState || null,
+        selectionState: options.selectionState || null,
+        routeState: options.routeState || null,
+        layerState: options.layerState || null,
+        tilesetState: options.tilesetState || null,
+        imageState: options.imageState || null,
+        heatmapDisplayState: options.heatmapDisplayState || null,
+        editModeState: options.editModeState || null,
+        routeController: options.routeController || null,
+        routeManager: options.routeManager || null,
+        markerManager: options.markerManager || null,
+        markerRenderer: options.markerRenderer || null,
+        layerVisibility: options.layerVisibility || null,
+        layerConfig: options.layerConfig || null,
+        dragState: options.dragState || null,
+        canvas: options.canvas || null,
+        _showGridHeatmap: (options._showGridHeatmap === undefined) ? false : options._showGridHeatmap,
+        // Action hooks (optional)
+        zoomIn: options.zoomIn || function () {},
+        zoomOut: options.zoomOut || function () {},
+        resetView: options.resetView || function () {},
+        expandRouteNearby: options.expandRouteNearby || function () {},
+        setGridHeatmap: options.setGridHeatmap || function () {},
+        showTooltip: options.showTooltip || null,
+        hideTooltip: options.hideTooltip || null,
+        saveViewToStorage: options.saveViewToStorage || null,
+        checkMarkerHover: options.checkMarkerHover || null,
+        updateResolution: options.updateResolution || null
+      };
 
       // Optional dependencies
       this.config = options.config || global.MP4Config || {};
@@ -45,7 +76,7 @@
 
       // GestureHandler - handles touch gestures
       if (typeof GestureHandler !== 'undefined') {
-        this.gestureHandler = new GestureHandler(this.map, this.config);
+        this.gestureHandler = new GestureHandler(this._mapLike, this.config);
         try {
           await this.gestureHandler.init();
         } catch (e) {
@@ -55,7 +86,29 @@
 
       // PointerHandler - handles mouse/touch events
       if (typeof PointerHandler !== 'undefined') {
-        this.pointerHandler = new PointerHandler(this.map, this.config, this.eventBus);
+        this.pointerHandler = new PointerHandler({
+          mapState: this._mapLike.mapState,
+          canvas: this._mapLike.canvas,
+          markerManager: this._mapLike.markerManager,
+          markerRenderer: this._mapLike.markerRenderer,
+          layerVisibility: this._mapLike.layerVisibility,
+          layerConfig: this._mapLike.layerConfig,
+          eventBus: this.eventBus,
+          errorHandler: this.errorHandler,
+          gestureHandler: this.gestureHandler,
+          selectionState: this._mapLike.selectionState,
+          editModeState: this._mapLike.editModeState,
+          dragState: this._mapLike.dragState,
+          imageState: this._mapLike.imageState,
+          checkMarkerHover: this._mapLike.checkMarkerHover ? this._mapLike.checkMarkerHover.bind(this._mapLike) : null,
+          saveViewToStorage: this._mapLike.saveViewToStorage ? this._mapLike.saveViewToStorage.bind(this._mapLike) : null,
+          showTooltip: this._mapLike.showTooltip ? this._mapLike.showTooltip.bind(this._mapLike) : null,
+          hideTooltip: this._mapLike.hideTooltip ? this._mapLike.hideTooltip.bind(this._mapLike) : null,
+          updateResolution: this._mapLike.updateResolution ? this._mapLike.updateResolution.bind(this._mapLike) : null,
+          routeManager: this._mapLike.routeManager,
+          routeController: this._mapLike.routeController,
+          config: this.config
+        }, this.config, this.eventBus);
         try {
           await this.pointerHandler.init();
         } catch (e) {
@@ -65,7 +118,7 @@
 
       // KeyboardHandler - handles keyboard shortcuts
       if (typeof KeyboardHandler !== 'undefined') {
-        this.keyboardHandler = new KeyboardHandler(this.map, this.config, this.eventBus);
+        this.keyboardHandler = new KeyboardHandler(this._mapLike, this.config, this.eventBus);
         try {
           await this.keyboardHandler.init();
         } catch (e) {

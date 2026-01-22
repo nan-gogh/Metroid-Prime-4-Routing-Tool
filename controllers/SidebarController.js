@@ -19,8 +19,8 @@
       this.errorHandler = options.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
       this.eventTypes = window.EventTypes || {};
 
-      // Keep map reference for UI operations (temporary)
-      this.map = options.map;
+      // Prefer explicit small services; no full map reference stored
+      this.canvas = options.canvas || null;
 
       this._renderScheduled = false;
       this._scheduleRender = this._scheduleRender.bind(this);

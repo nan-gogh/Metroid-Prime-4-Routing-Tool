@@ -8,10 +8,16 @@ if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
 const MarkerUtils = {
     _manager: null,
     _errorHandler: globalThis.__MP4_NOOP_ERROR_HANDLER,
+    _storageInstance: null,
 
     // Inject error handler after initialization
     setErrorHandler(handler) {
         this._errorHandler = handler || globalThis.__MP4_NOOP_ERROR_HANDLER;
+    },
+
+    // Inject an explicit storage instance (preferred over global accessor)
+    setStorageInstance(storageInstance) {
+        this._storageInstance = storageInstance || null;
     },
 
     // Factory method to create manager with dependencies
@@ -42,10 +48,11 @@ const MarkerUtils = {
     getManager() {
         if (!this._manager) {
             // Try to create manager if dependencies are available
-            if (typeof MarkerManager !== 'undefined' && typeof getStorageService === 'function' && typeof NotificationInterface !== 'undefined') {
+                // Prefer injected storage instance; fall back to global storage provider or window.storageService
+                    const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : (typeof window !== 'undefined' && window.storageService ? window.storageService : null));
+            if (typeof MarkerManager !== 'undefined' && storageService !== null && typeof NotificationInterface !== 'undefined') {
                 try {
                     const h = this._errorHandler;
-                    const storageService = getStorageService();
                     this._manager = new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, storageService || {}, NotificationInterface, null, { errorHandler: this._errorHandler });
 
                     // Set up route cleanup callback
@@ -115,7 +122,7 @@ const MarkerUtils = {
         // Prefer event-driven clear so MarkerManager remains authoritative.
         // Prefer emitting via manager's injected eventBus if available
         try {
-            const storageService = getStorageService && typeof getStorageService === 'function' ? getStorageService() : {};
+            const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : (typeof window !== 'undefined' && window.storageService ? window.storageService : {}));
             const mgr = this._manager || (this._manager = (typeof MarkerManager !== 'undefined' ? new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, storageService || {}, NotificationInterface, null, { errorHandler: this._errorHandler }) : null));
             if (mgr && mgr.eventBus && EventTypes && EventTypes.MARKER_CLEAR_REQUESTED) {
                 try {

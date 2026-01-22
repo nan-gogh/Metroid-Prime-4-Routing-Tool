@@ -42,8 +42,11 @@
         );
       }
       
-      // Optional map reference for operations that previously called map methods
-      this.map = options.map || null;
+      // Prefer injected helpers to avoid reading from full `map` instance
+      this.checkMarkerHover = options.checkMarkerHover || null;
+      this.canvas = options.canvas || null;
+      this.lastMouseX = (typeof options.lastMouseX === 'number') ? options.lastMouseX : null;
+      this.lastMouseY = (typeof options.lastMouseY === 'number') ? options.lastMouseY : null;
       // Event listener cleanup
       this._eventUnsubscribers = [];
     }
@@ -63,14 +66,13 @@
 
     /**
      * Helper to obtain the underlying StorageService instance.
-     * Prefers injected storageProvider, falls back to global getStorageService().
+     * Prefers injected storageProvider; no global fallbacks.
      */
     _getStorageInstance() {
       try {
         if (this.storageProvider && typeof this.storageProvider.getInstance === 'function') {
           return this.storageProvider.getInstance();
         }
-        if (typeof getStorageService === 'function') return getStorageService();
       } catch (e) {
         // ignore and return null
       }
@@ -274,14 +276,7 @@
             try { updateMarkerScale(ev.target.value, ev.target); } catch (e) { this.errorHandler.logWarning('SettingsController: markerSize change failed', 'SettingsController._bindHighlightControls.markerChange', { error: e }); }
             try {
               // Trigger hover update for UX parity
-              if (this.map && typeof this.map.checkMarkerHover === 'function') {
-                if (typeof this.map.lastMouseX === 'number' && typeof this.map.lastMouseY === 'number') {
-                  this.map.checkMarkerHover(this.map.lastMouseX, this.map.lastMouseY);
-                } else {
-                  const rect = this.map && this.map.canvas && this.map.canvas.getBoundingClientRect ? this.map.canvas.getBoundingClientRect() : null;
-                  if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
-                }
-              }
+              this._invokeCheckMarkerHover();
             } catch (e) { this.errorHandler.logWarning('SettingsController: markerSize change hover update failed', 'SettingsController._bindHighlightControls.markerChangeHover', { error: e }); }
           });
         }
@@ -355,20 +350,34 @@
             try { updateHighlight(ev.target.value, ev.target); } catch (e) { this.errorHandler.logWarning('SettingsController: highlight change failed', 'SettingsController._bindHighlightControls.highlightChange', { error: e }); }
             try {
               // Trigger hover update for UX parity
-              if (this.map && typeof this.map.checkMarkerHover === 'function') {
-                if (typeof this.map.lastMouseX === 'number' && typeof this.map.lastMouseY === 'number') {
-                  this.map.checkMarkerHover(this.map.lastMouseX, this.map.lastMouseY);
-                } else {
-                  const rect = this.map && this.map.canvas && this.map.canvas.getBoundingClientRect ? this.map.canvas.getBoundingClientRect() : null;
-                  if (rect && this.map.checkMarkerHover) this.map.checkMarkerHover(rect.width / 2, rect.height / 2);
-                }
-              }
+              this._invokeCheckMarkerHover();
             } catch (e) { this.errorHandler.logWarning('SettingsController: highlight change hover update failed', 'SettingsController._bindHighlightControls.highlightChangeHover', { error: e }); }
           });
         }
 
       } catch (e) {
         this.errorHandler.logWarning('SettingsController: Failed to bind highlight controls', 'SettingsController._bindHighlightControls', { error: e });
+      }
+    }
+
+    /**
+     * Attempt to invoke marker hover check using injected helpers or fallback to map
+     */
+    _invokeCheckMarkerHover() {
+      try {
+        const fn = (typeof this.checkMarkerHover === 'function') ? this.checkMarkerHover : null;
+        if (!fn) return;
+
+        if (typeof this.lastMouseX === 'number' && typeof this.lastMouseY === 'number') {
+          fn(this.lastMouseX, this.lastMouseY);
+          return;
+        }
+
+        const canvasEl = this.canvas;
+        const rect = canvasEl && canvasEl.getBoundingClientRect ? canvasEl.getBoundingClientRect() : null;
+        if (rect) fn(rect.width / 2, rect.height / 2);
+      } catch (e) {
+        this.errorHandler.logWarning('SettingsController: Failed to invoke checkMarkerHover', 'SettingsController._invokeCheckMarkerHover', { error: e });
       }
     }
 
@@ -527,7 +536,9 @@
     _setStorageConsent(consent) {
       try {
         const storage = this._getStorageInstance();
-        if (storage && typeof storage.set === 'function') {
+        if (storage && typeof storage.setConsent === 'function') {
+          storage.setConsent(!!consent, true);
+        } else if (storage && typeof storage.set === 'function') {
           if (consent) storage.set(this.config.STORAGE_KEYS.STORAGE_CONSENT, '1');
           else storage.remove && storage.remove(this.config.STORAGE_KEYS.STORAGE_CONSENT);
         } else if (storage && typeof storage.setStorageConsent === 'function') {

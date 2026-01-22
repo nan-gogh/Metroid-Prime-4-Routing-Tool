@@ -31,9 +31,10 @@
       this.canvas = options.canvas;
       this.containerNode = options.containerNode;
       
-      // Store map reference for RenderContext creation
-      // This allows proper access to all canvas elements and contexts
-      this.map = options.map || null;
+      // Canvas/container inputs (prefer explicit canvas object instead of full `map`)
+      // Expect `options.canvas` to be either a single canvas or an object with named canvases
+      this.canvas = options.canvas;
+      this.containerNode = options.containerNode;
 
       // Renderer instances (created in init)
       this.tileRenderer = null;
@@ -225,9 +226,44 @@
      */
     _createRenderPipeline() {
       if (typeof RenderPipeline !== 'undefined') {
-        // Create RenderContext - must pass InteractiveMap instance for proper canvas access
-        const renderContext = typeof RenderContext !== 'undefined' && this.map ?
-          RenderContext.fromMap(this.map) : null;
+        // Build RenderContext from provided canvas object (avoid requiring full InteractiveMap)
+        let renderContext = null;
+        if (typeof RenderContext !== 'undefined' && this.canvas) {
+          const canvases = this.canvas || {};
+          const mainCanvas = canvases.main || canvases.canvas || null;
+          const canvasTiles = canvases.tiles || canvases.tiles || null;
+          const canvasHeatmap = canvases.heatmap || canvases.canvasHeatmap || null;
+          const canvasGrid = canvases.grid || null;
+          const canvasMarker = canvases.marker || null;
+          const canvasRoute = canvases.route || null;
+          const canvasOverlay = canvases.overlay || null;
+
+          const ctx = mainCanvas && mainCanvas.getContext ? mainCanvas.getContext('2d') : null;
+          const ctxTiles = canvasTiles && canvasTiles.getContext ? canvasTiles.getContext('2d') : null;
+          const ctxHeatmap = canvasHeatmap && canvasHeatmap.getContext ? canvasHeatmap.getContext('2d') : null;
+          const ctxGrid = canvasGrid && canvasGrid.getContext ? canvasGrid.getContext('2d') : null;
+          const ctxMarker = canvasMarker && canvasMarker.getContext ? canvasMarker.getContext('2d') : null;
+          const ctxRoute = canvasRoute && canvasRoute.getContext ? canvasRoute.getContext('2d') : null;
+          const ctxOverlay = canvasOverlay && canvasOverlay.getContext ? canvasOverlay.getContext('2d') : null;
+
+          renderContext = new RenderContext({
+            canvas: mainCanvas,
+            ctx: ctx,
+            ctxTiles: ctxTiles,
+            ctxHeatmap: ctxHeatmap,
+            ctxGrid: ctxGrid,
+            ctxMarker: ctxMarker,
+            ctxRoute: ctxRoute,
+            ctxOverlay: ctxOverlay,
+            canvasHeatmap: canvasHeatmap,
+            canvasGrid: canvasGrid,
+            canvasMarker: canvasMarker,
+            canvasRoute: canvasRoute,
+            canvasOverlay: canvasOverlay,
+            devicePixelRatio: (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1,
+            errorHandler: this.errorHandler
+          });
+        }
 
         // Create composite stage
         const compositeStage = typeof CompositeStage !== 'undefined' ?
@@ -242,7 +278,7 @@
           this.routeRenderer,
           this.overlayRenderer,
           compositeStage
-        ].filter(Boolean), renderContext, this.mapState, { eventBus: this.eventBus, errorHandler: this.errorHandler });
+        ].filter(Boolean), renderContext, this.mapState, { eventBus: this.eventBus, errorHandler: this.errorHandler, routeAnimationState: this.routeAnimationState });
       }
     }
 
@@ -405,10 +441,37 @@
         this.overlayRenderer
       ];
 
+      // Build renderContext and viewportContext once per fallback render
+      const renderContext = (typeof RenderContext !== 'undefined' && this.canvas) ? (function(ctrl){
+        const canvases = ctrl.canvas || {};
+        const mainCanvas = canvases.main || canvases.canvas || null;
+        const canvasTiles = canvases.tiles || null;
+        const canvasHeatmap = canvases.heatmap || null;
+        const canvasGrid = canvases.grid || null;
+        const canvasMarker = canvases.marker || null;
+        const canvasRoute = canvases.route || null;
+        const canvasOverlay = canvases.overlay || null;
+        const ctx = mainCanvas && mainCanvas.getContext ? mainCanvas.getContext('2d') : null;
+        const ctxTiles = canvasTiles && canvasTiles.getContext ? canvasTiles.getContext('2d') : null;
+        const ctxHeatmap = canvasHeatmap && canvasHeatmap.getContext ? canvasHeatmap.getContext('2d') : null;
+        const ctxGrid = canvasGrid && canvasGrid.getContext ? canvasGrid.getContext('2d') : null;
+        const ctxMarker = canvasMarker && canvasMarker.getContext ? canvasMarker.getContext('2d') : null;
+        const ctxRoute = canvasRoute && canvasRoute.getContext ? canvasRoute.getContext('2d') : null;
+        const ctxOverlay = canvasOverlay && canvasOverlay.getContext ? canvasOverlay.getContext('2d') : null;
+        return new RenderContext({ canvas: mainCanvas, ctx: ctx, ctxTiles: ctxTiles, ctxHeatmap: ctxHeatmap, ctxGrid: ctxGrid, ctxMarker: ctxMarker, ctxRoute: ctxRoute, ctxOverlay: ctxOverlay, canvasHeatmap: canvasHeatmap, canvasGrid: canvasGrid, canvasMarker: canvasMarker, canvasRoute: canvasRoute, canvasOverlay: canvasOverlay, devicePixelRatio: (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1, errorHandler: ctrl.errorHandler });
+      })(this) : null;
+      const viewportContext = (typeof ViewportContext !== 'undefined' && this.mapState) ? ViewportContext.fromMapState(this.mapState) : null;
+      // Snapshot animation offset from routeAnimationState once per fallback render
+      try {
+        if (viewportContext && this.routeAnimationState && typeof this.routeAnimationState.getAnimationOffset === 'function') {
+          viewportContext.routeDashOffset = this.routeAnimationState.getAnimationOffset() || 0;
+        }
+      } catch (e) { try { this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RenderController._renderFallback.snapshotAnimationOffset'); } catch (__) {} }
+
       renderers.forEach(renderer => {
         if (renderer && typeof renderer.render === 'function') {
           try {
-            renderer.render();
+            renderer.render(renderContext, viewportContext);
           } catch (e) {
             const h = this.errorHandler;
             h.logWarning(`Fallback render failed for ${renderer.constructor.name}`, 'RenderController._renderFallback', { error: e });

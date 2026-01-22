@@ -8,24 +8,28 @@
     globalThis.NOOP_ERROR_HANDLER = { logDebug: function(){}, logWarning: function(){}, logError: function(){} };
   }
   class RouteEditHandler {
-    constructor(map, config, eventBus, editModeState, dragState) {
-      this.map = map;
-      this.config = config || (global.MP4Config || {});
-      this.errorHandler = map.errorHandler || globalThis.NOOP_ERROR_HANDLER;
-      this.eventBus = eventBus || null;
-      this.dragState = dragState;
+    constructor(mapOrOpts, config, eventBus, editModeState, dragState) {
+      // Support both legacy signature and new options-based DI.
+      const opts = (mapOrOpts && typeof mapOrOpts === 'object' && (mapOrOpts.map || mapOrOpts.routeManager || mapOrOpts.canvas || (!config && !eventBus))) ?
+        mapOrOpts : { map: mapOrOpts, config, eventBus, editModeState, dragState };
 
-      // Get state managers from map
-      this.mapState = map.mapState;
-      this.selectionState = map.selectionState;
-      this.editModeState = editModeState || (map && map.editModeState);
+      this.config = opts.config || (global.MP4Config || {});
+      this.errorHandler = opts.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+      this.eventBus = opts.eventBus || null;
+      this.dragState = opts.dragState || {};
 
-      // Route utilities for calculations
+      // Preferred DI-first fields
+      this.routeManager = opts.routeManager || null;
+      this.mapState = opts.mapState || null;
+      this.selectionState = opts.selectionState || null;
+      this.editModeState = opts.editModeState || null;
+      this.canvas = opts.canvas || null;
+      this.routeController = opts.routeController || null;
 
       // Canonical route-length computation: use RouteManager only
       try {
-        if (map && map.routeManager && typeof map.routeManager.computeRouteLengthNormalized === 'function') {
-          this._computeRouteLengthNormalized = map.routeManager.computeRouteLengthNormalized.bind(map.routeManager);
+        if (this.routeManager && typeof this.routeManager.computeRouteLengthNormalized === 'function') {
+          this._computeRouteLengthNormalized = this.routeManager.computeRouteLengthNormalized.bind(this.routeManager);
         } else {
           this._computeRouteLengthNormalized = null;
         }
@@ -34,16 +38,27 @@
       }
 
       // Helper to call marker hover without touching map directly
-      this._checkMarkerHover = map.checkMarkerHover ? map.checkMarkerHover.bind(map) : () => null;
+      this._checkMarkerHover = opts.checkMarkerHover || (() => null);
 
-      // Route finding functions
+      // Route finding functions (use injected controller if present)
       this._findRouteWaypointAt = (screenX, screenY) => {
-        if (this.map.routeController && typeof this.map.routeController.findRouteWaypointAt === 'function') {
-          return this.map.routeController.findRouteWaypointAt(screenX, screenY);
+        if (this.routeController && typeof this.routeController.findRouteWaypointAt === 'function') {
+          return this.routeController.findRouteWaypointAt(screenX, screenY);
         }
         return null;
       };
-      this._findRouteSegmentAt = this.map.routeController ? this.map.routeController.findRouteSegmentAt.bind(this.map.routeController) : null;
+      this._findRouteSegmentAt = (this.routeController && this.routeController.findRouteSegmentAt) ? this.routeController.findRouteSegmentAt.bind(this.routeController) : null;
+
+      // No compatibility proxy: prefer explicit injected dependencies only.
+
+        // Helper to obtain a ViewportContext snapshot from current mapState
+        this._getViewport = () => {
+          try {
+            if (typeof ViewportContext !== 'undefined' && this.mapState) return ViewportContext.fromMapState(this.mapState);
+          } catch (e) { /* ignore */ }
+          // Fallback to basic object
+          return { zoom: this.zoom || 1, panX: this.panX || 0, panY: this.panY || 0, getDetailScale: () => 1 };
+        };
 
       // Performance optimization: Create fast property accessors
       this._createFastAccessors();
@@ -53,12 +68,12 @@
     _createFastAccessors() {
       try {
         Object.defineProperties(this, {
-          panX: { get: () => this.mapState.panX },
-          panY: { get: () => this.mapState.panY },
-          zoom: { get: () => this.mapState.zoom },
-          canvas: { get: () => this.map.canvas },
-          currentRoute: { get: () => this.map.routeManager ? this.map.routeManager.currentRoute : [] },
-          _routeSources: { get: () => this.map.routeManager ? this.map.routeManager.routeSources : [] },
+          panX: { get: () => (this.mapState && typeof this.mapState.panX !== 'undefined') ? this.mapState.panX : 0 },
+          panY: { get: () => (this.mapState && typeof this.mapState.panY !== 'undefined') ? this.mapState.panY : 0 },
+          zoom: { get: () => (this.mapState && typeof this.mapState.zoom !== 'undefined') ? this.mapState.zoom : 1 },
+          canvas: { get: () => this.canvas || null },
+          currentRoute: { get: () => this.routeManager && Array.isArray(this.routeManager.currentRoute) ? this.routeManager.currentRoute : [] },
+          _routeSources: { get: () => this.routeManager && Array.isArray(this.routeManager.routeSources) ? this.routeManager.routeSources : [] },
           editRouteMode: { get: () => this.editModeState ? this.editModeState.editRouteMode : false },
           _routeInsert: {
             get: () => this.dragState.routeInsert,
@@ -184,8 +199,8 @@
         const hit = this._checkMarkerHover ? this._checkMarkerHover(localX, localY) : null;
         if (hit && this.editRouteMode && hit.marker && hit.marker.uid) {
           // Find route position and set local candidate state
-            const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
-            this.map.routeManager.findRoutePositionOfMarker(hit.marker.uid) : -1;
+            const routePos = (this.routeManager && typeof this.routeManager.findRoutePositionOfMarker === 'function') ?
+            this.routeManager.findRoutePositionOfMarker(hit.marker.uid) : -1;
           if (routePos !== -1) {
             this.dragState.setRouteNodeCandidate({
               pointerId: ev.pointerId,
@@ -202,8 +217,8 @@
           const waypointHit = this._findRouteWaypointAt ? this._findRouteWaypointAt(localX, localY) : null;
           if (waypointHit && waypointHit.marker) {
             // Find route position and set local candidate state
-            const routePos = (this.map && this.map.routeManager && typeof this.map.routeManager.findRoutePositionOfMarker === 'function') ?
-              this.map.routeManager.findRoutePositionOfMarker(waypointHit.marker.uid) : -1;
+            const routePos = (this.routeManager && typeof this.routeManager.findRoutePositionOfMarker === 'function') ?
+              this.routeManager.findRoutePositionOfMarker(waypointHit.marker.uid) : -1;
             if (routePos !== -1) {
               this.dragState.setRouteNodeCandidate({
                 pointerId: ev.pointerId,
@@ -353,7 +368,9 @@
       try {
         if (!this.dragState.waypointDrag) return; // Safety check
         
-        const worldX = (localX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
+        const vp = this._getViewport();
+        const world = vp && vp.screenToWorld ? vp.screenToWorld(localX, localY, this.config.MAP_SIZE || 8192) : { x: (localX - (vp.panX||0)) / (vp.zoom||1) / (this.config.MAP_SIZE || 8192), y: (localY - (vp.panY||0)) / (vp.zoom||1) / (this.config.MAP_SIZE || 8192) };
+        const worldX = world.x;
         const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
 
         // Emit waypoint drag update
@@ -380,7 +397,9 @@
       try {
         const tempIdx = this._routeInsert.tempIndex;
         if (this._routeSources && this._routeSources[tempIdx]) {
-          const worldX = (localX - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
+          const vp = this._getViewport();
+          const world = vp && vp.screenToWorld ? vp.screenToWorld(localX, localY, this.config.MAP_SIZE || 8192) : { x: (localX - (vp.panX||0)) / (vp.zoom||1) / (this.config.MAP_SIZE || 8192), y: (localY - (vp.panY||0)) / (vp.zoom||1) / (this.config.MAP_SIZE || 8192) };
+          const worldX = world.x;
           const worldY = (localY - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
           this._routeSources[tempIdx].marker.x = Math.max(0, Math.min(1, Number(worldX)));
           this._routeSources[tempIdx].marker.y = Math.max(0, Math.min(1, Number(worldY)));
@@ -413,7 +432,7 @@
             this._computeRouteLengthNormalized(this._routeSources) : 0;
 
           // Adjust for looping if enabled and we have 3+ waypoints
-          if ((this.map && this.map.routeLooping) && this._routeSources && this._routeSources.length >= 3) {
+          if ((this.routeManager && this.routeManager.looping) && this._routeSources && this._routeSources.length >= 3) {
             const firstSrc = this._routeSources[0];
             const lastSrc = this._routeSources[this._routeSources.length - 1];
             if (firstSrc && firstSrc.marker && lastSrc && lastSrc.marker) {
@@ -458,15 +477,19 @@
               const srcA = this._routeSources && this._routeSources[idxA];
               const srcB = this._routeSources && this._routeSources[idxB];
               if (srcA && srcB && srcA.marker && srcB.marker) {
-                const ax = srcA.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX;
-                const ay = srcA.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY;
-                const bx = srcB.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX;
-                const by = srcB.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY;
+                const vp = this._getViewport();
+                const ms = this.config.MAP_SIZE || 8192;
+                const aPt = vp && vp.worldToScreen ? vp.worldToScreen(srcA.marker.x, srcA.marker.y, ms) : { x: srcA.marker.x * ms * (vp.zoom||1) + (vp.panX||0), y: srcA.marker.y * ms * (vp.zoom||1) + (vp.panY||0) };
+                const bPt = vp && vp.worldToScreen ? vp.worldToScreen(srcB.marker.x, srcB.marker.y, ms) : { x: srcB.marker.x * ms * (vp.zoom||1) + (vp.panX||0), y: srcB.marker.y * ms * (vp.zoom||1) + (vp.panY||0) };
+                const ax = aPt.x; const ay = aPt.y;
+                const bx = bPt.x; const by = bPt.y;
                 const t = (typeof seg.t === 'number') ? seg.t : 0;
                 const px = ax + (bx - ax) * t;
                 const py = ay + (by - ay) * t;
-                const worldX = (px - this.panX) / this.zoom / (this.config.MAP_SIZE || 8192);
-                const worldY = (py - this.panY) / this.zoom / (this.config.MAP_SIZE || 8192);
+                const vp2 = this._getViewport();
+                const worldPt = vp2 && vp2.screenToWorld ? vp2.screenToWorld(px, py, this.config.MAP_SIZE || 8192) : { x: (px - (vp2.panX||0)) / (vp2.zoom||1) / (this.config.MAP_SIZE || 8192), y: (py - (vp2.panY||0)) / (vp2.zoom||1) / (this.config.MAP_SIZE || 8192) };
+                const worldX = worldPt.x;
+                const worldY = worldPt.y;
                 this.dragState.setRoutePreview({ index: seg.index, t, worldX, worldY, screenX: px, screenY: py });
                 try { this.canvas.style.cursor = 'pointer'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler.handlePointerMove.setCursor'); }
                 this.eventBus.emit(window.EventTypes.RENDER_REQUESTED);
@@ -542,8 +565,8 @@
           hoverOccupied: false
         });
 
-        // Clear pointer down time to prevent click handling
-        if (this.map) this.map.pointerDownTime = 0;
+        // Clear pointer down time to prevent click handling (local-only)
+        this.pointerDownTime = 0;
 
         try { this.canvas.style.cursor = 'grabbing'; } catch (e) { this.errorHandler && this.errorHandler.logError(e, 'RouteEditHandler._startRouteSegmentInsertion.setCursor'); }
 
@@ -718,8 +741,8 @@
             const prev = this._routeInsert.prevSources || [];
             const prevIdx = (Array.isArray(this._routeInsert.prevIndices) && this._routeInsert.prevIndices.length) ?
                            this._routeInsert.prevIndices : (prev.map((_,i)=>i));
-            const len = this.map.routeManager ?
-              this.map.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
+            const len = this.routeManager ?
+              this.routeManager.computeRouteLengthNormalized(this.config.MAP_SIZE || 8192) : 0;
             
             // Emit route edit request instead of direct call (decoupled architecture)
             if (this.eventBus && window.EventTypes.ROUTE_EDIT_REQUESTED) {
@@ -747,8 +770,8 @@
     // ===== UTILITY METHODS =====
 
     _findMarkerAt(localX, localY) {
-      // Delegate to map's marker finding logic
-      return this.map.checkMarkerHover ? this.map.checkMarkerHover(localX, localY) : null;
+      // Delegate to provided marker hit-checker
+      return this._checkMarkerHover ? this._checkMarkerHover(localX, localY) : null;
     }
 
     // ===== CLEANUP =====

@@ -63,30 +63,21 @@ class InteractiveMap {
             this.eventBus.setErrorHandler(this.errorHandler);
         }
 
-        // Initialize storage provider for dependency injection (preferred) with legacy fallbacks
-        try {
-            const globalStorage = (typeof getStorageService === 'function') ? getStorageService() : (typeof window !== 'undefined' ? window.storageService : null);
-            if (typeof StorageServiceProvider !== 'undefined') {
-                this.storageProvider = new StorageServiceProvider(globalStorage, this.errorHandler);
-            } else {
-                // Fallback minimal provider
-                this.storageProvider = { getInstance: function() { return globalStorage; }, setInstance: function(s) { globalStorage = s; } };
-            }
-            if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
-        } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.constructor.storageProvider', { message: 'Failed to initialize storageProvider' }); }
+        // Storage provider will be created in `init()` after StorageService is initialized.
+        this.storageProvider = null;
 
-        // Initialize state managers
-        this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
-        this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
+        // State managers will be created in `init()` when storageProvider is available.
+        this.mapState = null;
+        this.selectionState = null;
+        this.editModeState = null;
+        this.highlightState = null;
+        this.tilesetState = null;
+        this.routeAnimationState = null;
+        this.routeEditState = null;
+        this.dragState = null;
+        this.layerState = null;
+        this.heatmapDisplayState = null;
+        this.imageState = null;
 
         // State managers initialized
 
@@ -101,8 +92,107 @@ class InteractiveMap {
         }
     }
 
+    // Helper to obtain the active StorageService instance
+    _getStorageInstance() {
+        try {
+            if (this.storageProvider && typeof this.storageProvider.getInstance === 'function') {
+                return this.storageProvider.getInstance();
+            }
+            if (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function') {
+                return window.storageProvider.getInstance();
+            }
+        } catch (e) {
+            try { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'InteractiveMap._getStorageInstance'); } catch (__) {}
+        }
+        return null;
+    }
+
+    // Final consent checker: synchronously determine whether storage consent is present.
+    // Preference order: StorageService.hasConsent() if available; otherwise read localStorage flag.
+    _consentChecker() {
+        try {
+            const svc = this._getStorageInstance();
+            if (svc && typeof svc.hasConsent === 'function') return svc.hasConsent();
+            if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+                return localStorage.getItem('mp4_storage_consent') === '1';
+            }
+        } catch (e) {
+            try { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'InteractiveMap._consentChecker'); } catch (__) {}
+        }
+        return false;
+    }
+
     // Asynchronous initialization of controllers and complex setup
     async init() {
+        // Ensure StorageService is initialized early so provider-backed constructors
+        // receive a real storage instance before controllers/managers are created.
+        try {
+            if (typeof initializeStorageService !== 'undefined') {
+                // Final consent checker: prefer an explicit in-memory override, then a consent cookie
+                // Reading cookies is limited in scope and used only to remember an explicit prior consent.
+                // We deliberately avoid reading `localStorage` here so no broader storage access occurs.
+                const finalConsentChecker = () => {
+                    try {
+                        if (typeof window !== 'undefined' && typeof window.__mp4_consent_override !== 'undefined') {
+                            return !!window.__mp4_consent_override;
+                        }
+                        if (typeof document !== 'undefined' && typeof document.cookie === 'string') {
+                            // Look for cookie named mp4_storage_consent=1
+                            const parts = document.cookie.split(';').map(p => p.trim());
+                            for (const p of parts) {
+                                if (p.indexOf('mp4_storage_consent=') === 0) {
+                                    return p.split('=')[1] === '1';
+                                }
+                            }
+                        }
+                    } catch (e) { /* best-effort - default to no consent */ }
+                    return false;
+                };
+
+                // Initialize StorageService with the final consent checker
+                const createdService = initializeStorageService(finalConsentChecker, this.errorHandler, this.eventBus);
+                
+                // Create provider from the initialized service
+                if (createdService && typeof StorageServiceProvider !== 'undefined') {
+                    this.storageProvider = new StorageServiceProvider(createdService, this.errorHandler);
+                    if (typeof window !== 'undefined') window.storageProvider = this.storageProvider;
+                }
+            }
+        } catch (e) { 
+            moduleErrorHandler && moduleErrorHandler.logError(e, 'InteractiveMap.init.StorageServiceEarly', { message: 'Failed to initialize StorageService early' }); 
+        }
+        // Create state managers now that provider is available
+        try {
+            // Require a valid StorageService instance before creating state managers
+            const svc = this._getStorageInstance();
+            if (!svc) {
+                const err = new Error('StorageService not available: initialization requires a valid StorageService instance');
+                this.errorHandler && this.errorHandler.logError && this.errorHandler.logError(err, 'InteractiveMap.init.createStateManagers');
+                // CRITICAL: Rethrow to prevent cascade failures - app cannot function without state managers
+                throw err;
+            }
+
+            if (!this.mapState) {
+                this.mapState = new MapState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.selectionState = new SelectionState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.editModeState = new EditModeState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.highlightState = new HighlightState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.tilesetState = new TilesetState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.routeAnimationState = new RouteAnimationState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.routeEditState = new RouteEditState({ eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.dragState = new DragState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.layerState = new LayerState(Object.keys(LAYERS || {}), MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.heatmapDisplayState = new HeatmapDisplayState(MP4Config, { eventBus: this.eventBus, errorHandler: this.errorHandler, storageProvider: this.storageProvider });
+                this.imageState = new ImageState(MP4Config, this.tilesetState, this.mapState, { errorHandler: this.errorHandler });
+
+                // Initialize canvas dimensions for mapState
+                try { this.mapState.setCanvasSize(this.canvas.width, this.canvas.height, window.devicePixelRatio || 1); } catch (__) {}
+            }
+        } catch (e) {
+            // Log critical initialization failure and rethrow - app cannot continue without state managers
+            moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'InteractiveMap.init.createStateManagers.CRITICAL');
+            throw e;
+        }
         // Phase 1: data and render controllers
         try {
             // Initialize DataController (managers)
@@ -226,13 +316,6 @@ class InteractiveMap {
             this.routeAnimationState.setLastAnimationTime(0);
             this.routeAnimationState.setAnimationSpeed(MP4Config.ROUTE.ANIMATION_SPEED);
             this.routeAnimationState.setLineWidth(MP4Config.ROUTE.LINE_WIDTH);
-        } else {
-            // Fallback for when RouteAnimationState is not available
-            this._routeDashOffset = 0;
-            this._routeRaf = null;
-            this._lastRouteAnimTime = 0;
-            this._routeAnimationSpeed = MP4Config.ROUTE.ANIMATION_SPEED;
-            this.routeLineWidth = MP4Config.ROUTE.LINE_WIDTH;
         }
         // Selection state is now managed by SelectionState
         // Initialize selection state through state manager
@@ -412,7 +495,7 @@ class InteractiveMap {
         // Initialize route animation properties
         try {
             if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.initialize === 'function') {
-                RouteAnimation.initialize(this);
+                RouteAnimation.initialize(this.routeAnimationState, { errorHandler: this.errorHandler });
             }
         } catch (e) {
             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.routeAnimation', { message: 'RouteAnimation initialization failed' });
@@ -478,12 +561,36 @@ class InteractiveMap {
             // Initialize InputController (gesture, keyboard, pointer handlers)
             if (typeof InputController !== 'undefined') {
                 this.inputController = new InputController({
-                    map: this,
+                    // Provide explicit small services instead of full InteractiveMap
+                    mapState: this.mapState,
+                    canvas: this.canvas,
+                    markerManager: this.markerManager,
+                    markerRenderer: this.markerRenderer,
+                    layerVisibility: this.layerVisibility,
+                    layerConfig: this.layerConfig,
+                    selectionState: this.selectionState,
+                    editModeState: this.editModeState,
+                    dragState: this.dragState,
+                    imageState: this.imageState,
+                    routeManager: this.routeManager,
+                    routeController: this.routeController,
                     eventBus: this.eventBus,
                     errorHandler: this.errorHandler,
-                    config: MP4Config
-                    ,
-                    storageProvider: this.storageProvider
+                    config: MP4Config,
+                    storageProvider: this.storageProvider,
+                    // Bind helper callbacks expected by handlers
+                    checkMarkerHover: this.checkMarkerHover ? this.checkMarkerHover.bind(this) : null,
+                    saveViewToStorage: this.saveViewToStorage ? this.saveViewToStorage.bind(this) : null,
+                    showTooltip: this.showTooltip ? this.showTooltip.bind(this) : null,
+                    hideTooltip: this.hideTooltip ? this.hideTooltip.bind(this) : null,
+                    updateResolution: this.updateResolution ? this.updateResolution.bind(this) : null,
+                    // UI action hooks and view helpers
+                    zoomIn: this.zoomIn ? this.zoomIn.bind(this) : null,
+                    zoomOut: this.zoomOut ? this.zoomOut.bind(this) : null,
+                    resetView: this.resetView ? this.resetView.bind(this) : null,
+                    expandRouteNearby: this.expandRouteNearby ? this.expandRouteNearby.bind(this) : null,
+                    setGridHeatmap: this.setGridHeatmap ? this.setGridHeatmap.bind(this) : null,
+                    _showGridHeatmap: this._showGridHeatmap || false
                 });
                 try {
                     await this.inputController.init();
@@ -645,62 +752,52 @@ class InteractiveMap {
     }
 
     get _routeDashOffset() {
-        return this.routeAnimationState ? this.routeAnimationState.getAnimationOffset() : this._fallbackRouteDashOffset;
+        return this.routeAnimationState ? this.routeAnimationState.getAnimationOffset() : undefined;
     }
 
     set _routeDashOffset(value) {
         if (this.routeAnimationState) {
             this.routeAnimationState.setAnimationOffset(value);
-        } else {
-            this._fallbackRouteDashOffset = value;
         }
     }
 
     get _routeRaf() {
-        return this.routeAnimationState ? this.routeAnimationState.getAnimationFrameId() : this._fallbackRouteRaf;
+        return this.routeAnimationState ? this.routeAnimationState.getAnimationFrameId() : undefined;
     }
 
     set _routeRaf(value) {
         if (this.routeAnimationState) {
             this.routeAnimationState.setAnimationFrameId(value);
-        } else {
-            this._fallbackRouteRaf = value;
         }
     }
 
     get _lastRouteAnimTime() {
-        return this.routeAnimationState ? this.routeAnimationState.getLastAnimationTime() : this._fallbackLastRouteAnimTime;
+        return this.routeAnimationState ? this.routeAnimationState.getLastAnimationTime() : undefined;
     }
 
     set _lastRouteAnimTime(value) {
         if (this.routeAnimationState) {
             this.routeAnimationState.setLastAnimationTime(value);
-        } else {
-            this._fallbackLastRouteAnimTime = value;
         }
     }
 
     get _routeAnimationSpeed() {
-        return this.routeAnimationState ? this.routeAnimationState.getAnimationSpeed() : this._fallbackRouteAnimationSpeed;
+        return this.routeAnimationState ? this.routeAnimationState.getAnimationSpeed() : undefined;
     }
 
     set _routeAnimationSpeed(value) {
         if (this.routeAnimationState) {
             this.routeAnimationState.setAnimationSpeed(value);
-        } else {
-            this._fallbackRouteAnimationSpeed = value;
         }
     }
 
     get routeLineWidth() {
-        return this.routeAnimationState ? this.routeAnimationState.getLineWidth() : this._fallbackRouteLineWidth;
+        return this.routeAnimationState ? this.routeAnimationState.getLineWidth() : undefined;
     }
 
     set routeLineWidth(value) {
         if (this.routeAnimationState) {
             this.routeAnimationState.setLineWidth(value);
-        } else {
-            this._fallbackRouteLineWidth = value;
         }
     }
 
@@ -827,10 +924,9 @@ class InteractiveMap {
         if (this.mapState) {
             this.mapState.setCanvasSize(cssWidth, cssHeight, dpr);
         } else {
-            // Fallback: compute a device-aware minimum zoom so smallest resolution can be reached
-            const minRes = MP4Config.TILE_RESOLUTIONS[0];
-            // minZoom such that minRes >= MAP_SIZE * minZoom * dpr => minZoom = minRes / (MAP_SIZE * dpr)
-            this.minZoom = Math.max(0.005, Math.min(MP4Config.ZOOM.DEFAULT_MIN, minRes / (MP4Config.MAP_SIZE * dpr)));
+            // minZoom is a read-only property delegating to mapState.minZoom
+            // Without mapState, we cannot update minZoom - log warning
+            moduleErrorHandler && moduleErrorHandler.logWarning('resize() called before mapState initialized', 'InteractiveMap.resize.noMapState');
         }
 
         this.imageState.updateResolution();
@@ -1600,7 +1696,7 @@ class InteractiveMap {
                 moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.renderPipeline', { message: 'map.render: renderPipeline.render failed' });
                 // Fall back to individual renderers with renderContext
                 const fallbackRenderContext = typeof RenderContext !== 'undefined' ? RenderContext.fromMap(this) : null;
-                const fallbackViewportContext = typeof ViewportContext !== 'undefined' ? ViewportContext.fromMapState(this, { width: this.canvas?.clientWidth, height: this.canvas?.clientHeight }, this.config.MAP_SIZE) : null;
+                const fallbackViewportContext = typeof ViewportContext !== 'undefined' ? ViewportContext.fromMapState(this.mapState) : null;
                 try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.tileRenderer', { message: 'renderTiles: tileRenderer.render failed' }); }
                 try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(fallbackRenderContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.heatmapRenderer', { message: 'renderHeatmap: heatmapRenderer.render failed' }); }
                 try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(fallbackRenderContext, fallbackViewportContext); } catch (err) { moduleErrorHandler && moduleErrorHandler.logWarning(err, 'InteractiveMap.render.gridRenderer', { message: 'renderGrid: gridRenderer.render failed' }); }
@@ -1617,7 +1713,7 @@ class InteractiveMap {
         }
 
         // Fallback: individual renderers (legacy path)
-        const legacyViewportContext = typeof ViewportContext !== 'undefined' ? ViewportContext.fromMapState(this, { width: this.canvas?.clientWidth, height: this.canvas?.clientHeight }, this.config.MAP_SIZE) : null;
+        const legacyViewportContext = typeof ViewportContext !== 'undefined' ? ViewportContext.fromMapState(this.mapState) : null;
         try { if (this.tileRenderer && typeof this.tileRenderer.render === 'function') this.tileRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.tileRenderer', { message: 'renderTiles: tileRenderer.render failed' }); }
         try { if (this.heatmapRenderer && typeof this.heatmapRenderer.render === 'function') this.heatmapRenderer.render(); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.heatmapRenderer', { message: 'renderHeatmap: heatmapRenderer.render failed' }); }
         try { if (this.gridRenderer && typeof this.gridRenderer.render === 'function') this.gridRenderer.render(null, legacyViewportContext); } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.render.fallback.gridRenderer', { message: 'renderGrid: gridRenderer.render failed' }); }
@@ -1958,14 +2054,42 @@ class InteractiveMap {
     }
 
     startRouteAnimation() {
-        if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.startAnimation === 'function') {
-            RouteAnimation.startAnimation(this);
+        const opts = {
+            routeAnimationState: this.routeAnimationState,
+            routeManager: this.routeManager,
+            mapState: this.mapState,
+            eventBus: this.eventBus,
+            renderCallback: () => {
+                try {
+                    if (this.markRendererDirty) this.markRendererDirty('RouteRenderer');
+                    else if (this.eventBus && window.EventTypes && window.EventTypes.RENDER_SELECTIVE_REQUESTED) this.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] });
+                    else if (this.render) this.render();
+                } catch (e) { /* swallow render errors from callback */ }
+            },
+            errorHandler: this.errorHandler
+        };
+
+        try {
+            if (window.RouteAnimationController && typeof window.RouteAnimationController.start === 'function') {
+                window.RouteAnimationController.start(opts);
+            } else if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.start === 'function') {
+                RouteAnimation.start(opts);
+            }
+        } catch (e) {
+            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'InteractiveMap.startRouteAnimation.call');
         }
     }
 
     stopRouteAnimation() {
-        if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.stopAnimation === 'function') {
-            RouteAnimation.stopAnimation(this);
+        const opts = { routeAnimationState: this.routeAnimationState, errorHandler: this.errorHandler };
+        try {
+            if (window.RouteAnimationController && typeof window.RouteAnimationController.stop === 'function') {
+                window.RouteAnimationController.stop(opts);
+            } else if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.stop === 'function') {
+                RouteAnimation.stop(opts);
+            }
+        } catch (e) {
+            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'InteractiveMap.stopRouteAnimation.call');
         }
     }
 
@@ -2324,41 +2448,9 @@ async function init() {
         // Continue anyway - some controllers might still work
     }
 
-    // Initialize StorageService with consent checker
-    try {
-        if (typeof initializeStorageService !== 'undefined') {
-            // Initialize storage service using any available provider-level consent checker
-            const consentChecker = () => {
-                try {
-                    if (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function') {
-                        const inst = window.storageProvider.getInstance();
-                        if (inst && typeof inst.hasConsent === 'function') return inst.hasConsent();
-                    }
-                } catch (__) {}
-                return false;
-            };
-            // Pass app-level errorHandler and eventBus so StorageService can emit events
-            initializeStorageService(consentChecker, this.errorHandler, this.eventBus);
-        }
-    } catch (e) {
-        moduleErrorHandler.logWarn('Failed to initialize StorageService', 'InteractiveMap.init.StorageService', { error: e });
-    }
-
-    // Propagate storage instance to existing state managers (storage will auto-fetch via getStorageService when needed)
-    try {
-        const svcInst = (this.storageProvider && typeof this.storageProvider.getInstance === 'function') ? this.storageProvider.getInstance() : ((typeof getStorageService === 'function') ? getStorageService() : null);
-        if (svcInst) {
-            try { this.mapState && (this.mapState.storage = svcInst); } catch (__) {}
-            try { this.selectionState && (this.selectionState.storage = svcInst); } catch (__) {}
-            try { this.editModeState && (this.editModeState.storage = svcInst); } catch (__) {}
-            try { this.highlightState && (this.highlightState.storage = svcInst); } catch (__) {}
-            try { this.tilesetState && (this.tilesetState.storage = svcInst); } catch (__) {}
-            try { this.routeAnimationState && (this.routeAnimationState.storage = svcInst); } catch (__) {}
-            try { this.layerState && (this.layerState.storage = svcInst); } catch (__) {}
-            try { this.heatmapDisplayState && (this.heatmapDisplayState.storage = svcInst); } catch (__) {}
-            try { this.imageState && (this.imageState.storage = svcInst); } catch (__) {}
-        }
-    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning && moduleErrorHandler.logWarning(e, 'InteractiveMap.init.propagateStorage', {}); }
+    // Ensure StorageService is initialized (if not already). Some environments
+    // StorageService initialization happens early in init() - no fallback needed here
+    // State managers are constructed with storageProvider; no manual propagation needed
     
 
     // Initialize EventBus for cross-module communication
@@ -3054,16 +3146,12 @@ async function init() {
         let consentManager = null;
         let dataExportController = null;
         
-        // Retrieve StorageService from injected storageProvider (preferred) or global getStorageService() function
+        // Retrieve StorageService from injected provider only
         let storageService = null;
         try {
-            if (map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') {
-                storageService = map.storageProvider.getInstance();
-            } else if (typeof getStorageService === 'function') {
-                storageService = getStorageService();
-            }
+            storageService = map && typeof map._getStorageInstance === 'function' ? map._getStorageInstance() : null;
         } catch (e) {
-            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorageService', { message: 'Failed to get StorageService' });
+            moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.initUIControllers.getStorage', { message: 'Failed to get StorageService' });
         }
         
                 // Phase 5 initialization diagnostics removed
@@ -3121,6 +3209,11 @@ async function init() {
                 markerManager: map.markerManager,
                 mapState: map.mapState,
                 map: map,
+                // Inject small helpers to avoid SettingsController reading from global map
+                checkMarkerHover: map.checkMarkerHover ? map.checkMarkerHover.bind(map) : null,
+                canvas: map.canvas,
+                lastMouseX: map.lastMouseX,
+                lastMouseY: map.lastMouseY,
                 eventBus: eventBus,
                 config: MP4Config,
                 errorHandler: moduleErrorHandler,
@@ -3209,7 +3302,7 @@ async function init() {
             }
         } catch (inner) {
             // Fallback: check if storage service has consent
-            const svc = (map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : (getStorageService && typeof getStorageService === 'function' ? getStorageService() : null);
+            const svc = map && typeof map._getStorageInstance === 'function' ? map._getStorageInstance() : null;
             const consent = svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
             if (consent && map && typeof map.loadViewFromStorage === 'function') {
                 try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }

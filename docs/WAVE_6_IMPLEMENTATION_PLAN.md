@@ -22,7 +22,7 @@
 
 **Cleanup Completed:**
 - ✅ Removed broken `StorageServiceProvider` abstraction
-- ✅ Switched to global `getStorageService()` function
+- ✅ Switched to DI-first `StorageServiceProvider` with legacy `window.storageService` fallback
 - ✅ Fixed syntax errors (map.js, SettingsController.js)
 - ✅ Removed all Phase 5 diagnostic logDebug statements
 

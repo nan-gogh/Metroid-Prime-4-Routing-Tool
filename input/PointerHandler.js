@@ -6,40 +6,71 @@
     globalThis.__MP4_NOOP_ERROR_HANDLER = { logDebug: ()=>{}, logWarning: ()=>{}, logError: ()=>{} };
   }
   class PointerHandler {
-    constructor(map, config, eventBus) {
-      this.map = map;
-        this.markerManager = map.markerManager;
-          this.config = config || (global.MP4Config || {});
-          this.errorHandler = map.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
-      this.eventBus = eventBus || null;
+    constructor(mapOrOpts, config, eventBus) {
+      // Support legacy `map` param and new options-based DI
+      const opts = (mapOrOpts && typeof mapOrOpts === 'object' && (mapOrOpts.mapState || mapOrOpts.canvas || mapOrOpts.markerManager || (!config && !eventBus))) ?
+        mapOrOpts : { map: mapOrOpts, config, eventBus };
+
+      this.markerManager = opts.markerManager || null;
+      this.markerRenderer = opts.markerRenderer || null;
+      this.config = opts.config || (global.MP4Config || {});
+      this.errorHandler = opts.errorHandler || globalThis.__MP4_NOOP_ERROR_HANDLER;
+      this.eventBus = opts.eventBus || eventBus || null;
       this.eventTypes = window.EventTypes || {};
-      this.gestureHandler = map.gestureHandler; // Reference to map's gesture handler
+      this.gestureHandler = opts.gestureHandler || null; // Reference to gesture handler
       this.bound = false;
 
-      // Get state managers from map
-      this.mapState = map.mapState;
-      this.selectionState = map.selectionState;
-      this.editModeState = map.editModeState;
-      this.dragState = map.dragState; // Centralized drag state
-      this.imageState = map.imageState;
+      // Get state managers (DI preferred)
+      this.mapState = opts.mapState || null;
+      this.selectionState = opts.selectionState || null;
+      this.editModeState = opts.editModeState || null;
+      this.dragState = opts.dragState || null; // Centralized drag state
+      this.imageState = opts.imageState || null;
+      this._canvas = opts.canvas || null;
+      this.checkMarkerHover = opts.checkMarkerHover || null;
+      this.saveViewToStorage = opts.saveViewToStorage || (() => {});
+      this.showTooltip = opts.showTooltip || (() => {});
+      this.hideTooltip = opts.hideTooltip || (() => {});
+      this.updateResolutionRef = opts.updateResolution || (this.imageState && this.imageState.updateResolution ? this.imageState.updateResolution.bind(this.imageState) : () => {});
+
+      // Extract route-related helpers from options (prefer DI)
+      this.routeManager = opts.routeManager || null;
+      this.routeController = opts.routeController || null;
+      this.routeLooping = typeof opts.routeLooping !== 'undefined' ? opts.routeLooping : false;
 
       // Create route edit handler for route-specific interactions
       if (typeof RouteEditHandler !== 'undefined') {
-        this.routeEditHandler = new RouteEditHandler(map, this.config, eventBus, this.editModeState, this.dragState);
+        this.routeEditHandler = new RouteEditHandler({
+          routeManager: this.routeManager,
+          mapState: this.mapState,
+          canvas: this._canvas || null,
+          eventBus: this.eventBus,
+          dragState: this.dragState,
+          editModeState: this.editModeState,
+          routeController: this.routeController,
+          checkMarkerHover: this.checkMarkerHover,
+          config: this.config,
+          errorHandler: this.errorHandler,
+          routeLooping: this.routeLooping
+        });
       }
 
       // Create marker edit handler for marker-specific interactions
+      // Prefer injected layer helpers
+      this.layerVisibility = opts.layerVisibility || null;
+      this.layerConfig = opts.layerConfig || null;
+
       if (typeof MarkerEditHandler !== 'undefined') {
         this.markerEditHandler = new MarkerEditHandler(
           this.mapState,
           this.selectionState,
           this.editModeState,
-          map.markerManager,
-          map.layerVisibility,
-          map.layerConfig,
-          map.showTooltip.bind(map),
-          map.hideTooltip.bind(map),
-          map.checkMarkerHover ? map.checkMarkerHover.bind(map) : null,
+          this.markerManager,
+          this.layerVisibility,
+          this.layerConfig,
+          this.showTooltip,
+          this.hideTooltip,
+          this.checkMarkerHover,
           this.config,
           this.eventBus,
           this.errorHandler
@@ -71,7 +102,7 @@
           panX: { get: () => this.mapState.panX, set: (v) => this.mapState.panX = v },
           panY: { get: () => this.mapState.panY, set: (v) => this.mapState.panY = v },
           zoom: { get: () => this.mapState.zoom, set: (v) => this.mapState.zoom = v },
-          canvas: { get: () => this.map.canvas },
+          canvas: { get: () => this._canvas || null },
           isDragging: { get: () => this.dragState.isDragging },
           hasActiveDrag: { get: () => this.dragState.hasActiveDrag },
           editMarkersMode: { get: () => this.editModeState ? this.editModeState.editMarkersMode : false },
@@ -81,14 +112,14 @@
 
         // Pre-bind frequently called methods (eliminates lookup overhead)
         // Note: _render binding removed - now using EventBus for render requests
-        this._updateResolution = this.imageState.updateResolution.bind(this.imageState);
-        this._checkMarkerHover = this.map.checkMarkerHover.bind(this.map);
-        this._findMarkerAt = this.map.checkMarkerHover.bind(this.map);
-        this._saveViewToStorage = this.map.saveViewToStorage ? this.map.saveViewToStorage.bind(this.map) : () => {};
-        
+        this._updateResolution = this.updateResolutionRef || (()=>{});
+        this._checkMarkerHover = this.checkMarkerHover || (()=>null);
+        this._findMarkerAt = this._checkMarkerHover;
+        this._saveViewToStorage = this.saveViewToStorage || (()=>{});
+
         // Marker utilities
-        if (this.map.markerRenderer) {
-          this._findMarkerAt = this.map.markerRenderer.findMarkerAt.bind(this.map.markerRenderer);
+        if (this.markerRenderer) {
+          this._findMarkerAt = this.markerRenderer.findMarkerAt.bind(this.markerRenderer);
         }
         
       } catch (e) { this.errorHandler.logWarning('PointerHandler fast accessors failed', 'PointerHandler.constructor.fastAccessors', { error: e }); }
@@ -97,7 +128,7 @@
     init() {
       if (this.bound) return;
       try {
-        const canvas = this.map.canvas;
+        const canvas = this.canvas;
         if (!canvas) return;
         this._onWheel = this._onWheel.bind(this);
         this._onPointerDown = this._onPointerDown.bind(this);
@@ -123,7 +154,7 @@
 
     destroy() {
       try {
-        const canvas = this.map.canvas;
+        const canvas = this.canvas;
         if (!canvas || !this.bound) return;
         canvas.removeEventListener('wheel', this._onWheel);
         canvas.removeEventListener('pointerdown', this._onPointerDown);
@@ -187,7 +218,9 @@
       try {
         const h = this.errorHandler;
         // Cache canvas rect for the active pointer interaction to avoid layout thrash
-        this._cachedRect = this.map.canvas.getBoundingClientRect();
+        const c = this.canvas;
+        if (!c) return;
+        this._cachedRect = c.getBoundingClientRect();
         const rect = this._cachedRect;
         const localX = ev.clientX - rect.left;
         const localY = ev.clientY - rect.top;
@@ -226,7 +259,7 @@
       try {
         const h = this.errorHandler;
         // Determine whether pointerdown hit a marker
-        const hit = this.map.markerRenderer ? this.map.markerRenderer.findMarkerAt(localX, localY) : null;
+        const hit = this.markerRenderer ? this.markerRenderer.findMarkerAt(localX, localY) : null;
 
         // Try route-specific handling first
         if (this.routeEditHandler && this.routeEditHandler.handlePointerDown(ev, localX, localY, downTime)) {
@@ -243,8 +276,8 @@
               uid: hit.marker.uid,
               layerKey: hit.layerKey,
               pointerId: ev.pointerId,
-              offsetX: localX - (hit.marker.x * (this.config.MAP_SIZE || 8192) * this.map.zoom + this.map.panX),
-              offsetY: localY - (hit.marker.y * (this.config.MAP_SIZE || 8192) * this.map.zoom + this.map.panY),
+              offsetX: localX - (hit.marker.x * (this.config.MAP_SIZE || 8192) * this.zoom + this.panX),
+              offsetY: localY - (hit.marker.y * (this.config.MAP_SIZE || 8192) * this.zoom + this.panY),
               startClientX: ev.clientX,
               startClientY: ev.clientY
             });
@@ -339,7 +372,6 @@
             this.zoom = updatedView.zoom;
           }
           this._updateResolution();
-          this.map.updateResolution();
           this.eventBus.emit(this.eventTypes.RENDER_REQUESTED);
           
           // Update marker hover during pinch
@@ -482,7 +514,7 @@
           if (this.selectionState && this.selectionState.selectedMarker && this.selectionState.selectedMarker.uid === this._draggingMarker.uid &&
               this.selectionState.selectedMarkerLayer === this._draggingMarker.layerKey) {
             try { this.selectionState.clearSelectedMarker(); } catch (e) { /* ignore */ }
-            try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
+            try { this.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.hideTooltip'); }
           }
         } catch (e) { h.logError(e, 'PointerHandler._promoteMarkerDrag.clearSelection'); }
 
@@ -517,17 +549,17 @@
         const h = this.errorHandler;
         this.dragState.setDragging(false);
         try { this.canvas.style.cursor = 'grab'; } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.setCursor'); }
-        try {
-          const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
-          let enteredUi = false;
           try {
-            if (related && related.closest) {
-              enteredUi = !!related.closest('.sidebar, .controls, .zoom-controls, #layerList, .header, .sidebar-handle');
-            }
-          } catch (e) { enteredUi = false; }
-          // If pointer left into the UI, keep tooltip visible; otherwise hide it.
-          if (!enteredUi) try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.hideTooltip'); }
-        } catch (e) { try { this.map.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
+            const related = ev && ev.relatedTarget ? ev.relatedTarget : null;
+            let enteredUi = false;
+            try {
+              if (related && related.closest) {
+                enteredUi = !!related.closest('.sidebar, .controls, .zoom-controls, #layerList, .header, .sidebar-handle');
+              }
+            } catch (e) { enteredUi = false; }
+            // If pointer left into the UI, keep tooltip visible; otherwise hide it.
+            if (!enteredUi) try { this.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.hideTooltip'); }
+          } catch (e) { try { this.hideTooltip(); } catch (e) { h.logError(e, 'PointerHandler._onMouseLeave.fallbackHideTooltip'); } }
 
         // Handle route-specific mouse leave
         if (this.routeEditHandler) {

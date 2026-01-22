@@ -70,7 +70,10 @@
             mockMap.currentRoute = null;
             mockMap._routeSources = null;
             routeRenderer.invalidateCache();
-            routeRenderer.render();
+            // Build render and viewport contexts
+            const renderContext = { canvasRoute: canvas, ctxRoute: ctx };
+            const viewportContext = ViewportContext ? ViewportContext.fromMapState(mockMap) : { zoom: mockMap.zoom, panX: mockMap.panX, panY: mockMap.panY };
+            routeRenderer.render(renderContext, viewportContext);
             console.log('Tested empty route');
         }
 
@@ -81,7 +84,9 @@
                 layerKey: 'test'
             }];
             routeRenderer.invalidateCache();
-            routeRenderer.render();
+            const renderContext = { canvasRoute: canvas, ctxRoute: ctx };
+            const viewportContext = ViewportContext ? ViewportContext.fromMapState(mockMap) : { zoom: mockMap.zoom, panX: mockMap.panX, panY: mockMap.panY };
+            routeRenderer.render(renderContext, viewportContext);
             console.log('Tested single point route');
         }
 
@@ -93,7 +98,9 @@
                 { marker: { x: 0.8, y: 0.8, uid: 'test3' }, layerKey: 'test' }
             ];
             routeRenderer.invalidateCache();
-            routeRenderer.render();
+            const renderContext = { canvasRoute: canvas, ctxRoute: ctx };
+            const viewportContext = ViewportContext ? ViewportContext.fromMapState(mockMap) : { zoom: mockMap.zoom, panX: mockMap.panX, panY: mockMap.panY };
+            routeRenderer.render(renderContext, viewportContext);
             console.log('Tested route with invalid markers');
         }
 
@@ -105,14 +112,18 @@
                 { marker: { x: 0.9, y: 0.9, uid: 'test3' }, layerKey: 'test' }
             ];
             routeRenderer.invalidateCache();
-            routeRenderer.render();
+            const renderContext = { canvasRoute: canvas, ctxRoute: ctx };
+            const viewportContext = ViewportContext ? ViewportContext.fromMapState(mockMap) : { zoom: mockMap.zoom, panX: mockMap.panX, panY: mockMap.panY };
+            routeRenderer.render(renderContext, viewportContext);
             console.log('Tested valid route');
         }
 
         function testLoopToggle() {
             mockMap.routeLooping = !mockMap.routeLooping;
             routeRenderer.invalidateCache();
-            routeRenderer.render();
+            const renderContext = { canvasRoute: canvas, ctxRoute: ctx };
+            const viewportContext = ViewportContext ? ViewportContext.fromMapState(mockMap) : { zoom: mockMap.zoom, panX: mockMap.panX, panY: mockMap.panY };
+            routeRenderer.render(renderContext, viewportContext);
             console.log('Toggled loop:', mockMap.routeLooping);
         }
 

@@ -385,7 +385,7 @@
       }
 
       const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
-      const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
+      const detailScale = (vp && typeof vp.getDetailScale === 'function') ? vp.getDetailScale() : 1; // Use viewport-provided detail scale when available
       ctx.lineWidth = Math.max(1, baseLine * vp.zoom * detailScale);
 
       // Optimized dash pattern calculation
@@ -395,7 +395,19 @@
 
       if (routeHex) {
         ctx.setLineDash([dashLen, gapLen]);
-        ctx.lineDashOffset = -map._routeDashOffset;
+        // Read animation offset from routeAnimationState snapshot if available;
+        // fallback to viewport-provided value for backward compatibility.
+        let animOffset = 0;
+        try {
+          if (this.routeAnimationState && typeof this.routeAnimationState.getAnimationOffset === 'function') {
+            animOffset = this.routeAnimationState.getAnimationOffset() || 0;
+          }
+        } catch (e) {
+          try { this.errorHandler.logWarning('RouteRenderer: failed to read animation offset', 'RouteRenderer._setupLineStyle', { error: e }); } catch (__) {}
+          animOffset = 0;
+        }
+
+        ctx.lineDashOffset = -animOffset;
       }
     }
 
@@ -428,7 +440,7 @@
         }
 
         const baseLine = this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3;
-        const detailScale = 1; // Simplified - was map.getDetailScale() which may not exist
+        const detailScale = (vp && typeof vp.getDetailScale === 'function') ? vp.getDetailScale() : 1; // Use viewport-provided detail scale when available
         const glowLine = Math.max(1, baseLine * vp.zoom * detailScale) * 2.6;
 
         ctx.lineWidth = glowLine;
@@ -480,7 +492,7 @@
         this.routeManager.getRouteNodeSize(lineWidth, vp.zoom) : 6;
 
       // Skip the closing loop point for node rendering (only when a loop was actually added)
-      const nodeCount = (map.routeLooping && pathData.points.length >= 4) ? pathData.points.length - 1 : pathData.points.length;
+      const nodeCount = ((vp && (vp.routeLooping || (this.routeManager && this.routeManager.routeLooping))) && pathData.points.length >= 4) ? pathData.points.length - 1 : pathData.points.length;
 
       for (let i = 0; i < nodeCount; i++) {
         const point = pathData.points[i];
@@ -569,8 +581,9 @@
           try { this.errorHandler.logWarning('RouteRenderer._renderRoutePreview: Failed to parse route color', 'RouteRenderer._renderRoutePreview.colorParse', { error: e }); } catch (__) { }
         }
 
-        const dotSize = (global.map && global.map.getRouteNodeSize && typeof global.map.getRouteNodeSize === 'function') ?
-          global.map.getRouteNodeSize() : 6;
+        const dotSize = (this.routeManager && typeof this.routeManager.getRouteNodeSize === 'function') ?
+          this.routeManager.getRouteNodeSize(this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3, viewport.zoom) :
+          (viewport && typeof viewport.getRouteNodeSize === 'function' ? viewport.getRouteNodeSize(this.routeAnimationState ? this.routeAnimationState.getLineWidth() : 3, viewport.zoom) : 6);
 
         ctx.save();
         ctx.beginPath();

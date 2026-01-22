@@ -1,48 +1,57 @@
-// rendering/ViewportContext.js
-// Encapsulates current viewport state (zoom, pan, canvas dimensions)
-// passed to renderers so they don't need direct access to MapState
-
 (function (global) {
   class ViewportContext {
-    /**
-     * Encapsulate viewport state for rendering.
-     * @param {number} zoom - Current zoom level
-     * @param {number} panX - X pan offset in canvas coordinates
-     * @param {number} panY - Y pan offset in canvas coordinates
-     * @param {number} canvasWidth - Canvas width in CSS pixels
-     * @param {number} canvasHeight - Canvas height in CSS pixels
-     * @param {number} [devicePixelRatio=1] - Device pixel ratio for HiDPI displays
-     */
-    constructor(zoom, panX, panY, canvasWidth, canvasHeight, devicePixelRatio = 1) {
-      this.zoom = zoom;
-      this.panX = panX;
-      this.panY = panY;
-      this.canvasWidth = canvasWidth;
-      this.canvasHeight = canvasHeight;
-      this.devicePixelRatio = devicePixelRatio;
+    constructor(options = {}) {
+      this.zoom = typeof options.zoom === 'number' ? options.zoom : 1;
+      this.panX = typeof options.panX === 'number' ? options.panX : 0;
+      this.panY = typeof options.panY === 'number' ? options.panY : 0;
+      this.canvasWidth = typeof options.canvasWidth === 'number' ? options.canvasWidth : 0;
+      this.canvasHeight = typeof options.canvasHeight === 'number' ? options.canvasHeight : 0;
+      this.devicePixelRatio = typeof options.devicePixelRatio === 'number' ? options.devicePixelRatio : (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+      this.routeDashOffset = typeof options.routeDashOffset === 'number' ? options.routeDashOffset : 0;
+      this.routeLooping = !!options.routeLooping;
     }
 
-    /**
-     * Create a ViewportContext from MapState.
-     * @param {MapState} mapState
-     * @returns {ViewportContext}
-     */
     static fromMapState(mapState) {
-      if (!mapState) {
-        return new ViewportContext(1, 0, 0, 0, 0, 1);
-      }
-      return new ViewportContext(
-        mapState.zoom,
-        mapState.panX,
-        mapState.panY,
-        mapState.canvasWidth,
-        mapState.canvasHeight,
-        mapState.devicePixelRatio
-      );
+      if (!mapState) return new ViewportContext();
+      // Do not read map-owned animation fallbacks here; RenderPipeline snapshots
+      // animation offset from RouteAnimationState and injects it into the
+      // viewportContext for each frame. Keep this method focused on view transforms.
+      return new ViewportContext({
+        zoom: mapState.zoom,
+        panX: mapState.panX,
+        panY: mapState.panY,
+        canvasWidth: mapState.canvasWidth || 0,
+        canvasHeight: mapState.canvasHeight || 0,
+        devicePixelRatio: mapState.devicePixelRatio || (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
+        routeDashOffset: 0,
+        routeLooping: !!mapState.routeLooping
+      });
+    }
+
+    // Convert normalized world coordinates (0..1) to screen pixels
+    worldToScreen(normX, normY, mapSize) {
+      const ms = mapSize || 8192;
+      return {
+        x: (normX * ms) * this.zoom + this.panX,
+        y: (normY * ms) * this.zoom + this.panY
+      };
+    }
+
+    // Convert screen pixels to normalized world coordinates (0..1)
+    screenToWorld(screenX, screenY, mapSize) {
+      const ms = mapSize || 8192;
+      return {
+        x: (screenX - this.panX) / this.zoom / ms,
+        y: (screenY - this.panY) / this.zoom / ms
+      };
+    }
+
+    getDetailScale() {
+      return 1;
     }
   }
 
-  // Export for different module systems
+  // Export
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = ViewportContext;
   } else if (typeof define === 'function' && define.amd) {

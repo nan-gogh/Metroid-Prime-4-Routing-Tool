@@ -21,66 +21,68 @@ const RouteComputation = {
 
     /**
      * Compute route using current route waypoints plus nearby visible markers
-     * @param {Object} map - The map instance
-     * @param {Function} beginRouteCompute - Function to call at start
-     * @param {Function} endRouteCompute - Function to call at end
-     * @param {Object} LAYERS - The layers object
-     * @param {number} MAP_SIZE - The map size constant
+     * @param {Object} opts - { routeManager, routeEditState, pointerHandler, layerState, beginRouteCompute, endRouteCompute, LAYERS, MAP_SIZE, errorHandler }
      */
-    expandRouteNearby(map, beginRouteCompute, endRouteCompute, LAYERS, MAP_SIZE) {
-        beginRouteCompute();
+    expandRouteNearby(opts = {}) {
+        const {
+            routeManager,
+            routeEditState,
+            layerState,
+            LAYERS,
+            MAP_SIZE,
+            errorHandler
+        } = opts;
         try {
-            // Prevent route expansion if route has fewer than 2 waypoints (need at least 1 segment)
-            if (!map.currentRoute || !Array.isArray(map.currentRoute) || map.currentRoute.length < 2) {
+            // Validate routeManager and current route
+            const currentRoute = routeManager && typeof routeManager.getRoute === 'function' ? routeManager.getRoute() : (routeManager ? routeManager.currentRoute : null);
+            if (!currentRoute || !Array.isArray(currentRoute) || currentRoute.length < 2) {
                 return;
             }
 
-            // Check for active drag operations and cancel them before expanding
-            const hasActiveDrags = map._routeInsert || map._draggingCandidate || map.pointerHandler.dragState.routeNodeCandidate;
-            if (hasActiveDrags && map.pointerHandler && typeof map.pointerHandler._cancelRouteDragOperations === 'function') {
-                map.pointerHandler._cancelRouteDragOperations('Route expansion');
+            // Cancel active drags if present
+            const hasActiveDrags = (routeEditState && (routeEditState.hasRouteInsert && routeEditState.hasRouteInsert())) ||
+                (routeEditState && (routeEditState.hasRouteNodeCandidate && routeEditState.hasRouteNodeCandidate())) ||
+                (pointerHandler && pointerHandler._draggingMarker);
+            if (hasActiveDrags && pointerHandler && typeof pointerHandler._cancelRouteDragOperations === 'function') {
+                pointerHandler._cancelRouteDragOperations('Route expansion');
             }
 
             // Build route waypoints in normalized coordinates
             const routePts = [];
             const routeUIDs = new Set();
-            for (let i = 0; i < map.currentRoute.length; i++) {
-                const idx = map.currentRoute[i];
-                const src = map._routeSources && map._routeSources[idx];
+            const routeSources = routeManager && typeof routeManager.getRouteSources === 'function' ? routeManager.getRouteSources() : (routeManager ? routeManager.routeSources : null);
+            for (let i = 0; i < currentRoute.length; i++) {
+                const idx = currentRoute[i];
+                const src = routeSources && routeSources[idx];
                 if (!src || !src.marker) continue;
                 routePts.push({ x: src.marker.x, y: src.marker.y });
                 if (src.marker.uid) routeUIDs.add(src.marker.uid);
             }
             if (routePts.length < 2) { return; }
 
-            // Threshold in pixels for proximity; tuneable
+            // Threshold in pixels for proximity; tunable
             const THRESHOLD_PX = this.CONFIG.EXPAND_PROXIMITY_THRESHOLD;
             const thresholdNorm = THRESHOLD_PX / MAP_SIZE;
 
             // Collect candidate markers from visible layers (exclude virtual 'route')
-            const poolSources = this._collectNearbyMarkers(map, LAYERS, routePts, routeUIDs, thresholdNorm);
+            const poolSources = this._collectNearbyMarkers(layerState, LAYERS, routePts, routeUIDs, thresholdNorm);
 
             // Assign nearby markers to the nearest route segment (by projection)
-            const segments = this._assignMarkersToSegments(map, routePts, poolSources);
+            const segments = this._assignMarkersToSegments(routeManager && routeManager.routeLooping, routePts, poolSources);
 
             // Solve TSP for each segment and construct final route
-            const result = this._solveSegmentsAndBuildRoute(map, routePts, segments);
+            const result = this._solveSegmentsAndBuildRoute(routeManager, routePts, segments);
 
-            // Set the computed route
-            if (result.sources.length > 0) {
-                if (map.routeController && typeof map.routeController.setRoute === 'function') {
-                    map.routeController.setRoute(result.indices, result.length, result.sources);
-                } else if (map.routeManager && typeof map.routeManager.setRoute === 'function') {
-                    map.routeManager.setRoute(result.indices, result.length, result.sources);
-                } else {
-                    map.setRoute(result.indices, result.length, result.sources);
-                }
+            // Return computed result to caller for them to apply (no side-effects here)
+            if (result && result.sources && result.sources.length > 0) {
+                return result;
             }
+            return null;
         } catch (e) {
-            const h = RouteComputation._errorHandler;
-            h.logError(e, 'RouteComputation.expandRouteNearby');
+            const h = errorHandler || RouteComputation._errorHandler;
+            h && h.logError && h.logError(e, 'RouteComputation.expandRouteNearby');
         } finally {
-            endRouteCompute();
+            // No UI cleanup here; caller is responsible for begin/end and any DOM actions
         }
     },
 
@@ -88,7 +90,7 @@ const RouteComputation = {
      * Collect markers that are near the route
      * @private
      */
-    _collectNearbyMarkers(map, LAYERS, routePts, routeUIDs, thresholdNorm) {
+    _collectNearbyMarkers(layerState, LAYERS, routePts, routeUIDs, thresholdNorm) {
         const poolSources = [];
         const layerEntries = Object.entries(LAYERS || {});
 
@@ -96,7 +98,7 @@ const RouteComputation = {
             const layerKey = layerEntries[li][0];
             const layer = layerEntries[li][1];
             if (layerKey === 'route') continue;
-            if (!map.layerState || !map.layerState.isLayerVisible(layerKey)) continue;
+            if (!layerState || !layerState.isLayerVisible(layerKey)) continue;
             if (!Array.isArray(layer.markers)) continue;
 
             for (let mi = 0; mi < layer.markers.length; mi++) {
@@ -106,7 +108,7 @@ const RouteComputation = {
                 if (m.uid && routeUIDs.has(m.uid)) continue; // will add route points separately
 
                 // Compute minimal distance from m to route polyline (normalized units)
-                if (this._isMarkerNearRoute(m, routePts, map.routeLooping, thresholdNorm)) {
+                if (this._isMarkerNearRoute(m, routePts, layerState && layerState.routeLooping, thresholdNorm)) {
                     poolSources.push({ marker: m, layerKey: layerKey, layerIndex: mi });
                 }
             }
@@ -160,9 +162,9 @@ const RouteComputation = {
      * Assign markers to their nearest route segments
      * @private
      */
-    _assignMarkersToSegments(map, routePts, poolSources) {
+    _assignMarkersToSegments(routeLooping, routePts, poolSources) {
         const routeLen = routePts.length;
-        const segCount = map.routeLooping ? routeLen : (routeLen - 1);
+        const segCount = routeLooping ? routeLen : (routeLen - 1);
         const segments = new Array(segCount);
         for (let si = 0; si < segCount; si++) segments[si] = [];
 
@@ -206,16 +208,19 @@ const RouteComputation = {
      * Solve TSP for each segment and build the final route
      * @private
      */
-    _solveSegmentsAndBuildRoute(map, routePts, segments) {
+    _solveSegmentsAndBuildRoute(routeManager, routePts, segments) {
         const finalSources = [];
-        const segCount = map.routeLooping ? routePts.length : (routePts.length - 1);
+        const segCount = routeManager && routeManager.routeLooping ? routePts.length : (routePts.length - 1);
+
+        const currentRoute = routeManager && typeof routeManager.getRoute === 'function' ? routeManager.getRoute() : (routeManager ? routeManager.currentRoute : []);
+        const routeSources = routeManager && typeof routeManager.getRouteSources === 'function' ? routeManager.getRouteSources() : (routeManager ? routeManager.routeSources : []);
 
         // Process each segment
         for (let si = 0; si < segCount; si++) {
-            const aIdx = map.currentRoute[si];
-            const bIdx = map.currentRoute[(si + 1) % map.currentRoute.length];
-            const srcA = map._routeSources && map._routeSources[aIdx];
-            const srcB = map._routeSources && map._routeSources[bIdx];
+            const aIdx = currentRoute[si];
+            const bIdx = currentRoute[(si + 1) % currentRoute.length];
+            const srcA = routeSources && routeSources[aIdx];
+            const srcB = routeSources && routeSources[bIdx];
 
             if (!srcA || !srcA.marker || !srcB || !srcB.marker) continue;
 

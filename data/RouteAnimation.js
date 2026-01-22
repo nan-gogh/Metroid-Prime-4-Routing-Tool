@@ -10,7 +10,7 @@ if (typeof globalThis.__MP4_NOOP_ERROR_HANDLER === 'undefined') {
 const RouteAnimation = {
     _errorHandler: globalThis.__MP4_NOOP_ERROR_HANDLER,
     setErrorHandler(handler) { this._errorHandler = handler || globalThis.__MP4_NOOP_ERROR_HANDLER; },
-    
+
     // Configuration constants for route animation
     get CONFIG() {
         return {
@@ -20,173 +20,68 @@ const RouteAnimation = {
     },
 
     /**
-     * Start route animation for a map instance
-     * @param {Object} map - The map instance to animate
+     * Initialize animation defaults on a RouteAnimationState instance
+     * @param {RouteAnimationState} routeAnimationState
+     * @param {Object} opts
      */
-    startAnimation(map) {
-        if (!map) return;
+    initialize(routeAnimationState, opts = {}) {
+        if (!routeAnimationState) return;
+        const h = opts.errorHandler || this._errorHandler;
+        try {
+            // Ensure the state has sensible defaults
+            if (typeof routeAnimationState.getAnimationOffset !== 'function') return;
+            if (typeof routeAnimationState.getAnimationOffset() === 'undefined') routeAnimationState.setAnimationOffset(0);
+            if (typeof routeAnimationState.getAnimationFrameId() === 'undefined') routeAnimationState.setAnimationFrameId(null);
+            if (typeof routeAnimationState.getLastAnimationTime() === 'undefined') routeAnimationState.setLastAnimationTime(0);
+            if (typeof routeAnimationState.getAnimationSpeed() === 'undefined') routeAnimationState.setAnimationSpeed(this.CONFIG.DEFAULT_SPEED);
+            if (typeof routeAnimationState.getLineWidth() === 'undefined') routeAnimationState.setLineWidth(MP4Config.ROUTE.LINE_WIDTH || 3);
+            if (typeof routeAnimationState.getAnimationDirection === 'function' && typeof routeAnimationState.getAnimationDirection() === 'undefined') routeAnimationState.setAnimationDirection(1);
+        } catch (e) {
+            h && h.logWarning && h.logWarning(e, 'RouteAnimation.initialize');
+        }
+    },
 
-        // Check if animation is already running using RouteAnimationState if available
-        if (map.routeAnimationState && map.routeAnimationState.getAnimationFrameId()) return;
-        if (!map.routeAnimationState && map._routeRaf) return;
-
-        // Initialize animation state
-        if (map.routeAnimationState) {
-            map.routeAnimationState.setLastAnimationTime(performance.now());
+    /**
+     * Start route animation
+     * @param {Object} opts - { routeAnimationState, routeManager, mapState, eventBus, renderCallback, errorHandler }
+     */
+    start(opts = {}) {
+        // RouteAnimationController is the single owner of RAF lifecycle
+        if (window.RouteAnimationController && typeof window.RouteAnimationController.start === 'function') {
+            try { return window.RouteAnimationController.start(opts); } catch (e) { this._errorHandler && this._errorHandler.logWarning && this._errorHandler.logWarning(e, 'RouteAnimation.start.controller'); }
         } else {
-            map._lastRouteAnimTime = performance.now();
+            // If controller is unavailable, log an explicit warning — controller is expected.
+            const h = opts.errorHandler || this._errorHandler;
+            h && h.logWarning && h.logWarning(new Error('RouteAnimationController not available; cannot start animation'), 'RouteAnimation.start.missingController');
         }
+    },
 
-        const step = (timestamp) => {
-            // Get timing from RouteAnimationState if available
-            const lastTime = map.routeAnimationState ? 
-                map.routeAnimationState.getLastAnimationTime() : 
-                map._lastRouteAnimTime;
-            
-            const dt = Math.max(0, timestamp - lastTime) / 1000; // seconds
-            
-            // Update timing
-            if (map.routeAnimationState) {
-                map.routeAnimationState.setLastAnimationTime(timestamp);
-            } else {
-                map._lastRouteAnimTime = timestamp;
-            }
-
-            // Advance offset by speed * dt * direction (scale with zoom so perceived
-            // animation speed remains consistent across zoom levels)
-            const dir = (Number(map._routeAnimationDirection) === -1) ? -1 : 1;
-            const zoomFactor = (typeof map.zoom === 'number' && map.zoom > 0) ? map.zoom : 1;
-            const speed = map._routeAnimationSpeed || this.CONFIG.DEFAULT_SPEED;
-
-            const currentOffset = map.routeAnimationState ? 
-                map.routeAnimationState.getAnimationOffset() : 
-                map._routeDashOffset;
-            
-            const newOffset = (currentOffset + speed * dt * dir * zoomFactor + this.CONFIG.DASH_OFFSET_WRAP) % this.CONFIG.DASH_OFFSET_WRAP;
-
-            // Update offset
-            if (map.routeAnimationState) {
-                map.routeAnimationState.setAnimationOffset(newOffset);
-            } else {
-                map._routeDashOffset = newOffset;
-            }
-
-            // Only continue animating if there is a route
-            if (!map.currentRoute || !map.currentRoute.length) {
-                this.stopAnimation(map);
-                return;
-            }
-
-            // Only redraw the route for animation frames through the batched render pipeline
-            try {
-                if (map.markRendererDirty) {
-                    map.markRendererDirty('RouteRenderer');
-                } else if (map.eventBus && EventTypes && EventTypes.RENDER_SELECTIVE_REQUESTED) {
-                    try {
-                        map.eventBus.emit(EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: ['RouteRenderer'] });
-                    } catch (e) {
-                        try {
-                            RouteAnimation._errorHandler.logError(e, 'RouteAnimation.emitRenderIntent');
-                        } catch (logErr) {
-                            try { globalThis.__MP4_NOOP_ERROR_HANDLER.logWarning('RouteAnimation emit failed', 'RouteAnimation.emitRenderIntent', { error: logErr }); } catch (ignore) {}
-                        }
-                    }
-                } else if (map.render) {
-                    map.render(); // Fallback for compatibility
-                }
-            } catch (e) {
-                const h = RouteAnimation._errorHandler;
-                h.logWarning('RouteAnimation: render failed', 'RouteAnimation.step.render', { error: e });
-            }
-
-            // Schedule next frame and store RAF ID properly
-            const rafId = requestAnimationFrame(step);
-            if (map.routeAnimationState) {
-                map.routeAnimationState.setAnimationFrameId(rafId);
-            } else {
-                map._routeRaf = rafId;
-            }
-        };
-
-        // Start first frame and store RAF ID properly
-        const rafId = requestAnimationFrame(step);
-        if (map.routeAnimationState) {
-            map.routeAnimationState.setAnimationFrameId(rafId);
+    /**
+     * Stop route animation
+     * @param {Object} opts - { routeAnimationState, errorHandler }
+     */
+    stop(opts = {}) {
+        // Delegate to RouteAnimationController exclusively
+        if (window.RouteAnimationController && typeof window.RouteAnimationController.stop === 'function') {
+            try { return window.RouteAnimationController.stop(opts); } catch (e) { this._errorHandler && this._errorHandler.logWarning && this._errorHandler.logWarning(e, 'RouteAnimation.stop.controller'); }
         } else {
-            map._routeRaf = rafId;
+            const h = opts.errorHandler || this._errorHandler;
+            h && h.logWarning && h.logWarning(new Error('RouteAnimationController not available; cannot stop animation'), 'RouteAnimation.stop.missingController');
         }
     },
 
     /**
-     * Stop route animation for a map instance
-     * @param {Object} map - The map instance to stop animating
+     * Set direction on RouteAnimationState
+     * @param {RouteAnimationState} routeAnimationState
+     * @param {number} direction
      */
-    stopAnimation(map) {
-        if (!map) return;
-
-        // Get current RAF ID using RouteAnimationState if available
-        const currentRafId = map.routeAnimationState ? 
-            map.routeAnimationState.getAnimationFrameId() : 
-            map._routeRaf;
-
-        if (currentRafId) {
-            cancelAnimationFrame(currentRafId);
-            
-            // Clear RAF ID using RouteAnimationState if available
-            if (map.routeAnimationState) {
-                map.routeAnimationState.setAnimationFrameId(null);
-            } else {
-                map._routeRaf = null;
-            }
-        }
+    setDirection(routeAnimationState, direction) {
+        if (!routeAnimationState) return;
+        try { routeAnimationState.setAnimationDirection(direction === -1 ? -1 : 1); } catch (e) { this._errorHandler && this._errorHandler.logWarning && this._errorHandler.logWarning(e, 'RouteAnimation.setDirection'); }
     },
 
-    /**
-     * Set animation direction for a map instance
-     * @param {Object} map - The map instance
-     * @param {number} direction - 1 for forward, -1 for reverse
-     */
-    setDirection(map, direction) {
-        if (!map) return;
-
-        map._routeAnimationDirection = Number(direction) === -1 ? -1 : 1;
-    },
-
-    /**
-     * Check if animation is currently running
-     * @param {Object} map - The map instance
-     * @returns {boolean} True if animation is running
-     */
-    isAnimating(map) {
-        return map && map._routeRaf !== null && map._routeRaf !== undefined;
-    },
-
-    /**
-     * Initialize animation properties on a map instance
-     * @param {Object} map - The map instance to initialize
-     */
-    initialize(map) {
-        if (!map) return;
-
-        if (typeof map._routeAnimationSpeed === 'undefined') {
-            map._routeAnimationSpeed = this.CONFIG.DEFAULT_SPEED;
-        }
-
-        if (typeof map._routeAnimationDirection === 'undefined') {
-            map._routeAnimationDirection = 1; // forward by default
-        }
-
-        if (typeof map._routeDashOffset === 'undefined') {
-            map._routeDashOffset = 0;
-        }
-
-        if (typeof map._routeRaf === 'undefined') {
-            map._routeRaf = null;
-        }
-
-        if (typeof map._lastRouteAnimTime === 'undefined') {
-            map._lastRouteAnimTime = 0;
-        }
+    isAnimating(routeAnimationState) {
+        return routeAnimationState && typeof routeAnimationState.getAnimationFrameId === 'function' && !!routeAnimationState.getAnimationFrameId();
     }
 };
 

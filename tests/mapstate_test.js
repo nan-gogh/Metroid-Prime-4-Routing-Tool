@@ -21,6 +21,11 @@
   // Load MapState
   const fs = require('fs');
   const path = require('path');
+  // Use shared test helpers to prepare environment
+  const { setupTestEnv } = require('./test_helpers');
+  setupTestEnv({ mp4config: global.MP4Config });
+  const { ErrorHandler } = require(path.join(__dirname, '../utils/ErrorHandler.js'));
+  global.errorHandler = new ErrorHandler();
   const mapStateCode = fs.readFileSync(path.join(__dirname, '../state/MapState.js'), 'utf8');
 
   // Execute the MapState code

@@ -7,6 +7,24 @@ class StorageService {
         this._errorHandler = errorHandler || new ErrorHandler();
         this._cache = new Map();
         this._eventBus = eventBus || null;
+        this._consentOverride = null; // explicit override when consent state is managed programmatically
+    }
+
+    /**
+     * Check whether localStorage appears available for read/write operations.
+     * Uses a light touch feature-detect with try/catch to avoid throwing in restricted environments.
+     * @returns {boolean}
+     */
+    _canUseLocalStorage() {
+        try {
+            if (typeof localStorage === 'undefined' || localStorage === null) return false;
+            const testKey = '__mp4_storage_test__';
+            localStorage.setItem(testKey, '1');
+            localStorage.removeItem(testKey);
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     /**
@@ -15,7 +33,10 @@ class StorageService {
      */
     hasConsent() {
         try {
-            return this._consentChecker ? this._consentChecker() : false;
+            if (this._consentOverride !== null) return !!this._consentOverride;
+            if (this._consentChecker) return !!this._consentChecker();
+            // Default: no consent until ConsentManager explicitly sets it
+            return false;
         } catch (e) {
             this._errorHandler.logWarning('StorageService.hasConsent: consent checker failed', 'StorageService.hasConsent', { error: e });
             return false;
@@ -29,7 +50,9 @@ class StorageService {
      * @returns {*} Stored value or defaultValue
      */
     get(key, defaultValue = null) {
-        if (!this.hasConsent()) {
+        // Allow reading the consent flag even when consent is not yet granted
+        const CONSENT_KEY = 'mp4_storage_consent';
+        if (!this.hasConsent() && key !== CONSENT_KEY) {
             return defaultValue;
         }
 
@@ -62,7 +85,9 @@ class StorageService {
      * @returns {boolean} True if successful, false otherwise
      */
     set(key, value) {
-        if (!this.hasConsent()) {
+        // Allow writing the consent flag even when consent is currently false
+        const CONSENT_KEY = 'mp4_storage_consent';
+        if (key !== CONSENT_KEY && !this.hasConsent()) {
             return false;
         }
 
@@ -97,6 +122,7 @@ class StorageService {
     remove(key) {
         try {
             this._cache.delete(key);
+            // Allow removing consent key even if consent is false
             localStorage.removeItem(key);
             try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { key, removed: true }); } catch (__) {}
         } catch (e) {
@@ -177,6 +203,52 @@ class StorageService {
                 availablePercentage: 100,
                 canStore: true
             };
+        }
+    }
+
+    /**
+     * Programmatically set consent state for storage operations.
+     * Updates an internal override and optionally persists the choice.
+     * Emits STORAGE_CONSENT_CHANGED via eventBus.
+     * @param {boolean} granted
+     * @param {boolean} persist
+     */
+    setConsent(granted, persist = true) {
+        try {
+            const old = this.hasConsent();
+            this._consentOverride = !!granted;
+            // Only persist consent to localStorage when explicitly requested AND
+            // the new state is granted AND localStorage is available. This avoids
+            // writing anything when consent is not given or localStorage is
+            // unavailable (privacy modes, node tests, etc.). We intentionally
+            // avoid removing items from localStorage here to prevent write
+            // operations when revoking consent in restricted environments.
+            if (persist && !!granted) {
+                try {
+                    if (this._canUseLocalStorage()) {
+                        localStorage.setItem('mp4_storage_consent', '1');
+                    }
+                } catch (e) { /* best-effort */ }
+            }
+            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_CONSENT_CHANGED, { consent: !!granted, oldConsent: old, newConsent: !!granted }); } catch (__) {}
+            return true;
+        } catch (e) {
+            this._errorHandler.logWarning('StorageService.setConsent failed', 'StorageService.setConsent', { error: e });
+            return false;
+        }
+    }
+
+    /**
+     * Replace the consentChecker function used by hasConsent()
+     * @param {Function|null} fn
+     */
+    setConsentChecker(fn) {
+        try {
+            this._consentChecker = typeof fn === 'function' ? fn : null;
+            return true;
+        } catch (e) {
+            this._errorHandler.logWarning('StorageService.setConsentChecker failed', 'StorageService.setConsentChecker', { error: e });
+            return false;
         }
     }
 
@@ -425,10 +497,15 @@ let storageService = null;
  * Initialize the global storage service
  * @param {Function} consentChecker - Function that returns true if user has storage consent
  * @param {ErrorHandler} errorHandler - Error handler instance
+ * @param {EventBus} eventBus - Event bus instance for storage lifecycle events
  */
 function initializeStorageService(consentChecker, errorHandler = null, eventBus = null) {
     // Allow passing an app-level eventBus so StorageService can emit storage lifecycle events
     storageService = new StorageService(consentChecker, errorHandler, eventBus);
+    // Expose the initialized instance on window for legacy fallback and provider access
+    if (typeof window !== 'undefined') {
+        window.storageService = storageService;
+    }
     return storageService;
 }
 
@@ -436,18 +513,17 @@ function initializeStorageService(consentChecker, errorHandler = null, eventBus 
  * Get the global storage service instance
  * @returns {StorageService|null} Storage service instance or null if not initialized
  */
-function getStorageService() {
-    return storageService;
-}
+// Note: legacy global accessor removed. Use `initializeStorageService()` and
+// DI via a `StorageServiceProvider` or `window.storageService` (legacy fallback).
 
 // Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { StorageService, initializeStorageService, getStorageService };
+    module.exports = { StorageService, initializeStorageService };
 }
 
-// Global exposure for browser environment
+// Global exposure for browser environment (legacy fallback)
 if (typeof window !== 'undefined') {
     window.StorageService = StorageService;
     window.initializeStorageService = initializeStorageService;
-    window.getStorageService = getStorageService;
+    // Runtime-initialized instance will be placed on `window.storageService` by initialize routine.
 }

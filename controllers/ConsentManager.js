@@ -55,7 +55,7 @@
     getConsent() {
       try {
         if (!this.storage) return false;
-        const consentValue = this.storage.get(this._consentKey, null);
+        const consentValue = this.storage.get(this._consentKey);
         return consentValue === '1' || consentValue === true;
       } catch (e) {
         this.errorHandler.logWarning('ConsentManager: Failed to get consent', 'ConsentManager.getConsent', { error: e });
@@ -118,10 +118,15 @@
 
         const oldConsent = this.getConsent();
 
-        if (granted) {
-          this.storage.set(this._consentKey, '1');
+        // Prefer StorageService API for consent so it can update internal override
+        if (typeof this.storage.setConsent === 'function') {
+          this.storage.setConsent(!!granted, true);
+        } else if (typeof this.storage.set === 'function' && typeof this.storage.remove === 'function') {
+          if (granted) this.storage.set(this._consentKey, '1');
+          else this.storage.remove(this._consentKey);
         } else {
-          this.storage.remove(this._consentKey);
+          // No writable storage available — just emit the event and return
+          this.errorHandler.logWarning('ConsentManager: No writable storage available to persist consent', 'ConsentManager.setConsent');
         }
 
         this.errorHandler.logDebug('ConsentManager: Consent changed', 'ConsentManager.setConsent', {
@@ -262,10 +267,10 @@
           'Tileset preference',
           'Grid/heatmap settings'
         ],
-        storageMechanism: 'localStorage (client-side only)',
+        storageMechanism: 'configured storage provider (client-side only)',
         dataCleared: 'User can revoke consent to clear all stored data',
         thirdParties: 'No third-party data sharing',
-        lastConsentChange: this.storage?.get?.('mp4_storage_consent_timestamp') || null
+        lastConsentChange: this.storage?.get?.(this._consentKey + '_timestamp') || null
       };
     }
 

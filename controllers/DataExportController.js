@@ -263,7 +263,7 @@
         purpose: 'GDPR Data Subject Access Request',
         dataRetention: 'User can delete at any time via consent revocation',
         thirdParties: 'No third-party sharing',
-        notes: 'This export contains all data stored by the Metroid Prime 4 Routing Tool in browser localStorage'
+        notes: 'This export contains all data stored by the Metroid Prime 4 Routing Tool in the configured storage provider'
       };
     }
 

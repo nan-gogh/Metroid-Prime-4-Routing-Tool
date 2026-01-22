@@ -2,8 +2,8 @@
 // Comprehensive test suite for LayerState class
 
 (function() {
-  // Include ErrorHandler for testing
-  if (typeof ErrorHandler === 'undefined') {
+  // Include ErrorHandler for testing (guard against TDZ when requiring later)
+  if (typeof global !== 'undefined' && typeof global.ErrorHandler === 'undefined') {
     // Simple mock ErrorHandler for testing
     global.ErrorHandler = class ErrorHandler {
       logDebug() {}
@@ -25,30 +25,30 @@
   // Mock Storage API
   global.Storage = function() {};
 
-  // Mock localStorage for testing
-  const mockLocalStorage = {
+  // Mock storage (StorageService-like) for testing
+  const mockStorage = {
     data: {},
-    getItem: function(key) { return this.data[key] || null; },
-    setItem: function(key, value) { this.data[key] = value; },
-    removeItem: function(key) { delete this.data[key]; },
+    get: function(key) { return (key in this.data) ? this.data[key] : null; },
+    set: function(key, value) { this.data[key] = value; },
+    remove: function(key) { delete this.data[key]; },
     clear: function() { this.data = {}; }
   };
-  global.localStorage = mockLocalStorage;
-
-  // Mock checkStorageConsent function
-  global.checkStorageConsent = function() { return true; };
 
   // Load LayerState
   const fs = require('fs');
   const path = require('path');
+  const { setupTestEnv, createMockStorage } = require('./test_helpers');
+  setupTestEnv({ mp4config: MP4Config });
   const script = fs.readFileSync(path.join(__dirname, '../state/LayerState.js'), 'utf8');
   eval(script);
+  // LayerState is registered on `global` by the evaluated module
 
   class LayerStateTest {
     constructor() {
       this.tests = [];
       this.passed = 0;
       this.failed = 0;
+      this.errorHandler = (typeof global !== 'undefined' && global.errorHandler) ? global.errorHandler : new ErrorHandler();
     }
 
     test(name, fn) {
@@ -93,7 +93,7 @@
   // Test constructor
   test.test('constructor initializes default state', () => {
     const layerKeys = ['route', 'customMarkers', 'energyTank'];
-    const state = new LayerState(layerKeys);
+    const state = new global.LayerState(layerKeys, MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     test.assertEqual(state.getTotalCount(), 4); // 3 provided + grid
     test.assert(state.isLayerVisible('route'));
@@ -106,7 +106,7 @@
 
   // Test layer visibility
   test.test('setLayerVisible and isLayerVisible', () => {
-    const state = new LayerState(['route', 'customMarkers']);
+    const state = new global.LayerState(['route', 'customMarkers'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setLayerVisible('customMarkers', false);
     test.assert(!state.isLayerVisible('customMarkers'));
@@ -117,7 +117,7 @@
   });
 
   test.test('toggleLayer', () => {
-    const state = new LayerState(['route', 'customMarkers']);
+    const state = new global.LayerState(['route', 'customMarkers'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     test.assert(state.isLayerVisible('customMarkers'));
     state.toggleLayer('customMarkers');
@@ -128,7 +128,7 @@
 
   // Test bulk operations
   test.test('showAllLayers and hideAllLayers', () => {
-    const state = new LayerState(['route', 'customMarkers', 'energyTank']);
+    const state = new global.LayerState(['route', 'customMarkers', 'energyTank'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     // Hide some layers first
     state.setLayerVisible('customMarkers', false);
@@ -143,7 +143,7 @@
   });
 
   test.test('getVisibleLayers and getHiddenLayers', () => {
-    const state = new LayerState(['route', 'customMarkers', 'energyTank']);
+    const state = new global.LayerState(['route', 'customMarkers', 'energyTank'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setLayerVisible('customMarkers', false);
     state.setLayerVisible('energyTank', false);
@@ -164,7 +164,7 @@
 
   // Test special display states
   test.test('grid visibility', () => {
-    const state = new LayerState(['route']);
+    const state = new global.LayerState(['route'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setGridVisible(false);
     test.assert(!state.isGridVisible());
@@ -174,7 +174,7 @@
   });
 
   test.test('heatmap visibility', () => {
-    const state = new LayerState(['route']);
+    const state = new global.LayerState(['route'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setHeatmapVisible(true);
     test.assert(state.isHeatmapVisible());
@@ -185,7 +185,7 @@
 
   // Test layer counting
   test.test('layer counting methods', () => {
-    const state = new LayerState(['route', 'customMarkers', 'energyTank']);
+    const state = new global.LayerState(['route', 'customMarkers', 'energyTank'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     test.assertEqual(state.getTotalCount(), 4); // 3 + grid
     test.assertEqual(state.getVisibleCount(), 3); // grid is off by default
@@ -200,7 +200,7 @@
 
   // Test layer configuration
   test.test('layer configuration', () => {
-    const state = new LayerState(['route', 'customMarkers']);
+    const state = new global.LayerState(['route', 'customMarkers'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     // Check default config
     const customConfig = state.getLayerConfig('customMarkers');
@@ -219,7 +219,7 @@
 
   // Test bulk operations
   test.test('setMultipleLayers', () => {
-    const state = new LayerState(['route', 'customMarkers', 'energyTank']);
+    const state = new global.LayerState(['route', 'customMarkers', 'energyTank'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     const newVisibility = {
       'customMarkers': false,
@@ -236,14 +236,14 @@
 
   // Test state persistence
   // test.test('saveToStorage and loadFromStorage', () => {
-  //   const state1 = new LayerState(['route', 'customMarkers']);
+  //   const state1 = new LayerState(['route', 'customMarkers'], {}, { storage: mockStorage, errorHandler: ErrorHandler });
 
   //   state1.setLayerVisible('customMarkers', false);
   //   state1.setHeatmapVisible(true);
 
   //   state1.saveToStorage();
 
-  //   const state2 = new LayerState(['route', 'customMarkers']);
+  //   const state2 = new LayerState(['route', 'customMarkers'], {}, { storage: mockStorage, errorHandler: ErrorHandler });
   //   state2.loadFromStorage();
 
   //   test.assert(!state2.isLayerVisible('customMarkers'), 'customMarkers should be hidden after loading');
@@ -252,7 +252,7 @@
 
   // Test toJSON serialization
   test.test('toJSON serialization', () => {
-    const state = new LayerState(['route', 'customMarkers']);
+    const state = new global.LayerState(['route', 'customMarkers'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setLayerVisible('customMarkers', false);
     state.setHeatmapVisible(true);
@@ -270,7 +270,7 @@
 
   // Test utility methods
   test.test('utility methods', () => {
-    const state = new LayerState(['route']);
+    const state = new global.LayerState(['route'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     test.assert(state.hasLayer('route'));
     test.assert(!state.hasLayer('nonexistent'));
@@ -285,7 +285,7 @@
 
   // Test reset
   test.test('reset method', () => {
-    const state = new LayerState(['route', 'customMarkers']);
+    const state = new global.LayerState(['route', 'customMarkers'], MP4Config, { storage: mockStorage, errorHandler: ErrorHandler });
 
     state.setLayerVisible('customMarkers', false);
     state.setHeatmapVisible(true);
@@ -301,7 +301,7 @@
 
   // Test error handling
   test.test('error handling in methods', () => {
-    const state = new LayerState(['route']);
+    const state = new LayerState(['route'], {}, { storage: mockStorage, errorHandler: ErrorHandler });
     const initialCount = state.getTotalCount();
 
     // These should not throw errors even with invalid inputs

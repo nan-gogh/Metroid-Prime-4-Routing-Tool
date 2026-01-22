@@ -15,8 +15,10 @@
      * @param {MapState} [mapState] - Optional MapState for creating ViewportContext
      */
     constructor(stages, renderContext, mapState, options = {}) {
-      this.errorHandler = global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
+      this.errorHandler = (options && options.errorHandler) || global.errorHandler || globalThis.NOOP_ERROR_HANDLER;
       this.eventBus = options.eventBus || null;
+      // Accept routeAnimationState via constructor options for deterministic per-frame snapshots
+      this.routeAnimationState = options.routeAnimationState || null;
       this.stages = stages || [];
       this.renderContext = renderContext; // Store render context for passing to renderers
       this.mapState = mapState; // Store mapState for creating ViewportContext during render
@@ -221,6 +223,22 @@
         this.eventBus.emit(window.EventTypes.RENDER_SELECTIVE_REQUESTED, { renderers: Array.from(dirtyOnly) });
       }
 
+      // Create a single ViewportContext snapshot for the entire frame to ensure
+      // renderers receive a consistent view (including animation offset).
+      let viewportContext = null;
+      if (typeof ViewportContext !== 'undefined' && this.mapState) {
+        viewportContext = ViewportContext.fromMapState(this.mapState);
+        try {
+          // Prefer routeAnimationState provided on pipeline (set by RenderController)
+          const ras = this.routeAnimationState || (this.mapState && this.mapState.routeAnimationState) || null;
+          if (ras && typeof ras.getAnimationOffset === 'function') {
+            viewportContext.routeDashOffset = ras.getAnimationOffset() || 0;
+          }
+        } catch (e) {
+          try { this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RenderPipeline.render.snapshotAnimationOffset'); } catch (__) {}
+        }
+      }
+
       // Use custom order if set, otherwise use original stages array
       const stagesToRender = this._stageOrder.length > 0 ? this._stageOrder : this.stages;
       const renderedStages = [];
@@ -235,16 +253,11 @@
 
         const stageStartTime = this._profilingEnabled ? performance.now() : 0;
 
-        try {
-          if (typeof stage.render === 'function') {
-            // Create ViewportContext from MapState if available
-            let viewportContext = null;
-            if (typeof ViewportContext !== 'undefined' && this.mapState) {
-              viewportContext = ViewportContext.fromMapState(this.mapState);
-            }
-            // Pass renderContext and optional viewportContext to renderer
-            stage.render(this.renderContext, viewportContext);
-            renderedStages.push(stageName);
+            try {
+              if (typeof stage.render === 'function') {
+                // Pass the precomputed renderContext and the single-frame viewportContext to renderer
+                stage.render(this.renderContext, viewportContext);
+                renderedStages.push(stageName);
 
             if (this._profilingEnabled) {
               const stageTime = performance.now() - stageStartTime;

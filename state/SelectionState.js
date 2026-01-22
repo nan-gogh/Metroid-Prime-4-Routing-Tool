@@ -215,7 +215,7 @@
 
     loadFromStorage() {
       try {
-        const key = (this.config?.STORAGE_KEYS?.SELECTION_STATE) || 'mp4_selection_state';
+        const key = (this.config?.STORAGE_KEYS?.SELECTION_STATE) || 'mp4_selectionState';
         let data = null;
         if (this.storage && typeof this.storage.get === 'function') {
           data = this.storage.get(key);

@@ -63,28 +63,19 @@
     _loadGridVisibility() {
       const h = this.errorHandler;
       try {
-        // Prefer injected storage (StorageService) when available
+        // Prefer injected storage (StorageService) when available. Do not fall back
+        // to global/localStorage to keep storage access DI-centric.
         if (this.storage && typeof this.storage.get === 'function') {
-          const stored = this.storage.get(this.config.STORAGE_KEYS.GRID_VISIBLE);
+          const key = (this.config && this.config.STORAGE_KEYS && this.config.STORAGE_KEYS.GRID_VISIBLE) || 'mp4_grid_visible';
+          const stored = this.storage.get(key);
           if (stored !== null && typeof stored !== 'undefined') {
             this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === true);
           } else {
             this.layerVisibility.grid = false; // Default to hidden
           }
-        } else if (typeof Storage !== 'undefined' && typeof localStorage !== 'undefined') {
-          const consent = (typeof checkStorageConsent === 'function') ? checkStorageConsent() : false;
-          if (consent) {
-            const stored = localStorage.getItem('mp4_grid_visible');
-            if (stored !== null) {
-              this.layerVisibility.grid = (stored === '1' || stored === 'true' || stored === true);
-            } else {
-              this.layerVisibility.grid = false; // Default to hidden
-            }
-          } else {
-            this.layerVisibility.grid = false; // Default to hidden
-          }
         } else {
-          this.layerVisibility.grid = false; // Default to hidden
+          // No injected storage available — default to hidden
+          this.layerVisibility.grid = false;
         }
       } catch (e) {
         try { h.logWarning('LayerState._loadGridVisibility failed', 'LayerState._loadGridVisibility', { error: e }); } catch (ignore) {}

@@ -13,7 +13,7 @@
       this.animationSpeed = (this.config.ROUTE && this.config.ROUTE.ANIMATION_SPEED) || 100; // pixels per second
       this.lineWidth = (this.config.ROUTE && this.config.ROUTE.LINE_WIDTH) || 3; // base stroke width
       this.animationDirection = 1; // 1 for forward, -1 for reverse
-      // Storage will be obtained via global getStorageService() when needed
+      // Storage will be obtained via injected provider (`options.storage`) or `storageProvider` when needed
       this.storage = (options && options.storage) ? options.storage : null;
       this.eventBus = options.eventBus || null;
     }
@@ -167,13 +167,12 @@
 
     loadFromStorage() {
       try {
-        const key = this.config && this.config.STORAGE_KEYS ? this.config.STORAGE_KEYS.ROUTE_ANIMATION : 'mp4_route_animation_state';
+        const key = (this.config?.STORAGE_KEYS?.ROUTE_ANIMATION_STATE) || 'mp4_routeAnimationState';
         let data = null;
 
+        // Only use injected storage provider for persistence. No global/localStorage fallback.
         if (this.storage && typeof this.storage.get === 'function') {
           data = this.storage.get(key);
-        } else if (typeof localStorage !== 'undefined') {
-          try { const raw = localStorage.getItem(key); data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
         }
 
         if (data && typeof data === 'object') {
