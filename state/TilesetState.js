@@ -109,10 +109,19 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.TILESET_STATE) || 'mp4_tileset_state';
-        let data = null;
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        // Respect consent — skip loads if consent not granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'TilesetState.loadFromStorage.consentCheck'); return false; }
         }
+
+        // Use storageUtils when available
+        let data = null;
+        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
+          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'tileset', this.errorHandler);
+        } else {
+          if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        }
+
         if (data && typeof data === 'object') {
           if (typeof data.tileset === 'string') this.tileset = data.tileset;
           if (typeof data.grayscale === 'boolean') this.grayscale = data.grayscale;

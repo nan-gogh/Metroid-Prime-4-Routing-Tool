@@ -335,10 +335,21 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.MAP_VIEW) || 'mp4_map_view';
-        let data = null;
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        // Respect consent — skip loads if consent not granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MapState.loadFromStorage.consentCheck'); return false; }
         }
+
+        // Use storageUtils when available to standardize behavior
+        let data = null;
+        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
+          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'mapView', this.errorHandler);
+        } else {
+          if (this.storage && typeof this.storage.get === 'function') {
+            data = this.storage.get(key);
+          }
+        }
+
         if (data && typeof data === 'object') {
           const minZoom = this.minZoom;
           const maxZoom = this.maxZoom;

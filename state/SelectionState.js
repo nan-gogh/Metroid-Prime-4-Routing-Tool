@@ -231,10 +231,19 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.SELECTION_STATE) || 'mp4_selectionState';
-        let data = null;
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        // Respect consent — skip loads if consent not granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'SelectionState.loadFromStorage.consentCheck'); return false; }
         }
+
+        // Use storageUtils when available
+        let data = null;
+        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
+          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'selection', this.errorHandler);
+        } else {
+          if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+        }
+
         if (data && typeof data === 'object') {
           if (data.selectedMarker && typeof data.selectedMarker === 'object') this.selectedMarker = data.selectedMarker;
           if (typeof data.selectedMarkerLayer === 'string') this.selectedMarkerLayer = data.selectedMarkerLayer;

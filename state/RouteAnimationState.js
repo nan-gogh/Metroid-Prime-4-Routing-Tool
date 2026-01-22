@@ -182,11 +182,17 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.ROUTE_ANIMATION_STATE) || 'mp4_routeAnimationState';
-        let data = null;
+        // Respect consent — skip loads if consent not granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.loadFromStorage.consentCheck'); return false; }
+        }
 
-        // Only use injected storage provider for persistence. No global/localStorage fallback.
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        // Use storageUtils when available
+        let data = null;
+        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
+          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'routeAnimation', this.errorHandler);
+        } else {
+          if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
         }
 
         if (data && typeof data === 'object') {
