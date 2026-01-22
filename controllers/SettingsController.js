@@ -631,22 +631,30 @@
         };
 
         const storage = this._getStorageInstance();
-        if (storage && typeof storage.set === 'function') {
-          storage.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
-          storage.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
-          storage.set(this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0');
-        } else if (storage && typeof storage.saveSetting === 'function') {
-          storage.saveSetting('mp4_tileset', settings.tileset);
-          storage.saveSetting('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-          storage.saveSetting('mp4_grid_visible', settings.gridVisible ? '1' : '0');
-        } else {
-          // Fallback to global storage service
-          const svc = this._getStorageInstance();
-          if (svc && typeof svc.set === 'function') {
-            svc.set('mp4_tileset', settings.tileset);
-            svc.set('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
-            svc.set('mp4_grid_visible', settings.gridVisible ? '1' : '0');
+        try {
+          if (typeof storageUtils !== 'undefined') {
+            storageUtils.saveWithEvents(storage, this.config.STORAGE_KEYS.TILESET, settings.tileset, this.eventBus || window.eventBus, this.config.STORAGE_KEYS.TILESET, this.errorHandler);
+            storageUtils.saveWithEvents(storage, this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0', this.eventBus || window.eventBus, this.config.STORAGE_KEYS.TILESET_GRAYSCALE, this.errorHandler);
+            storageUtils.saveWithEvents(storage, this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0', this.eventBus || window.eventBus, this.config.STORAGE_KEYS.GRID_VISIBLE, this.errorHandler);
+          } else if (storage && typeof storage.set === 'function') {
+            storage.set(this.config.STORAGE_KEYS.TILESET, settings.tileset);
+            storage.set(this.config.STORAGE_KEYS.TILESET_GRAYSCALE, settings.tilesetGrayscale ? '1' : '0');
+            storage.set(this.config.STORAGE_KEYS.GRID_VISIBLE, settings.gridVisible ? '1' : '0');
+          } else if (storage && typeof storage.saveSetting === 'function') {
+            storage.saveSetting(this.config.STORAGE_KEYS.TILESET || 'mp4_tileset', settings.tileset);
+            storage.saveSetting(this.config.STORAGE_KEYS.TILESET_GRAYSCALE || 'mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
+            storage.saveSetting(this.config.STORAGE_KEYS.GRID_VISIBLE || 'mp4_grid_visible', settings.gridVisible ? '1' : '0');
+          } else {
+            // Fallback to global storage service
+            const svc = this._getStorageInstance();
+            if (svc && typeof svc.set === 'function') {
+              svc.set('mp4_tileset', settings.tileset);
+              svc.set('mp4_tileset_grayscale', settings.tilesetGrayscale ? '1' : '0');
+              svc.set('mp4_grid_visible', settings.gridVisible ? '1' : '0');
+            }
           }
+        } catch (e) {
+          this.errorHandler.logWarning('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });
         }
       } catch (e) {
         this.errorHandler.logWarning('SettingsController: Failed to save display settings', 'SettingsController._saveDisplaySettings', { error: e });

@@ -174,6 +174,9 @@
         // Markers
         saveMarkers: (markers) => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) {
+              return storageUtils.saveWithEvents(storageInstance, cfgKeys.MARKERS || 'mp4_markers', markers, this.eventBus, cfgKeys.MARKERS || 'mp4_markers', this.errorHandler);
+            }
             if (storageInstance && typeof storageInstance.set === 'function') {
               return storageInstance.set(cfgKeys.MARKERS || 'mp4_markers', markers);
             }
@@ -185,6 +188,7 @@
         },
         loadMarkers: () => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) return storageUtils.loadWithEvents(storageInstance, cfgKeys.MARKERS || 'mp4_markers', [], this.eventBus, cfgKeys.MARKERS || 'mp4_markers', this.errorHandler);
             if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.MARKERS || 'mp4_markers', []);
             if (storageInstance && typeof storageInstance.loadMarkers === 'function') return storageInstance.loadMarkers();
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadMarkers', {}); }
@@ -193,6 +197,9 @@
         // Route
         saveRoute: (routeData) => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) {
+              return storageUtils.saveWithEvents(storageInstance, cfgKeys.ROUTE || 'mp4_route', routeData, this.eventBus, cfgKeys.ROUTE || 'mp4_route', this.errorHandler);
+            }
             if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(cfgKeys.ROUTE || 'mp4_route', routeData);
             if (storageInstance && typeof storageInstance.saveRoute === 'function') return storageInstance.saveRoute(routeData);
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveRoute', {}); }
@@ -200,6 +207,7 @@
         },
         loadRoute: () => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) return storageUtils.loadWithEvents(storageInstance, cfgKeys.ROUTE || 'mp4_route', null, this.eventBus, cfgKeys.ROUTE || 'mp4_route', this.errorHandler);
             if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.ROUTE || 'mp4_route', null);
             if (storageInstance && typeof storageInstance.loadRoute === 'function') return storageInstance.loadRoute();
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadRoute', {}); }
@@ -208,6 +216,9 @@
         // Route looping flag
         saveRouteLoopingFlag: (flag) => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) {
+              return storageUtils.saveWithEvents(storageInstance, cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', !!flag, this.eventBus, cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', this.errorHandler);
+            }
             if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', !!flag);
             if (storageInstance && typeof storageInstance.saveRouteLoopingFlag === 'function') return storageInstance.saveRouteLoopingFlag(!!flag);
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveRouteLoopingFlag', {}); }
@@ -215,6 +226,7 @@
         },
         loadRouteLoopingFlag: () => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) return storageUtils.loadWithEvents(storageInstance, cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', false, this.eventBus, cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', this.errorHandler);
             if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(cfgKeys.ROUTE_LOOPING || 'mp4_route_looping', false);
             if (storageInstance && typeof storageInstance.loadRouteLoopingFlag === 'function') return storageInstance.loadRouteLoopingFlag();
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadRouteLoopingFlag', {}); }
@@ -223,6 +235,7 @@
         // Generic setting access for legacy code
         loadSetting: (key) => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) return storageUtils.loadWithEvents(storageInstance, key, null, this.eventBus, key, this.errorHandler);
             if (storageInstance && typeof storageInstance.loadSetting === 'function') return storageInstance.loadSetting(key);
             if (storageInstance && typeof storageInstance.get === 'function') return storageInstance.get(key, null);
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.loadSetting', {}); }
@@ -230,6 +243,7 @@
         },
         saveSetting: (key, val) => {
           try {
+            if (typeof storageUtils !== 'undefined' && storageInstance) return storageUtils.saveWithEvents(storageInstance, key, val, this.eventBus, key, this.errorHandler);
             if (storageInstance && typeof storageInstance.saveSetting === 'function') return storageInstance.saveSetting(key, val);
             if (storageInstance && typeof storageInstance.set === 'function') return storageInstance.set(key, val);
           } catch (e) { this.errorHandler.logWarning(e, 'DataController.storageAdapter.saveSetting', {}); }

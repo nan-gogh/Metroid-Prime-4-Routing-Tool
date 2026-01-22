@@ -18,6 +18,7 @@
       this.multiSelectedMarkers = new Set(); // For future multi-selection support
 
       this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider ? options.storageProvider.getInstance() : null);
+      this.storageProvider = options && options.storageProvider ? options.storageProvider : null;
       this.eventBus = options.eventBus || null;
 
       // Set up event listeners
@@ -191,16 +192,17 @@
           selectedMarkerLayer: this.selectedMarkerLayer,
           multiSelectedMarkers: Array.from(this.multiSelectedMarkers)
         };
-        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
-          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'selection', this.errorHandler);
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.saveWithEvents === 'function') {
+          storageUtils.saveWithEvents(stor, key, payload, this.eventBus, 'selection', this.errorHandler);
           return;
         }
 
         // Fallback behavior
-        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
+        if (stor && typeof stor.hasConsent === 'function') { if (!stor.hasConsent()) return; }
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'selection' });
         let saved = false;
-        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'SelectionState.saveToStorage.storageCall'); saved = false; } }
+        if (stor) { try { if (typeof stor.set === 'function') saved = !!stor.set(key, payload); else if (typeof stor.saveSetting === 'function') saved = !!stor.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'SelectionState.saveToStorage.storageCall'); saved = false; } }
         if (saved) this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'selection', selectedCount: this.multiSelectedMarkers.size }); else this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'selection', error: 'storage.save returned false or consent denied' });
       } catch (e) {
         try { 
@@ -217,16 +219,17 @@
       try {
         const key = (this.config?.STORAGE_KEYS?.SELECTION_STATE) || 'mp4_selectionState';
         // Respect consent — skip loads if consent not granted
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'SelectionState.loadFromStorage.consentCheck'); return false; }
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
+        if (stor && typeof stor.hasConsent === 'function') {
+          try { if (!stor.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'SelectionState.loadFromStorage.consentCheck'); return false; }
         }
 
         // Use storageUtils when available
         let data = null;
-        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
-          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'selection', this.errorHandler);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.loadWithEvents === 'function') {
+          data = storageUtils.loadWithEvents(stor, key, null, this.eventBus, 'selection', this.errorHandler);
         } else {
-          if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+          if (stor && typeof stor.get === 'function') data = stor.get(key);
         }
 
         if (data && typeof data === 'object') {

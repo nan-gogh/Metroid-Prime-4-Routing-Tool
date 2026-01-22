@@ -3,7 +3,7 @@
 (function (global) {
   function _hasConsent(storage) {
     try {
-      return storage && typeof storage.hasConsent === 'function' ? storage.hasConsent() : true;
+      return storage && typeof storage.hasConsent === 'function' ? storage.hasConsent() : false;
     } catch (e) {
       return false;
     }

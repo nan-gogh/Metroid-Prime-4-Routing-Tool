@@ -344,13 +344,10 @@ class InteractiveMap {
             // LayerState initializes visibility in constructor
             // Set grid visibility from storage
             try {
-                const _stor = getStorage();
-                let g = null;
-                if (_stor && typeof _stor.loadSetting === 'function') {
-                    g = _stor.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
-                } else if (_stor && typeof _stor.get === 'function') {
-                    g = _stor.get(MP4Config.STORAGE_KEYS.GRID_VISIBLE);
-                }
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                const g = (typeof storageUtils !== 'undefined')
+                    ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.GRID_VISIBLE, null, window.eventBus, MP4Config.STORAGE_KEYS.GRID_VISIBLE, moduleErrorHandler)
+                    : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.GRID_VISIBLE) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.GRID_VISIBLE) : null));
 
                 if (g === null || typeof g === 'undefined') {
                     this.layerState.setGridVisible(false);
@@ -406,36 +403,36 @@ class InteractiveMap {
         if (this.layerState) {
             // Load tileset from storage
             try {
-                const _stor = getStorage();
-                let t = null;
-                if (_stor && typeof _stor.loadSetting === 'function') t = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
-                else if (_stor && typeof _stor.get === 'function') t = _stor.get(MP4Config.STORAGE_KEYS.TILESET);
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                const t = (typeof storageUtils !== 'undefined')
+                    ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET, null, window.eventBus, MP4Config.STORAGE_KEYS.TILESET, moduleErrorHandler)
+                    : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.TILESET) : null));
                 this.tileset = t || 'sat';
             } catch (e) { this.tileset = 'sat'; }
 
             // Load tileset grayscale from storage
             try {
-                const _stor = getStorage();
-                let g = null;
-                if (_stor && typeof _stor.loadSetting === 'function') g = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
-                else if (_stor && typeof _stor.get === 'function') g = _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                const g = (typeof storageUtils !== 'undefined')
+                    ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, null, window.eventBus, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, moduleErrorHandler)
+                    : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE) : null));
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
         } else {
             // Fallback for when LayerState is not available
             try {
-                const _stor = getStorage();
-                let t = null;
-                if (_stor && typeof _stor.loadSetting === 'function') t = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET);
-                else if (_stor && typeof _stor.get === 'function') t = _stor.get(MP4Config.STORAGE_KEYS.TILESET);
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                const t = (typeof storageUtils !== 'undefined')
+                    ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET, null, window.eventBus, MP4Config.STORAGE_KEYS.TILESET, moduleErrorHandler)
+                    : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.TILESET) : null));
                 this.tileset = t || 'sat';
             } catch (e) { this.tileset = 'sat'; }
 
             try {
-                const _stor = getStorage();
-                let g = null;
-                if (_stor && typeof _stor.loadSetting === 'function') g = _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
-                else if (_stor && typeof _stor.get === 'function') g = _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE);
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                const g = (typeof storageUtils !== 'undefined')
+                    ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, null, window.eventBus, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, moduleErrorHandler)
+                    : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE) : null));
                 this.tilesetGrayscale = (g === '1' || g === 1 || g === true);
             } catch (e) { this.tilesetGrayscale = false; }
         }
@@ -443,7 +440,7 @@ class InteractiveMap {
         // Load heatmap visibility from storage into dedicated HeatmapDisplayState
         if (this.heatmapDisplayState) {
             try {
-                const _stor = getStorage();
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
                 this.heatmapDisplayState.loadFromStorage(_stor);
             } catch (e) {
                 this.heatmapDisplayState.setVisible(false);
@@ -453,10 +450,12 @@ class InteractiveMap {
         // Load marker scaling configuration via provider-backed storage (consent gating
         // is handled by the storage provider — callers should not special-case consent).
         try {
-            const _stor = getStorage();
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
             let savedScaling = null;
             if (_stor) {
-                if (typeof _stor.get === 'function') savedScaling = _stor.get(MP4Config.STORAGE_KEYS.MARKER_SCALING);
+                if (typeof storageUtils !== 'undefined') {
+                    savedScaling = storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.MARKER_SCALING, null, window.eventBus, MP4Config.STORAGE_KEYS.MARKER_SCALING, moduleErrorHandler);
+                } else if (typeof _stor.get === 'function') savedScaling = _stor.get(MP4Config.STORAGE_KEYS.MARKER_SCALING);
                 else if (typeof _stor.loadSetting === 'function') savedScaling = _stor.loadSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING);
                 else if (typeof _stor.loadMarkerScaling === 'function') savedScaling = _stor.loadMarkerScaling();
             }
@@ -1137,9 +1136,15 @@ class InteractiveMap {
         try { this.imageState.incrementTilesetGeneration(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.incrementGeneration'); }
         try { this._abortAndCleanupTileLoads(); } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.abortTileLoads'); }
         try {
-            const _stor = getStorage();
-            if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
-            else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+            if (typeof storageUtils !== 'undefined') {
+                storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset, window.eventBus, MP4Config.STORAGE_KEYS.TILESET, this.errorHandler);
+            } else {
+                try {
+                    if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
+                    else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, this.tilesetState ? this.tilesetState.tileset : this.tileset);
+                } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting.fallback'); }
+            }
         } catch (e) { this.errorHandler.logError(e, 'InteractiveMap._handleTilesetChange.saveTilesetSetting'); }
         // Clear cached images and reload (folder may change depending on
         // whether grayscale variants are enabled)
@@ -1174,9 +1179,15 @@ class InteractiveMap {
             if (this.tilesetGrayscale === enabled) return;
             this.tilesetGrayscale = enabled;
             try {
-                const _stor = getStorage();
-                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
-                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                if (typeof storageUtils !== 'undefined') {
+                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0', window.eventBus, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.errorHandler);
+                } else {
+                    try {
+                        if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
+                        else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, this.tilesetGrayscale ? '1' : '0');
+                    } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting.fallback'); }
+                }
             } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setTilesetGrayscale.saveSetting'); }
             this._handleTilesetChange();
         }
@@ -1195,9 +1206,15 @@ class InteractiveMap {
             if (this._showGridHeatmap === enabled) return;
             this._showGridHeatmap = enabled;
             try {
-                const _stor = getStorage();
-                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
-                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
+                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                if (typeof storageUtils !== 'undefined') {
+                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0', window.eventBus, MP4Config.STORAGE_KEYS.GRID_HEATMAP, this.errorHandler);
+                } else {
+                    try {
+                        if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
+                        else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.GRID_HEATMAP, this._showGridHeatmap ? '1' : '0');
+                    } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting.fallback'); }
+                }
             } catch (e) { this.errorHandler.logError(e, 'InteractiveMap.setGridHeatmap.saveSetting'); }
             try {
                 // Redraw the heatmap renderer to show/hide heatmap overlay
@@ -1877,18 +1894,24 @@ class InteractiveMap {
     updateMarkerBaseSize(newSize) {
         MP4Config.MARKER_SCALING.baseSize = Math.max(2, Math.min(12, newSize));
         try {
-            const _stor = getStorage();
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
             if (_stor) {
                 const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 };
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveMarkerScaling === 'function') {
-                    _stor.saveMarkerScaling(payload);
+                if (typeof storageUtils !== 'undefined') {
+                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.MARKER_SCALING, payload, window.eventBus, MP4Config.STORAGE_KEYS.MARKER_SCALING, moduleErrorHandler);
+                } else {
+                    try {
+                        if (typeof _stor.set === 'function') {
+                            _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveSetting === 'function') {
+                            _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveMarkerScaling === 'function') {
+                            _stor.saveMarkerScaling(payload);
+                        }
+                    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerBaseSize.fallback', { message: 'Failed to save marker scaling config' }); }
                 }
             }
         } catch (e) {
@@ -1902,18 +1925,24 @@ class InteractiveMap {
     updateMarkerUserScaleMultiplier(newMultiplier) {
         MP4Config.MARKER_SCALING.userScaleMultiplier = Math.max(0.5, Math.min(1.5, newMultiplier));
         try {
-            const _stor = getStorage();
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
             if (_stor) {
                 const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 };
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveMarkerScaling === 'function') {
-                    _stor.saveMarkerScaling(payload);
+                if (typeof storageUtils !== 'undefined') {
+                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.MARKER_SCALING, payload, window.eventBus, MP4Config.STORAGE_KEYS.MARKER_SCALING, moduleErrorHandler);
+                } else {
+                    try {
+                        if (typeof _stor.set === 'function') {
+                            _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveSetting === 'function') {
+                            _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveMarkerScaling === 'function') {
+                            _stor.saveMarkerScaling(payload);
+                        }
+                    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerUserScaleMultiplier.fallback', { message: 'Failed to save marker scaling config' }); }
                 }
             }
         } catch (e) {
@@ -1927,18 +1956,24 @@ class InteractiveMap {
     updateMarkerHighlightMultiplier(newMultiplier) {
         MP4Config.MARKER_SCALING.highlightMultiplier = Math.max(1.5, Math.min(2.5, newMultiplier));
         try {
-            const _stor = getStorage();
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
             if (_stor) {
                 const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
                 };
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
-                } else if (typeof _stor.saveMarkerScaling === 'function') {
-                    _stor.saveMarkerScaling(payload);
+                if (typeof storageUtils !== 'undefined') {
+                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.MARKER_SCALING, payload, window.eventBus, MP4Config.STORAGE_KEYS.MARKER_SCALING, moduleErrorHandler);
+                } else {
+                    try {
+                        if (typeof _stor.set === 'function') {
+                            _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveSetting === 'function') {
+                            _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                        } else if (typeof _stor.saveMarkerScaling === 'function') {
+                            _stor.saveMarkerScaling(payload);
+                        }
+                    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerHighlightMultiplier.fallback', { message: 'Failed to save marker scaling config' }); }
                 }
             }
         } catch (e) {
@@ -2240,7 +2275,8 @@ function flushPendingUnsubscribers() {
 // LocalStorage helpers for layer visibility persistence
 function loadLayerVisibilityFromStorage() {
     try {
-        const _stor = getStorage();
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        if (typeof storageUtils !== 'undefined') return storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, null, window.eventBus, MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, moduleErrorHandler);
         if (_stor && typeof _stor.loadSetting === 'function') return _stor.loadSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY);
         if (_stor && typeof _stor.get === 'function') return _stor.get(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY);
         return null;
@@ -2250,9 +2286,13 @@ function loadLayerVisibilityFromStorage() {
     }
 }
 
-function saveLayerVisibilityToStorage(obj) {
+    function saveLayerVisibilityToStorage(obj) {
     try {
-        const _stor = getStorage();
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        if (typeof storageUtils !== 'undefined') {
+            storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, obj || {}, window.eventBus, MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, moduleErrorHandler);
+            return;
+        }
         if (_stor && typeof _stor.saveSetting === 'function') {
             _stor.saveSetting(MP4Config.STORAGE_KEYS.LAYER_VISIBILITY, obj || {});
             return;
@@ -2266,26 +2306,24 @@ function saveLayerVisibilityToStorage(obj) {
 }
 
 // Highlight multiplier persistence
-function loadHighlightMultiplierFromStorage() {
+    function loadHighlightMultiplierFromStorage() {
     try {
-        const _stor = getStorage();
-        if (_stor && typeof _stor.loadSetting === 'function') {
-            const v = _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER);
-            if (v === null || typeof v === 'undefined') return null;
-            return (typeof v === 'string') ? parseFloat(v) : Number(v);
-        }
-        if (_stor && typeof _stor.get === 'function') {
-            const v = _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER);
-            if (v === null || typeof v === 'undefined') return null;
-            return (typeof v === 'string') ? parseFloat(v) : Number(v);
-        }
-        return null;
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        const raw = (typeof storageUtils !== 'undefined')
+            ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, null, window.eventBus, MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, moduleErrorHandler)
+            : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER) : null));
+        if (raw === null || typeof raw === 'undefined') return null;
+        return (typeof raw === 'string') ? parseFloat(raw) : Number(raw);
     } catch (e) { moduleErrorHandler.logError(e, 'loadHighlightMultiplierFromStorage'); return null; }
 }
 
-function saveHighlightMultiplierToStorage(v) {
+    function saveHighlightMultiplierToStorage(v) {
     try {
-        const _stor = getStorage();
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        if (typeof storageUtils !== 'undefined') {
+            storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, v, window.eventBus, MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, moduleErrorHandler);
+            return;
+        }
         if (_stor && typeof _stor.saveSetting === 'function') {
             _stor.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHT_MULTIPLIER, v);
             return;
@@ -2299,26 +2337,24 @@ function saveHighlightMultiplierToStorage(v) {
 }
 
 // Highlighted layers persistence (consent-gated)
-function loadHighlightedLayersFromStorage() {
+    function loadHighlightedLayersFromStorage() {
     try {
-        const _stor = getStorage();
-        if (_stor && typeof _stor.loadSetting === 'function') {
-            const s = _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS);
-            if (!s) return null;
-            return s;
-        }
-        if (_stor && typeof _stor.get === 'function') {
-            const s = _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS);
-            if (!s) return null;
-            return s;
-        }
-        return null;
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        const s = (typeof storageUtils !== 'undefined')
+            ? storageUtils.loadWithEvents(_stor, MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, null, window.eventBus, MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, moduleErrorHandler)
+            : (_stor && typeof _stor.loadSetting === 'function' ? _stor.loadSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS) : (_stor && typeof _stor.get === 'function' ? _stor.get(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS) : null));
+        if (!s) return null;
+        return s;
     } catch (e) { moduleErrorHandler.logError(e, 'loadHighlightedLayersFromStorage'); return null; }
 }
 
-function saveHighlightedLayersToStorage(obj) {
+    function saveHighlightedLayersToStorage(obj) {
     try {
-        const _stor = getStorage();
+        const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+        if (typeof storageUtils !== 'undefined') {
+            storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, obj || {}, window.eventBus, MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, moduleErrorHandler);
+            return;
+        }
         if (_stor && typeof _stor.saveSetting === 'function') {
             _stor.saveSetting(MP4Config.STORAGE_KEYS.HIGHLIGHTED_LAYERS, obj || {});
             return;
@@ -2547,10 +2583,13 @@ async function init() {
                         if (map) {
                             try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - incrementGeneration'); }
                             try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - abortTileLoads'); }
-                            try {
-                                const _stor = getStorage();
-                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset);
-                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset);
+                                try {
+                                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                                if (typeof storageUtils !== 'undefined') {
+                                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset, window.eventBus, MP4Config.STORAGE_KEYS.TILESET, moduleErrorHandler);
+                                } else {
+                                    try { if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset); else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET, map.tilesetState.tileset); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting.fallback'); }
+                                }
                             } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - saveSetting'); }
                             try { map.preloadAllMapImages(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - preloadImages'); }
                             try { map.loadInitialImage(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_CHANGED - loadInitialImage'); }
@@ -2564,10 +2603,13 @@ async function init() {
                         // Grayscale state has changed, trigger side effects
                         // NOTE: Do NOT call map.setTilesetGrayscale() here - it would emit the event again!
                         if (map) {
-                            try {
-                                const _stor = getStorage();
-                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0');
-                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0');
+                                try {
+                                const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
+                                if (typeof storageUtils !== 'undefined') {
+                                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0', window.eventBus, MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, moduleErrorHandler);
+                                } else {
+                                    try { if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0'); else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.TILESET_GRAYSCALE, map.tilesetState.grayscale ? '1' : '0'); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - saveSetting.fallback'); }
+                                }
                             } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - saveSetting'); }
                             try { map.imageState.incrementTilesetGeneration(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - incrementGeneration'); }
                             try { map._abortAndCleanupTileLoads(); } catch (e) { moduleErrorHandler.logError(e, 'EventBus:TILESET_GRAYSCALE_CHANGED - abortTileLoads'); }
@@ -2583,10 +2625,13 @@ async function init() {
                         // Display settings have changed — update persistence/UI as needed.
                         // Rendering decisions are owned by RenderController; do not markDirty/render here.
                             if (map && data && typeof data.persist === 'boolean') {
-                            try {
+                                try {
                                 const _stor = getStorage();
-                                if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data);
-                                else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data);
+                                if (typeof storageUtils !== 'undefined') {
+                                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data, window.eventBus, MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, moduleErrorHandler);
+                                } else {
+                                    try { if (_stor && typeof _stor.saveSetting === 'function') _stor.saveSetting(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); else if (_stor && typeof _stor.set === 'function') _stor.set(MP4Config.STORAGE_KEYS.DISPLAY_SETTINGS, data); } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.fallback'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.logFallback', { message: 'DISPLAY_SETTINGS_CHANGED save failed' }); } catch (ignore) {} } }
+                                }
                             } catch (e) { try { moduleErrorHandler && moduleErrorHandler.logError && moduleErrorHandler.logError(e, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting'); } catch (logErr) { try { moduleErrorHandler && moduleErrorHandler.logWarning(logErr, 'EventBus:DISPLAY_SETTINGS_CHANGED.saveSetting.logFallback', { message: 'DISPLAY_SETTINGS_CHANGED save failed' }); } catch (ignore) {} } }
                         }
                     }
@@ -2898,23 +2943,24 @@ async function init() {
                             // Persist using available storage APIs
                             try {
                                 const _stor = getStorage();
-                                if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
-                                    if (typeof _stor.set === 'function') {
-                                        _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                                            userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                                            highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                                        });
-                                    } else if (typeof _stor.saveSetting === 'function') {
-                                        _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                                            userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                                            highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                                        });
-                                    }
-                                } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
-                                    _stor.saveMarkerScaling({
-                                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                                    });
+                                const payload = {
+                                    userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
+                                    highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
+                                };
+                                if (typeof storageUtils !== 'undefined') {
+                                    storageUtils.saveWithEvents(_stor, MP4Config.STORAGE_KEYS.MARKER_SCALING, payload, window.eventBus, MP4Config.STORAGE_KEYS.MARKER_SCALING, moduleErrorHandler);
+                                } else {
+                                    try {
+                                        if (_stor && typeof _stor.hasConsent === 'function' && !_stor.hasConsent()) {
+                                            // no consent - skip
+                                        } else if (_stor && typeof _stor.set === 'function') {
+                                            _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                                        } else if (_stor && typeof _stor.saveSetting === 'function') {
+                                            _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                                        } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
+                                            _stor.saveMarkerScaling(payload);
+                                        }
+                                    } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'MARKER_SCALING_SAVE_REQUESTED.persist.fallback'); }
                                 }
                             } catch (e) { moduleErrorHandler && moduleErrorHandler.logWarning(e, 'MARKER_SCALING_SAVE_REQUESTED.persist'); }
 
@@ -3225,7 +3271,7 @@ async function init() {
     try {
         let markers = null;
         try {
-            const _stor = getStorage();
+            const _stor = (typeof map !== 'undefined' && map && map.storageProvider && typeof map.storageProvider.getInstance === 'function') ? map.storageProvider.getInstance() : getStorage();
             if (_stor && typeof _stor.loadSetting === 'function') {
                 markers = _stor.loadSetting(MP4Config.STORAGE_KEYS.CUSTOM_MARKERS);
             } else if (_stor && typeof _stor.get === 'function') {

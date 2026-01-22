@@ -26,6 +26,7 @@
       // Initialize layer configuration
       this._initializeLayerConfig();
       this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider ? options.storageProvider.getInstance() : null);
+      this.storageProvider = options && options.storageProvider ? options.storageProvider : null;
       this.eventBus = options.eventBus || null;
     }
 
@@ -307,20 +308,26 @@
           showGridHeatmap: this._showGridHeatmap 
         };
         
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
         // Check consent FIRST — only save if consent granted
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          if (!this.storage.hasConsent()) {
+        if (stor && typeof stor.hasConsent === 'function') {
+          if (!stor.hasConsent()) {
             return; // No consent — silently return
           }
         }
         
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.saveWithEvents === 'function') {
+          storageUtils.saveWithEvents(stor, key, payload, this.eventBus, 'layerState', this.errorHandler);
+          return;
+        }
+
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'layerState' });
 
         let saved = false;
-        if (this.storage) {
+        if (stor) {
           try {
-            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
-            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
+            if (typeof stor.set === 'function') saved = !!stor.set(key, payload);
+            else if (typeof stor.saveSetting === 'function') saved = !!stor.saveSetting(key, payload);
           } catch (e) {
             this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'LayerState.saveToStorage.storageCall');
             saved = false;
@@ -346,9 +353,14 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.LAYER_STATE) || 'mp4_layer_state';
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
         let data = null;
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.loadWithEvents === 'function') {
+          data = storageUtils.loadWithEvents(stor, key, null, this.eventBus, 'layerState', this.errorHandler);
+        } else {
+          if (stor && typeof stor.get === 'function') {
+            data = stor.get(key);
+          }
         }
         if (data && typeof data === 'object') {
           if (data.layerVisibility && typeof data.layerVisibility === 'object') {

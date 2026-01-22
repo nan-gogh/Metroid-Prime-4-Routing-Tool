@@ -18,6 +18,7 @@
       this.highlightScaleMultiplier = 1.0;
       this._previousHighlights = new Map(); // layerKey -> wasHighlighted
       this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.storageProvider = options && options.storageProvider ? options.storageProvider : null;
       this.eventBus = options.eventBus || null;
     }
 
@@ -139,21 +140,22 @@
     saveToStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.HIGHLIGHT_STATE) || 'mp4_highlightState';
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
         const payload = { 
           highlightedLayers: Array.from(this.highlightedLayers), 
           highlightConfig: this.highlightConfig, 
           highlightScaleMultiplier: this.highlightScaleMultiplier 
         };
-        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
-          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'highlight', this.errorHandler);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.saveWithEvents === 'function') {
+          storageUtils.saveWithEvents(stor, key, payload, this.eventBus, 'highlight', this.errorHandler);
           return;
         }
 
         // Fallback behavior
-        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
+        if (stor && typeof stor.hasConsent === 'function') { if (!stor.hasConsent()) return; }
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'highlight' });
         let saved = false;
-        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HighlightState.saveToStorage.storageCall'); saved = false; } }
+        if (stor) { try { if (typeof stor.set === 'function') saved = !!stor.set(key, payload); else if (typeof stor.saveSetting === 'function') saved = !!stor.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HighlightState.saveToStorage.storageCall'); saved = false; } }
         if (saved) this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'highlight', highlightedCount: this.highlightedLayers.size }); else this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'highlight', error: 'storage.save returned false or consent denied' });
       } catch (e) {
         try { 

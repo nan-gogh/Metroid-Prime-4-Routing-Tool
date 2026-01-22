@@ -15,6 +15,7 @@
       this.animationDirection = 1; // 1 for forward, -1 for reverse
       // Storage will be obtained via injected provider (`options.storage`) or `storageProvider` when needed
       this.storage = (options && options.storage) ? options.storage : null;
+      this.storageProvider = options && options.storageProvider ? options.storageProvider : null;
       this.eventBus = options.eventBus || null;
     }
 
@@ -144,16 +145,17 @@
           lineWidth: this.lineWidth,
           animationDirection: this.animationDirection
         };
-        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
-          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'routeAnimation', this.errorHandler);
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.saveWithEvents === 'function') {
+          storageUtils.saveWithEvents(stor, key, payload, this.eventBus, 'routeAnimation', this.errorHandler);
           return;
         }
 
         // Fallback behavior
-        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
+        if (stor && typeof stor.hasConsent === 'function') { if (!stor.hasConsent()) return; }
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'routeAnimation' });
         let saved = false;
-        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.saveToStorage.storageCall'); saved = false; } }
+        if (stor) { try { if (typeof stor.set === 'function') saved = !!stor.set(key, payload); else if (typeof stor.saveSetting === 'function') saved = !!stor.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.saveToStorage.storageCall'); saved = false; } }
         if (saved) this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'routeAnimation', animationSpeed: this.animationSpeed, lineWidth: this.lineWidth }); else this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { entity: 'routeAnimation', error: 'storage.save returned false or consent denied' });
       } catch (e) {
         this.errorHandler?.logError?.(e, 'RouteAnimationState.saveToStorage');
@@ -168,16 +170,17 @@
       try {
         const key = (this.config?.STORAGE_KEYS?.ROUTE_ANIMATION_STATE) || 'mp4_routeAnimationState';
         // Respect consent — skip loads if consent not granted
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          try { if (!this.storage.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.loadFromStorage.consentCheck'); return false; }
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
+        if (stor && typeof stor.hasConsent === 'function') {
+          try { if (!stor.hasConsent()) return false; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.loadFromStorage.consentCheck'); return false; }
         }
 
         // Use storageUtils when available
         let data = null;
-        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
-          data = window.storageUtils.loadWithEvents(this.storage, key, null, this.eventBus, 'routeAnimation', this.errorHandler);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.loadWithEvents === 'function') {
+          data = storageUtils.loadWithEvents(stor, key, null, this.eventBus, 'routeAnimation', this.errorHandler);
         } else {
-          if (this.storage && typeof this.storage.get === 'function') data = this.storage.get(key);
+          if (stor && typeof stor.get === 'function') data = stor.get(key);
         }
 
         if (data && typeof data === 'object') {

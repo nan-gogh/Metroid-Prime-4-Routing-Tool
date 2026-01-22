@@ -22,6 +22,7 @@
       this.editRouteMode = false;
       // Injected services (prefer provider when available)
       this.storage = (options && options.storage) ? options.storage : (options && options.storageProvider && typeof options.storageProvider.getInstance === 'function' ? options.storageProvider.getInstance() : null);
+      this.storageProvider = options && options.storageProvider ? options.storageProvider : null;
       this.eventBus = options.eventBus || null;
     }
 
@@ -138,16 +139,17 @@
       try {
         const key = (this.config?.STORAGE_KEYS?.EDIT_MODE_STATE) || 'mp4_editModeState';
         const payload = { editMarkersMode: this.editMarkersMode, editRouteMode: this.editRouteMode };
-        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
-          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'editMode', this.errorHandler);
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
+        if (typeof storageUtils !== 'undefined' && typeof storageUtils.saveWithEvents === 'function') {
+          storageUtils.saveWithEvents(stor, key, payload, this.eventBus, 'editMode', this.errorHandler);
           return;
         }
 
         // Fallback behavior
-        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
+        if (stor && typeof stor.hasConsent === 'function') { if (!stor.hasConsent()) return; }
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'editMode' });
         let saved = false;
-        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'EditModeState.saveToStorage.storageCall'); saved = false; } }
+        if (stor) { try { if (typeof stor.set === 'function') saved = !!stor.set(key, payload); else if (typeof stor.saveSetting === 'function') saved = !!stor.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'EditModeState.saveToStorage.storageCall'); saved = false; } }
         if (saved) this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'editMode', editMarkersMode: this.editMarkersMode, editRouteMode: this.editRouteMode }); else this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'editMode', error: 'storage.save returned false or consent denied' });
       } catch (e) { 
         this.errorHandler?.logError?.(e, 'EditModeState.saveToStorage');
@@ -161,9 +163,10 @@
     loadFromStorage() {
       try {
         const key = (this.config?.STORAGE_KEYS?.EDIT_MODE_STATE) || 'mp4_edit_mode_state';
+        const stor = this.storage || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
         let data = null;
-        if (this.storage && typeof this.storage.get === 'function') {
-          data = this.storage.get(key);
+        if (stor && typeof stor.get === 'function') {
+          data = stor.get(key);
         }
         if (data && typeof data === 'object') {
           if (typeof data.editMarkersMode === 'boolean') this.editMarkersMode = data.editMarkersMode;
