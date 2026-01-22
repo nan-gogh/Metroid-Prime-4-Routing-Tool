@@ -144,32 +144,17 @@
           highlightConfig: this.highlightConfig, 
           highlightScaleMultiplier: this.highlightScaleMultiplier 
         };
-        
-        // Check consent FIRST — only save if consent granted
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          if (!this.storage.hasConsent()) {
-            return; // No consent — silently return
-          }
+        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
+          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'highlight', this.errorHandler);
+          return;
         }
-        
+
+        // Fallback behavior
+        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
         this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'highlight' });
-
         let saved = false;
-        if (this.storage) {
-          try {
-            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
-            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
-          } catch (e) {
-            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HighlightState.saveToStorage.storageCall');
-            saved = false;
-          }
-        }
-
-        if (saved) {
-          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'highlight', highlightedCount: this.highlightedLayers.size });
-        } else {
-          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'highlight', error: 'storage.save returned false or consent denied' });
-        }
+        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HighlightState.saveToStorage.storageCall'); saved = false; } }
+        if (saved) this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'highlight', highlightedCount: this.highlightedLayers.size }); else this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'highlight', error: 'storage.save returned false or consent denied' });
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'HighlightState.saveToStorage');

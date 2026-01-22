@@ -144,32 +144,17 @@
           lineWidth: this.lineWidth,
           animationDirection: this.animationDirection
         };
-
-        // Check consent FIRST — only save if consent granted
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          if (!this.storage.hasConsent()) {
-            return; // No consent — silently return
-          }
+        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
+          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'routeAnimation', this.errorHandler);
+          return;
         }
 
+        // Fallback behavior
+        if (this.storage && typeof this.storage.hasConsent === 'function') { if (!this.storage.hasConsent()) return; }
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'routeAnimation' });
-
         let saved = false;
-        if (this.storage) {
-          try {
-            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
-            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
-          } catch (e) {
-            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.saveToStorage.storageCall');
-            saved = false;
-          }
-        }
-
-        if (saved) {
-          this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'routeAnimation', animationSpeed: this.animationSpeed, lineWidth: this.lineWidth });
-        } else {
-          this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { entity: 'routeAnimation', error: 'storage.save returned false or consent denied' });
-        }
+        if (this.storage) { try { if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload); else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload); } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteAnimationState.saveToStorage.storageCall'); saved = false; } }
+        if (saved) this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'routeAnimation', animationSpeed: this.animationSpeed, lineWidth: this.lineWidth }); else this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { entity: 'routeAnimation', error: 'storage.save returned false or consent denied' });
       } catch (e) {
         this.errorHandler?.logError?.(e, 'RouteAnimationState.saveToStorage');
         this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { 

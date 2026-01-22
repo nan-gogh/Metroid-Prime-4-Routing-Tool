@@ -150,50 +150,30 @@ class MarkerManager {
         try {
             // Debug: entry
             try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage called', 'MarkerManager.saveToStorage', { markerCount: this.markers.length, hasStorage: !!this.storage }); } catch (__) {}
-
-            // Check consent FIRST, before emitting any events
-            if (this.storage && typeof this.storage.hasConsent === 'function') {
-                const consent = this.storage.hasConsent();
-                try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage: consent check', 'MarkerManager.saveToStorage', { hasConsent: consent }); } catch (__) {}
-                if (!consent) {
-                    try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage: aborting due to no consent', 'MarkerManager.saveToStorage', {}); } catch (__) {}
-                    return; // No consent — silently return
-                }
-            }
-
-            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'markers' });
-
-            // Get storage key from config
+            // Use storageUtils helper when available to standardize consent checks and lifecycle events
             const key = (this.config?.STORAGE_KEYS?.CUSTOM_MARKERS) || 'mp4_customMarkers';
-
-            // Use StorageService adapter and respect its return value
             let saved = false;
-            if (this.storage) {
+            if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
                 try {
-                    if (typeof this.storage.set === 'function') {
-                        saved = !!this.storage.set(key, this.markers);
-                    } else if (typeof this.storage.saveMarkers === 'function') {
-                        saved = !!this.storage.saveMarkers(this.markers);
-                    }
+                    saved = !!window.storageUtils.saveWithEvents(this.storage, key, this.markers, this.eventBus, 'markers', this.errorHandler);
                 } catch (e) {
-                    this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.storageCall', { key });
+                    this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.storageUtils');
                     saved = false;
+                }
+            } else {
+                // Fallback to previous behavior
+                if (this.storage) {
+                    try {
+                        if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, this.markers);
+                        else if (typeof this.storage.saveMarkers === 'function') saved = !!this.storage.saveMarkers(this.markers);
+                    } catch (e) {
+                        this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.storageCall', { key });
+                        saved = false;
+                    }
                 }
             }
 
             try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage result', 'MarkerManager.saveToStorage', { key, saved, markerCount: this.markers.length }); } catch (__) {}
-
-            if (saved) {
-                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, {
-                    entity: 'markers',
-                    count: this.markers.length
-                });
-            } else {
-                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, {
-                    entity: 'markers',
-                    error: 'storage.save returned false or consent denied'
-                });
-            }
         } catch (e) {
             this.errorHandler.logError(e, 'MarkerManager.saveToStorage');
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { 

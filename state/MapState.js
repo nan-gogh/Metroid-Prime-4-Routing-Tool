@@ -277,50 +277,27 @@
       try {
         const key = (this.config?.STORAGE_KEYS?.MAP_VIEW) || 'mp4_map_view';
         const payload = { panX: this.panX, panY: this.panY, zoom: this.zoom };
-        
-        // Check consent FIRST, before emitting any events
-        if (this.storage && typeof this.storage.hasConsent === 'function') {
-          try {
-            if (!this.storage.hasConsent()) {
-              return; // No consent — silently return without emitting events
-            }
-          } catch (e) {
-            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning('MapState.saveToStorage: consent check failed', 'MapState.saveToStorage', { error: e });
-            return; // On error, assume no consent and return
-          }
-        }
-
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'mapView' });
-
-        // Only emit COMPLETED when the underlying storage actually succeeded.
-        if (this.storage && typeof this.storage.set === 'function') {
-          const ok = (() => {
-            try {
-              return !!this.storage.set(key, payload);
-            } catch (e) { return false; }
-          })();
-          if (ok) {
-            this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, {
-              entity: 'mapView',
-              zoom: this.zoom,
-              panX: this.panX,
-              panY: this.panY
-            });
-            return;
-          }
-          // Storage.set returned falsy (likely write failed)
-          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, {
-            entity: 'mapView',
-            error: 'saveFailed'
-          });
+        // Use storageUtils helper to perform consent-checked save and emit lifecycle events
+        if (window.storageUtils && typeof window.storageUtils.saveWithEvents === 'function') {
+          window.storageUtils.saveWithEvents(this.storage, key, payload, this.eventBus, 'mapView', this.errorHandler);
           return;
         }
 
-        // No storage available - emit failed so callers don't assume success
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, {
-          entity: 'mapView',
-          error: 'noStorage'
-        });
+        // Fallback behavior (preserve previous semantics)
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          try { if (!this.storage.hasConsent()) return; } catch (e) { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning('MapState.saveToStorage: consent check failed', 'MapState.saveToStorage', { error: e }); return; }
+        }
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'mapView' });
+        if (this.storage && typeof this.storage.set === 'function') {
+          const ok = (() => { try { return !!this.storage.set(key, payload); } catch (e) { return false; } })();
+          if (ok) {
+            this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'mapView', zoom: this.zoom, panX: this.panX, panY: this.panY });
+            return;
+          }
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'mapView', error: 'saveFailed' });
+          return;
+        }
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'mapView', error: 'noStorage' });
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'MapState.saveToStorage');
