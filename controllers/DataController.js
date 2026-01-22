@@ -312,17 +312,32 @@
       // Load marker scaling configuration
       try {
         const storage = this._storageAdapter || (this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null);
-        if (storage && typeof storage.loadSetting === 'function' && storage.loadSetting) {
-          const savedScaling = storage.loadSetting(this.config.STORAGE_KEYS.MARKER_SCALING);
+        // Central consent gating: skip all loads if storage provider reports no consent
+        if (storage && typeof storage.hasConsent === 'function' && !storage.hasConsent()) {
+          try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('DataController._loadStoredData: skipping loads due to no consent', 'DataController._loadStoredData'); } catch (__) {}
+          return;
+        }
+
+        // Use storageUtils when available to standardize behavior
+        if (window.storageUtils && typeof window.storageUtils.loadWithEvents === 'function') {
+          const savedScaling = window.storageUtils.loadWithEvents(storage, this.config.STORAGE_KEYS.MARKER_SCALING, null, this.eventBus, 'markerScaling', this.errorHandler);
           if (savedScaling) {
             this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
             this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
           }
-        } else if (storage && typeof storage.get === 'function') {
-          const savedScaling = storage.get(this.config.STORAGE_KEYS.MARKER_SCALING);
-          if (savedScaling) {
-            this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
-            this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
+        } else {
+          if (storage && typeof storage.loadSetting === 'function' && storage.loadSetting) {
+            const savedScaling = storage.loadSetting(this.config.STORAGE_KEYS.MARKER_SCALING);
+            if (savedScaling) {
+              this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
+              this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
+            }
+          } else if (storage && typeof storage.get === 'function') {
+            const savedScaling = storage.get(this.config.STORAGE_KEYS.MARKER_SCALING);
+            if (savedScaling) {
+              this.config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || this.config.MARKER_SCALING.userScaleMultiplier;
+              this.config.MARKER_SCALING.highlightMultiplier = savedScaling.highlightMultiplier || this.config.MARKER_SCALING.highlightMultiplier;
+            }
           }
         }
       } catch (e) {
