@@ -36,11 +36,18 @@ function ensureBaseStateManager() {
 }
 
 function ensureEventTypes() {
-  global.EventTypes = global.EventTypes || {
-    MAP_VIEW_CHANGED: 'map:view_changed',
-    STORAGE_SAVE_STARTED: 'storage:save_started',
-    STORAGE_SAVE_COMPLETED: 'storage:save_completed',
-    STORAGE_SAVE_FAILED: 'storage:save_failed'
+  try {
+    // Prefer using the canonical EventTypes implementation so tests stay aligned
+    require(path.join(__dirname, '../utils/EventTypes.js'));
+  } catch (e) {
+    // best-effort fallback below
+  }
+
+  global.EventTypes = global.EventTypes || (global.window && global.window.EventTypes) || {
+    MAP_VIEW_CHANGED: 'map:view-changed',
+    STORAGE_SAVE_STARTED: 'storage:save-started',
+    STORAGE_SAVE_COMPLETED: 'storage:save-completed',
+    STORAGE_SAVE_FAILED: 'storage:save-failed'
   };
   global.window = global.window || {};
   global.window.EventTypes = global.window.EventTypes || global.EventTypes;

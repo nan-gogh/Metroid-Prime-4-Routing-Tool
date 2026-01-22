@@ -44,6 +44,9 @@
         // Load initial data from storage
         await this._loadStoredData();
 
+        // Set up cross-cutting event listeners (storage, route import/export)
+        try { this._setupEventListeners(); } catch (e) { this.errorHandler.logWarning(e, 'DataController.init.setupEventListeners'); }
+
         // Emit data ready event
         this.eventBus.emit('data:ready', {
           hasMarkers: !!this._markerManager,
@@ -53,6 +56,51 @@
       } catch (e) {
         this.errorHandler.logError(e, 'DataController.init failed');
         throw e;
+      }
+    }
+
+    _setupEventListeners() {
+      if (!this.eventBus || typeof window === 'undefined' || !window.EventTypes) return;
+      try {
+        const et = window.EventTypes;
+        // Storage lifecycle notifications
+        const onSaveStarted = (data) => {
+          try { if (this.notificationInterface && typeof this.notificationInterface.showInfo === 'function') this.notificationInterface.showInfo(`Saving ${data && data.entity ? data.entity : data && data.key ? data.key : ''}`); } catch (__) {}
+        };
+        const onSaveCompleted = (data) => {
+          try { if (this.notificationInterface && typeof this.notificationInterface.showSuccess === 'function') this.notificationInterface.showSuccess(`${data && data.entity ? data.entity : data && data.key ? data.key : 'Save'} saved`); } catch (__) {}
+        };
+        const onSaveFailed = (data) => {
+          try {
+            if (this.notificationInterface && typeof this.notificationInterface.showRouteError === 'function') {
+              this.notificationInterface.showRouteError(data && data.error ? data.error : 'Save failed');
+            } else if (this.notificationInterface && typeof this.notificationInterface.showError === 'function') {
+              this.notificationInterface.showError(data && data.error ? data.error : 'Save failed');
+            }
+          } catch (__) {}
+        };
+
+        this._eventUnsubscribers.push(this.eventBus.on(et.STORAGE_SAVE_STARTED, onSaveStarted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.STORAGE_SAVE_COMPLETED, onSaveCompleted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.STORAGE_SAVE_FAILED, onSaveFailed));
+
+        // Route import/export notifications
+        const onRouteImportStarted = () => { try { if (this.notificationInterface && typeof this.notificationInterface.showInfo === 'function') this.notificationInterface.showInfo('Importing route...'); } catch (__) {} };
+        const onRouteImportCompleted = (d) => { try { if (this.notificationInterface && typeof this.notificationInterface.showSuccess === 'function') this.notificationInterface.showSuccess('Route imported'); this.eventBus.emit(et.RENDER_REQUESTED, {}); } catch (__) {} };
+        const onRouteImportFailed = (d) => { try { if (this.notificationInterface && typeof this.notificationInterface.showRouteError === 'function') this.notificationInterface.showRouteError(d && d.error ? d.error : 'Route import failed'); } catch (__) {} };
+
+        const onRouteExportStarted = () => { try { if (this.notificationInterface && typeof this.notificationInterface.showInfo === 'function') this.notificationInterface.showInfo('Exporting route...'); } catch (__) {} };
+        const onRouteExportCompleted = () => { try { if (this.notificationInterface && typeof this.notificationInterface.showSuccess === 'function') this.notificationInterface.showSuccess('Route exported'); } catch (__) {} };
+        const onRouteExportFailed = (d) => { try { if (this.notificationInterface && typeof this.notificationInterface.showRouteError === 'function') this.notificationInterface.showRouteError(d && d.error ? d.error : 'Route export failed'); } catch (__) {} };
+
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_IMPORT_STARTED, onRouteImportStarted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_IMPORT_COMPLETED, onRouteImportCompleted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_IMPORT_FAILED, onRouteImportFailed));
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_EXPORT_STARTED, onRouteExportStarted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_EXPORT_COMPLETED, onRouteExportCompleted));
+        this._eventUnsubscribers.push(this.eventBus.on(et.ROUTE_EXPORT_FAILED, onRouteExportFailed));
+      } catch (e) {
+        this.errorHandler.logWarning(e, 'DataController._setupEventListeners');
       }
     }
 
