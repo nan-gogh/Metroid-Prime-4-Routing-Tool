@@ -70,17 +70,31 @@
         const key = (this.config?.STORAGE_KEYS?.TILESET_STATE) || 'mp4_tileset_state';
         const payload = { tileset: this.tileset, grayscale: this.grayscale };
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'tileset' });
-        
-        if (this.storage && typeof this.storage.set === 'function') {
-          this.storage.set(key, payload);
+        // Check consent FIRST — only save if consent granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          if (!this.storage.hasConsent()) {
+            return; // No consent — silently return
+          }
         }
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
-          entity: 'tileset',
-          tileset: this.tileset,
-          grayscale: this.grayscale
-        });
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'tileset' });
+
+        let saved = false;
+        if (this.storage) {
+          try {
+            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
+            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
+          } catch (e) {
+            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'TilesetState.saveToStorage.storageCall');
+            saved = false;
+          }
+        }
+
+        if (saved) {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'tileset', tileset: this.tileset, grayscale: this.grayscale });
+        } else {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'tileset', error: 'storage.save returned false or consent denied' });
+        }
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'TilesetState.saveToStorage');

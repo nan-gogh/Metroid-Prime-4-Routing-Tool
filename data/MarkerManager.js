@@ -116,8 +116,21 @@ class MarkerManager {
     // Load markers from storage
     loadFromStorage() {
         try {
+            // Respect consent: do not load or emit storage events when consent is not granted
+            if (this.storage && typeof this.storage.hasConsent === 'function') {
+                try {
+                    if (!this.storage.hasConsent()) {
+                        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.loadFromStorage: skipping load due to no consent', 'MarkerManager.loadFromStorage'); } catch (__) {}
+                        return false;
+                    }
+                } catch (e) {
+                    this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MarkerManager.loadFromStorage.consentCheck');
+                    return false;
+                }
+            }
+
             this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_STARTED, { entity: 'markers' });
-            const markers = this.storage.loadMarkers();
+            const markers = (typeof this.storage.loadMarkers === 'function') ? this.storage.loadMarkers() : (this.storage.get ? this.storage.get((this.config?.STORAGE_KEYS?.CUSTOM_MARKERS) || 'mp4_customMarkers', []) : []);
             if (Array.isArray(markers)) {
                 // Validate and filter markers
                 this.markers = markers.filter(marker => MarkerUtilsCore.validateMarker(marker));
@@ -135,20 +148,52 @@ class MarkerManager {
     // Save markers to storage (unified pattern)
     saveToStorage() {
         try {
+            // Debug: entry
+            try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage called', 'MarkerManager.saveToStorage', { markerCount: this.markers.length, hasStorage: !!this.storage }); } catch (__) {}
+
+            // Check consent FIRST, before emitting any events
+            if (this.storage && typeof this.storage.hasConsent === 'function') {
+                const consent = this.storage.hasConsent();
+                try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage: consent check', 'MarkerManager.saveToStorage', { hasConsent: consent }); } catch (__) {}
+                if (!consent) {
+                    try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage: aborting due to no consent', 'MarkerManager.saveToStorage', {}); } catch (__) {}
+                    return; // No consent — silently return
+                }
+            }
+
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'markers' });
-            
+
             // Get storage key from config
             const key = (this.config?.STORAGE_KEYS?.CUSTOM_MARKERS) || 'mp4_customMarkers';
-            
-            // Use StorageService exclusively
-            if (this.storage && typeof this.storage.set === 'function') {
-                this.storage.set(key, this.markers);
+
+            // Use StorageService adapter and respect its return value
+            let saved = false;
+            if (this.storage) {
+                try {
+                    if (typeof this.storage.set === 'function') {
+                        saved = !!this.storage.set(key, this.markers);
+                    } else if (typeof this.storage.saveMarkers === 'function') {
+                        saved = !!this.storage.saveMarkers(this.markers);
+                    }
+                } catch (e) {
+                    this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'MarkerManager.saveToStorage.storageCall', { key });
+                    saved = false;
+                }
             }
-            
-            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 
-                entity: 'markers',
-                count: this.markers.length
-            });
+
+            try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.saveToStorage result', 'MarkerManager.saveToStorage', { key, saved, markerCount: this.markers.length }); } catch (__) {}
+
+            if (saved) {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, {
+                    entity: 'markers',
+                    count: this.markers.length
+                });
+            } else {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, {
+                    entity: 'markers',
+                    error: 'storage.save returned false or consent denied'
+                });
+            }
         } catch (e) {
             this.errorHandler.logError(e, 'MarkerManager.saveToStorage');
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { 
@@ -190,6 +235,7 @@ class MarkerManager {
         const marker = { uid, x: Number(x), y: Number(y) };
         this.markers.push(marker);
 
+        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.addMarker: added', 'MarkerManager.addMarker', { uid: marker.uid, x: marker.x, y: marker.y }); } catch (__) {}
         this.saveToStorage();
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_ADDED : null, { marker, layerKey: this.config.layerPrefix });
 
@@ -212,6 +258,7 @@ class MarkerManager {
             }
         }
 
+        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.removeMarker: removed', 'MarkerManager.removeMarker', { uid }); } catch (__) {}
         this.saveToStorage();
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_REMOVED : null, { uid, layerKey: this.config.layerPrefix });
 
@@ -219,6 +266,7 @@ class MarkerManager {
     }
 
     // Update marker position (for drag operations)
+    // NOTE: Does NOT auto-save - caller must explicitly saveToStorage() when drag is finalized
     updateMarkerPosition(uid, x, y) {
         const index = this.findMarkerIndex(uid);
         if (index === -1) return false;
@@ -227,11 +275,9 @@ class MarkerManager {
         const oldPos = { x: this.markers[index].x, y: this.markers[index].y };
         this.markers[index].x = Number(x);
         this.markers[index].y = Number(y);
+        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.updateMarkerPosition', 'MarkerManager.updateMarkerPosition', { uid, oldPos, newPos: { x: this.markers[index].x, y: this.markers[index].y } }); } catch (__) {}
 
-        // Save to storage
-        this.saveToStorage();
-
-        // Notify that marker was moved
+        // Notify that marker was moved (for rendering)
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_EDITED : null, { 
             uid, 
             marker: this.markers[index], 
@@ -250,6 +296,7 @@ class MarkerManager {
     // Clear all markers
     clearMarkers() {
         this.markers = [];
+        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.clearMarkers called', 'MarkerManager.clearMarkers', {}); } catch (__) {}
         this.saveToStorage();
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_REMOVED : null, { all: true, layerKey: this.config.layerPrefix });
     }
@@ -279,6 +326,7 @@ class MarkerManager {
         const validMarkers = markers.filter(marker => MarkerUtilsCore.validateMarker(marker));
         
         this.markers = validMarkers;
+        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('MarkerManager.setMarkers: replaced markers', 'MarkerManager.setMarkers', { count: this.markers.length }); } catch (__) {}
         this.saveToStorage();
         this._notifyChanged(window.EventTypes ? window.EventTypes.MARKER_EDITED : null, { all: true, layerKey: this.config.layerPrefix });
     }

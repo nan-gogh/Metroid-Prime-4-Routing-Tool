@@ -52,16 +52,18 @@ class StorageService {
     get(key, defaultValue = null) {
         // Allow reading the consent flag even when consent is not yet granted
         const CONSENT_KEY = 'mp4_storage_consent';
-        if (!this.hasConsent() && key !== CONSENT_KEY) {
+        const consent = this.hasConsent();
+        if (!consent && key !== CONSENT_KEY) {
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.get: consent denied', 'StorageService.get', { key, hasConsent: consent });
             return defaultValue;
         }
 
-        // Emit load started
-        try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_STARTED, { key }); } catch (__) {}
+        // Debug: entry
+        try { this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.get called', 'StorageService.get', { key, hasConsent: consent }); } catch (__) {}
 
         // Check cache first
         if (this._cache.has(key)) {
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { key, source: 'cache' }); } catch (__) {}
+            try { this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.get: cache hit', 'StorageService.get', { key }); } catch (__) {}
             return this._cache.get(key);
         }
 
@@ -69,11 +71,10 @@ class StorageService {
             const value = localStorage.getItem(key);
             const parsed = value !== null ? JSON.parse(value) : defaultValue;
             this._cache.set(key, parsed);
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_COMPLETED, { key, source: 'localStorage' }); } catch (__) {}
+            try { this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.get: loaded from localStorage', 'StorageService.get', { key, source: 'localStorage' }); } catch (__) {}
             return parsed;
         } catch (e) {
-            this._errorHandler.logWarning(`StorageService.get: Failed to load ${key}`, 'StorageService.get', { key, error: e });
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_LOAD_FAILED, { key, error: e && e.message ? e.message : String(e) }); } catch (__) {}
+            this._errorHandler.logWarning && this._errorHandler.logWarning(`StorageService.get: Failed to load ${key}`, 'StorageService.get', { key, error: e });
             return defaultValue;
         }
     }
@@ -87,25 +88,22 @@ class StorageService {
     set(key, value) {
         // Allow writing the consent flag even when consent is currently false
         const CONSENT_KEY = 'mp4_storage_consent';
-        if (key !== CONSENT_KEY && !this.hasConsent()) {
+        const consent = this.hasConsent();
+        if (key !== CONSENT_KEY && !consent) {
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.set: consent denied', 'StorageService.set', { key, hasConsent: consent });
             return false;
         }
 
-        // Emit save started
-        try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_STARTED, { key }); } catch (__) {}
-
         try {
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.set called', 'StorageService.set', { key, hasConsent: consent });
             const serialized = JSON.stringify(value);
             localStorage.setItem(key, serialized);
             this._cache.set(key, value);
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { key }); } catch (__) {}
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.set: saved', 'StorageService.set', { key });
             return true;
         } catch (e) {
-            this._errorHandler.logWarning(`StorageService.set: Failed to save ${key}`, 'StorageService.set', { key, value, error: e });
-            try {
-                this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { key, error: e && e.message ? e.message : String(e) });
-            } catch (__) {}
-            // Quota handling
+            this._errorHandler && this._errorHandler.logWarning && this._errorHandler.logWarning(`StorageService.set: Failed to save ${key}`, 'StorageService.set', { key, value, error: e });
+            // Quota handling - this IS a storage-layer concern, so keep the event
             try {
                 if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
                     this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_QUOTA_EXCEEDED, { key, error: e && e.message ? e.message : String(e) });
@@ -121,13 +119,13 @@ class StorageService {
      */
     remove(key) {
         try {
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.remove called', 'StorageService.remove', { key });
             this._cache.delete(key);
             // Allow removing consent key even if consent is false
             localStorage.removeItem(key);
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { key, removed: true }); } catch (__) {}
+            this._errorHandler && this._errorHandler.logDebug && this._errorHandler.logDebug('StorageService.remove: removed', 'StorageService.remove', { key });
         } catch (e) {
-            this._errorHandler.logWarning(`StorageService.remove: Failed to remove ${key}`, 'StorageService.remove', { key, error: e });
-            try { this._eventBus && this._eventBus.emit && this._eventBus.emit(window.EventTypes.STORAGE_SAVE_FAILED, { key, error: e && e.message ? e.message : String(e) }); } catch (__) {}
+            this._errorHandler && this._errorHandler.logWarning && this._errorHandler.logWarning(`StorageService.remove: Failed to remove ${key}`, 'StorageService.remove', { key, error: e });
         }
     }
 

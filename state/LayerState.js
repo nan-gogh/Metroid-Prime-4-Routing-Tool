@@ -307,17 +307,31 @@
           showGridHeatmap: this._showGridHeatmap 
         };
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'layerState' });
-        
-        if (this.storage && typeof this.storage.set === 'function') {
-          this.storage.set(key, payload);
+        // Check consent FIRST — only save if consent granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          if (!this.storage.hasConsent()) {
+            return; // No consent — silently return
+          }
         }
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
-          entity: 'layerState',
-          layerCount: Object.keys(this.layerVisibility).length,
-          gridHeatmapVisible: this._showGridHeatmap
-        });
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'layerState' });
+
+        let saved = false;
+        if (this.storage) {
+          try {
+            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
+            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
+          } catch (e) {
+            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'LayerState.saveToStorage.storageCall');
+            saved = false;
+          }
+        }
+
+        if (saved) {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'layerState', layerCount: Object.keys(this.layerVisibility).length, gridHeatmapVisible: this._showGridHeatmap });
+        } else {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'layerState', error: 'storage.save returned false or consent denied' });
+        }
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'LayerState.saveToStorage');

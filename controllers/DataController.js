@@ -65,13 +65,60 @@
         const et = window.EventTypes;
         // Storage lifecycle notifications
         const onSaveStarted = (data) => {
-          try { if (this.notificationInterface && typeof this.notificationInterface.showInfo === 'function') this.notificationInterface.showInfo(`Saving ${data && data.entity ? data.entity : data && data.key ? data.key : ''}`); } catch (__) {}
+          try {
+            this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('DataController.onSaveStarted', 'DataController._setupEventListeners', { data });
+            // Suppress noisy autosave notifications for map view
+            if (data && data.entity === 'mapView') {
+              this.errorHandler.logDebug && this.errorHandler.logDebug('Autosave started for mapView (suppressed UI)', 'DataController.onSaveStarted');
+              return;
+            }
+            // Suppress notifications if storage consent not granted
+            try {
+              const storageInstance = this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null;
+              if (storageInstance && typeof storageInstance.hasConsent === 'function' && !storageInstance.hasConsent()) {
+                this.errorHandler.logDebug && this.errorHandler.logDebug('Storage save started but consent not granted - suppressing UI', 'DataController.onSaveStarted');
+                return;
+              }
+            } catch (__ ) {}
+            if (this.notificationInterface && typeof this.notificationInterface.showInfo === 'function') this.notificationInterface.showInfo(`Saving ${data && data.entity ? data.entity : data && data.key ? data.key : ''}`);
+          } catch (__) {}
         };
         const onSaveCompleted = (data) => {
-          try { if (this.notificationInterface && typeof this.notificationInterface.showSuccess === 'function') this.notificationInterface.showSuccess(`${data && data.entity ? data.entity : data && data.key ? data.key : 'Save'} saved`); } catch (__) {}
+          try {
+            this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('DataController.onSaveCompleted', 'DataController._setupEventListeners', { data });
+            // Suppress autosave success to avoid frequent popups for mapView
+            if (data && data.entity === 'mapView') {
+              this.errorHandler.logDebug && this.errorHandler.logDebug('Autosave completed for mapView (suppressed UI)', 'DataController.onSaveCompleted');
+              return;
+            }
+            // Suppress notifications if storage consent not granted
+            try {
+              const storageInstance = this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null;
+              if (storageInstance && typeof storageInstance.hasConsent === 'function' && !storageInstance.hasConsent()) {
+                this.errorHandler.logDebug && this.errorHandler.logDebug('Storage save completed but consent not granted - suppressing UI', 'DataController.onSaveCompleted');
+                return;
+              }
+            } catch (__ ) {}
+            if (this.notificationInterface && typeof this.notificationInterface.showSuccess === 'function') this.notificationInterface.showSuccess(`${data && data.entity ? data.entity : data && data.key ? data.key : 'Save'} saved`);
+          } catch (__) {}
         };
         const onSaveFailed = (data) => {
           try {
+            this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('DataController.onSaveFailed', 'DataController._setupEventListeners', { data });
+            // Don't surface errors to the user for autosave failures of map view;
+            // downgrade to debug to avoid persistent console warnings during pan/zoom.
+            if (data && data.entity === 'mapView') {
+              this.errorHandler.logDebug && this.errorHandler.logDebug(data && data.error ? data.error : 'mapView autosave failed', 'DataController.onSaveFailed');
+              return;
+            }
+            // If storage consent is not granted, suppress user-facing errors
+            try {
+              const storageInstance = this.storageProvider && typeof this.storageProvider.getInstance === 'function' ? this.storageProvider.getInstance() : null;
+              if (storageInstance && typeof storageInstance.hasConsent === 'function' && !storageInstance.hasConsent()) {
+                this.errorHandler.logDebug && this.errorHandler.logDebug('Storage save failed but consent not granted - suppressing UI', 'DataController.onSaveFailed', { entity: data && data.entity });
+                return;
+              }
+            } catch (__) {}
             if (this.notificationInterface && typeof this.notificationInterface.showRouteError === 'function') {
               this.notificationInterface.showRouteError(data && data.error ? data.error : 'Save failed');
             } else if (this.notificationInterface && typeof this.notificationInterface.showError === 'function') {

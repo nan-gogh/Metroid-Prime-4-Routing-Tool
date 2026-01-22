@@ -14,9 +14,7 @@ function initializeErrorHandlerInjection() {
     if (typeof TaskScheduler !== 'undefined' && typeof TaskScheduler.setErrorHandler === 'function') {
         TaskScheduler.setErrorHandler(appErrorHandler);
     }
-    if (typeof MarkerUtils !== 'undefined' && typeof MarkerUtils.setErrorHandler === 'function') {
-        MarkerUtils.setErrorHandler(appErrorHandler);
-    }
+    // MarkerUtils shim removed — core marker helpers and managers are used directly now.
     if (typeof RouteAnimation !== 'undefined' && typeof RouteAnimation.setErrorHandler === 'function') {
         RouteAnimation.setErrorHandler(appErrorHandler);
     }
@@ -113,8 +111,17 @@ class InteractiveMap {
         try {
             const svc = this._getStorageInstance();
             if (svc && typeof svc.hasConsent === 'function') return svc.hasConsent();
-            if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
-                return localStorage.getItem('mp4_storage_consent') === '1';
+            // Fallback: check an explicit in-memory override or cookie only.
+            if (typeof window !== 'undefined' && typeof window.__mp4_consent_override !== 'undefined') {
+                return !!window.__mp4_consent_override;
+            }
+            if (typeof document !== 'undefined' && typeof document.cookie === 'string') {
+                const parts = document.cookie.split(';').map(p => p.trim());
+                for (const p of parts) {
+                    if (p.indexOf('mp4_storage_consent=') === 0) {
+                        return p.split('=')[1] === '1';
+                    }
+                }
             }
         } catch (e) {
             try { this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'InteractiveMap._consentChecker'); } catch (__) {}
@@ -443,15 +450,15 @@ class InteractiveMap {
             }
         }
         
-        // Load marker scaling configuration (consent-gated)
+        // Load marker scaling configuration via provider-backed storage (consent gating
+        // is handled by the storage provider — callers should not special-case consent).
         try {
             const _stor = getStorage();
             let savedScaling = null;
-            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
+            if (_stor) {
                 if (typeof _stor.get === 'function') savedScaling = _stor.get(MP4Config.STORAGE_KEYS.MARKER_SCALING);
                 else if (typeof _stor.loadSetting === 'function') savedScaling = _stor.loadSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING);
-            } else if (_stor && typeof _stor.loadMarkerScaling === 'function') {
-                savedScaling = _stor.loadMarkerScaling();
+                else if (typeof _stor.loadMarkerScaling === 'function') savedScaling = _stor.loadMarkerScaling();
             }
             if (savedScaling) {
                 MP4Config.MARKER_SCALING.userScaleMultiplier = savedScaling.userScaleMultiplier || MP4Config.MARKER_SCALING.userScaleMultiplier;
@@ -1871,23 +1878,18 @@ class InteractiveMap {
         MP4Config.MARKER_SCALING.baseSize = Math.max(2, Math.min(12, newSize));
         try {
             const _stor = getStorage();
-            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                }
-            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
-                _stor.saveMarkerScaling({
+            if (_stor) {
+                const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
+                };
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveMarkerScaling === 'function') {
+                    _stor.saveMarkerScaling(payload);
+                }
             }
         } catch (e) {
             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerBaseSize', { message: 'Failed to save marker scaling config' });
@@ -1901,23 +1903,18 @@ class InteractiveMap {
         MP4Config.MARKER_SCALING.userScaleMultiplier = Math.max(0.5, Math.min(1.5, newMultiplier));
         try {
             const _stor = getStorage();
-            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                }
-            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
-                _stor.saveMarkerScaling({
+            if (_stor) {
+                const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
+                };
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveMarkerScaling === 'function') {
+                    _stor.saveMarkerScaling(payload);
+                }
             }
         } catch (e) {
             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerUserScaleMultiplier', { message: 'Failed to save marker scaling config' });
@@ -1931,23 +1928,18 @@ class InteractiveMap {
         MP4Config.MARKER_SCALING.highlightMultiplier = Math.max(1.5, Math.min(2.5, newMultiplier));
         try {
             const _stor = getStorage();
-            if (_stor && typeof _stor.hasConsent === 'function' && _stor.hasConsent()) {
-                if (typeof _stor.set === 'function') {
-                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                } else if (typeof _stor.saveSetting === 'function') {
-                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, {
-                        userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
-                        highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                    });
-                }
-            } else if (_stor && typeof _stor.saveMarkerScaling === 'function') {
-                _stor.saveMarkerScaling({
+            if (_stor) {
+                const payload = {
                     userScaleMultiplier: MP4Config.MARKER_SCALING.userScaleMultiplier,
                     highlightMultiplier: MP4Config.MARKER_SCALING.highlightMultiplier
-                });
+                };
+                if (typeof _stor.set === 'function') {
+                    _stor.set(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveSetting === 'function') {
+                    _stor.saveSetting(MP4Config.STORAGE_KEYS.MARKER_SCALING, payload);
+                } else if (typeof _stor.saveMarkerScaling === 'function') {
+                    _stor.saveMarkerScaling(payload);
+                }
             }
         } catch (e) {
             moduleErrorHandler && moduleErrorHandler.logWarning(e, 'InteractiveMap.updateMarkerHighlightMultiplier', { message: 'Failed to save marker scaling config' });
@@ -3273,7 +3265,7 @@ async function init() {
     try {
         try {
             const _stor = getStorage();
-            if (_stor && typeof _stor.hasStorageConsent === 'function' && _stor.hasStorageConsent()) {
+            if (_stor && map && typeof map.loadRouteFromStorage === 'function') {
                 map.loadRouteFromStorage();
             }
         } catch (inner) {
@@ -3285,7 +3277,7 @@ async function init() {
     try {
         try {
             const _stor = getStorage();
-            if (_stor && typeof _stor.hasStorageConsent === 'function' && _stor.hasStorageConsent()) {
+            if (_stor) {
                 try { map.updateLoopUI(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.updateLoopUI'); }
             }
         } catch (inner) {
@@ -3296,15 +3288,13 @@ async function init() {
     try {
         try {
             const _stor = getStorage();
-            const consent = (_stor && typeof _stor.hasStorageConsent === 'function') ? _stor.hasStorageConsent() : (localStorage.getItem('mp4_storage_consent') === '1');
-            if (consent && map && typeof map.loadViewFromStorage === 'function') {
+            if (_stor && map && typeof map.loadViewFromStorage === 'function') {
                 try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
             }
         } catch (inner) {
             // Fallback: check if storage service has consent
             const svc = map && typeof map._getStorageInstance === 'function' ? map._getStorageInstance() : null;
-            const consent = svc && typeof svc.hasConsent === 'function' ? svc.hasConsent() : false;
-            if (consent && map && typeof map.loadViewFromStorage === 'function') {
+            if (svc && map && typeof map.loadViewFromStorage === 'function') {
                 try { map.loadViewFromStorage(); } catch (e) { moduleErrorHandler.logError(e, 'InteractiveMap.init.loadViewFromStorage'); }
             }
         }

@@ -48,8 +48,8 @@ const MarkerUtils = {
     getManager() {
         if (!this._manager) {
             // Try to create manager if dependencies are available
-                // Prefer injected storage instance; fall back to global storage provider or window.storageService
-                    const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : (typeof window !== 'undefined' && window.storageService ? window.storageService : null));
+                    // Prefer injected storage instance; fall back to global storage provider (no fallback to window.storageService)
+                        const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : null);
             if (typeof MarkerManager !== 'undefined' && storageService !== null && typeof NotificationInterface !== 'undefined') {
                 try {
                     const h = this._errorHandler;
@@ -122,7 +122,7 @@ const MarkerUtils = {
         // Prefer event-driven clear so MarkerManager remains authoritative.
         // Prefer emitting via manager's injected eventBus if available
         try {
-            const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : (typeof window !== 'undefined' && window.storageService ? window.storageService : {}));
+            const storageService = this._storageInstance || (typeof window !== 'undefined' && window.storageProvider && typeof window.storageProvider.getInstance === 'function' ? window.storageProvider.getInstance() : {});
             const mgr = this._manager || (this._manager = (typeof MarkerManager !== 'undefined' ? new MarkerManager({ maxMarkers: 50, layerPrefix: 'cm' }, storageService || {}, NotificationInterface, null, { errorHandler: this._errorHandler }) : null));
             if (mgr && mgr.eventBus && EventTypes && EventTypes.MARKER_CLEAR_REQUESTED) {
                 try {

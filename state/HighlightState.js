@@ -145,16 +145,31 @@
           highlightScaleMultiplier: this.highlightScaleMultiplier 
         };
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'highlight' });
-        
-        if (this.storage && typeof this.storage.set === 'function') {
-          this.storage.set(key, payload);
+        // Check consent FIRST — only save if consent granted
+        if (this.storage && typeof this.storage.hasConsent === 'function') {
+          if (!this.storage.hasConsent()) {
+            return; // No consent — silently return
+          }
         }
         
-        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { 
-          entity: 'highlight',
-          highlightedCount: this.highlightedLayers.size
-        });
+        this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_STARTED, { entity: 'highlight' });
+
+        let saved = false;
+        if (this.storage) {
+          try {
+            if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, payload);
+            else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, payload);
+          } catch (e) {
+            this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HighlightState.saveToStorage.storageCall');
+            saved = false;
+          }
+        }
+
+        if (saved) {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_COMPLETED, { entity: 'highlight', highlightedCount: this.highlightedLayers.size });
+        } else {
+          this.eventBus?.emit?.(window.EventTypes?.STORAGE_SAVE_FAILED, { entity: 'highlight', error: 'storage.save returned false or consent denied' });
+        }
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'HighlightState.saveToStorage');

@@ -133,6 +133,19 @@ class RouteManager {
     // Load route from storage (unified pattern)
     loadFromStorage() {
         try {
+            // Respect consent: do not load or emit storage events when consent is not granted
+            if (this.storage && typeof this.storage.hasConsent === 'function') {
+                try {
+                    if (!this.storage.hasConsent()) {
+                        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.loadFromStorage: skipping load due to no consent', 'RouteManager.loadFromStorage'); } catch (__) {}
+                        return false;
+                    }
+                } catch (e) {
+                    this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteManager.loadFromStorage.consentCheck');
+                    return false;
+                }
+            }
+
             this.eventBus?.emit(window.EventTypes.STORAGE_LOAD_STARTED, { entity: 'route' });
             
             // Get storage keys from config
@@ -182,6 +195,19 @@ class RouteManager {
     // Save route to storage (unified pattern)
     saveToStorage() {
         try {
+            // Debug: entry
+            try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.saveToStorage called', 'RouteManager.saveToStorage', { pointCount: Array.isArray(this.currentRoute) ? this.currentRoute.length : 0, hasStorage: !!this.storage }); } catch (__) {}
+
+            // Check consent FIRST, before emitting any events
+            if (this.storage && typeof this.storage.hasConsent === 'function') {
+                const consent = this.storage.hasConsent();
+                try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.saveToStorage: consent check', 'RouteManager.saveToStorage', { hasConsent: consent }); } catch (__) {}
+                if (!consent) {
+                    try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.saveToStorage: aborting due to no consent', 'RouteManager.saveToStorage', {}); } catch (__) {}
+                    return; // No consent — silently return
+                }
+            }
+
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'route' });
             
             // Get storage keys from config
@@ -194,17 +220,33 @@ class RouteManager {
                 lengthNormalized: this.currentRouteLengthNormalized
             };
             
-            // Use StorageService exclusively
-            if (this.storage && typeof this.storage.set === 'function') {
-                this.storage.set(routeKey, routeData);
-                this.storage.set(loopingKey, this.routeLooping);
+            // Use StorageService exclusively and respect its return value
+            let saved = false;
+            if (this.storage) {
+                try {
+                    if (typeof this.storage.set === 'function') {
+                        const ok1 = !!this.storage.set(routeKey, routeData);
+                        const ok2 = !!this.storage.set(loopingKey, this.routeLooping);
+                        saved = ok1 && ok2;
+                    } else if (typeof this.storage.saveRoute === 'function') {
+                        saved = !!this.storage.saveRoute(routeData) && (typeof this.storage.saveRouteLoopingFlag !== 'function' || !!this.storage.saveRouteLoopingFlag(this.routeLooping));
+                    }
+                } catch (e) {
+                    this.errorHandler.logWarning(e, 'RouteManager.saveToStorage.storageCall');
+                    saved = false;
+                }
             }
-            
-            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { 
-                entity: 'route',
-                routeLength: this.currentRoute.length,
-                looping: this.routeLooping
-            });
+
+            try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.saveToStorage result', 'RouteManager.saveToStorage', { saved, routeLength: this.currentRoute.length, looping: this.routeLooping }); } catch (__) {}
+            if (saved) {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, {
+                    entity: 'route',
+                    routeLength: this.currentRoute.length,
+                    looping: this.routeLooping
+                });
+            } else {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { entity: 'route', error: 'storage.save returned false or consent denied' });
+            }
         } catch (e) {
             this.errorHandler.logError(e, 'RouteManager.saveToStorage');
             this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { 
@@ -286,7 +328,47 @@ class RouteManager {
     // Set route looping
     setRouteLooping(looping) {
         this.routeLooping = Boolean(looping);
-        this.storage.saveRouteLoopingFlag(this.routeLooping);
+        try {
+            const key = (this.config?.STORAGE_KEYS?.ROUTE_LOOPING_FLAG) || 'mp4_route_looping_flag';
+
+            // Consent check
+            if (this.storage && typeof this.storage.hasConsent === 'function') {
+                try {
+                    if (!this.storage.hasConsent()) {
+                        try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('RouteManager.setRouteLooping: skipping save due to no consent', 'RouteManager.setRouteLooping'); } catch (__) {}
+                        this._notifyRouteChanged();
+                        return;
+                    }
+                } catch (e) {
+                    this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteManager.setRouteLooping.consentCheck');
+                    this._notifyRouteChanged();
+                    return;
+                }
+            }
+
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_STARTED, { entity: 'route' });
+
+            let saved = false;
+            if (this.storage) {
+                try {
+                    if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, this.routeLooping);
+                    else if (typeof this.storage.saveRouteLoopingFlag === 'function') saved = !!this.storage.saveRouteLoopingFlag(this.routeLooping);
+                } catch (e) {
+                    this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'RouteManager.setRouteLooping.storageCall');
+                    saved = false;
+                }
+            }
+
+            if (saved) {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'route', looping: this.routeLooping });
+            } else {
+                this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { entity: 'route', error: 'storage.save returned false or consent denied' });
+            }
+        } catch (e) {
+            this.errorHandler && this.errorHandler.logError && this.errorHandler.logError(e, 'RouteManager.setRouteLooping');
+            this.eventBus?.emit(window.EventTypes.STORAGE_SAVE_FAILED, { entity: 'route', error: e.message });
+        }
+
         this._notifyRouteChanged();
     }
 

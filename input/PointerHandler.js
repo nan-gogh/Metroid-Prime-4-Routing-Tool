@@ -29,6 +29,10 @@
       this._canvas = opts.canvas || null;
       this.checkMarkerHover = opts.checkMarkerHover || null;
       this.saveViewToStorage = opts.saveViewToStorage || (() => {});
+      this._lastSavedView = null;
+      this._lastSaveTs = 0;
+      this._saveDelay = (opts.saveDelayMs && Number.isFinite(opts.saveDelayMs)) ? opts.saveDelayMs : 1000; // ms
+      this._saveTimer = null;
       this.showTooltip = opts.showTooltip || (() => {});
       this.hideTooltip = opts.hideTooltip || (() => {});
       this.updateResolutionRef = opts.updateResolution || (this.imageState && this.imageState.updateResolution ? this.imageState.updateResolution.bind(this.imageState) : () => {});
@@ -115,7 +119,13 @@
         this._updateResolution = this.updateResolutionRef || (()=>{});
         this._checkMarkerHover = this.checkMarkerHover || (()=>null);
         this._findMarkerAt = this._checkMarkerHover;
-        this._saveViewToStorage = this.saveViewToStorage || (()=>{});
+        // Keep raw save function and expose a throttled wrapper to avoid frequent saves
+        this._rawSaveViewToStorage = this.saveViewToStorage || (()=>{});
+        this._saveViewToStorage = (() => {
+          try {
+            return this._saveViewIfNeeded.bind(this);
+          } catch (e) { return this._rawSaveViewToStorage; }
+        })();
 
         // Marker utilities
         if (this.markerRenderer) {
@@ -469,6 +479,34 @@
       });
     }
 
+    // Throttled save: only persist when view changed and at most once per _saveDelay ms
+    _saveViewIfNeeded() {
+      try {
+        const h = this.errorHandler;
+        const view = { panX: this.panX, panY: this.panY, zoom: this.zoom };
+        const sameAsLast = this._lastSavedView && this._lastSavedView.panX === view.panX && this._lastSavedView.panY === view.panY && this._lastSavedView.zoom === view.zoom;
+        if (sameAsLast) return;
+        const now = Date.now();
+        const since = now - (this._lastSaveTs || 0);
+        if (since < this._saveDelay) {
+          // schedule one save after remaining time
+          try { if (this._saveTimer) clearTimeout(this._saveTimer); } catch (e) {}
+          this._saveTimer = setTimeout(() => { try { this._doSaveView(); } catch (e) { h.logError(e, 'PointerHandler._saveViewIfNeeded.timer'); } }, this._saveDelay - since);
+        } else {
+          this._doSaveView();
+        }
+      } catch (e) { try { this.errorHandler.logError(e, 'PointerHandler._saveViewIfNeeded'); } catch (__) {} }
+    }
+
+    _doSaveView() {
+      try {
+        this._lastSaveTs = Date.now();
+        this._lastSavedView = { panX: this.panX, panY: this.panY, zoom: this.zoom };
+        // Call the raw save implementation (map-provided)
+        try { this._rawSaveViewToStorage(); } catch (e) { this.errorHandler.logError(e, 'PointerHandler._doSaveView.rawSave'); }
+      } catch (e) { try { this.errorHandler.logError(e, 'PointerHandler._doSaveView'); } catch (__) {} }
+    }
+
     // ===== PERFORMANCE-OPTIMIZED EXTRACTION METHODS =====
 
     _handleMarkerDragPromotion(ev, localX, localY) {
@@ -532,6 +570,7 @@
       // Save marker position if one was being dragged
       if (hadDraggingMarker) {
         try {
+          try { this.errorHandler && this.errorHandler.logDebug && this.errorHandler.logDebug('PointerHandler._finalizeDrags: hadDraggingMarker, saving', 'PointerHandler._finalizeDrags', { markerUid: this._draggingMarker && this._draggingMarker.uid }); } catch (__) {}
           if (this.markerManager && typeof this.markerManager.saveToStorage === 'function') {
             this.markerManager.saveToStorage();
           }

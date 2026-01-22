@@ -89,8 +89,18 @@
       try {
         if (!storageService) return this._heatmapVisible;
 
+        // Check consent FIRST — only load if consent granted
+        if (typeof storageService.hasConsent === 'function') {
+          if (!storageService.hasConsent()) {
+            return this._heatmapVisible; // No consent — return current value
+          }
+        }
+
         this.eventBus?.emit(EventTypes.STORAGE_LOAD_STARTED, { entity: 'heatmapDisplay' });
-        const stored = storageService.loadSetting(this.config.STORAGE_KEYS?.GRID_HEATMAP);
+        
+        // Use get() instead of loadSetting() for consistent interface
+        const key = this.config?.STORAGE_KEYS?.GRID_HEATMAP || 'mp4_grid_heatmap';
+        const stored = storageService.get ? storageService.get(key) : (storageService.loadSetting ? storageService.loadSetting(key) : null);
         const loaded = stored === '1' || stored === 1 || stored === true;
         this._heatmapVisible = loaded;
         this.eventBus?.emit(EventTypes.STORAGE_LOAD_COMPLETED, { entity: 'heatmapDisplay' });
@@ -109,19 +119,32 @@
       try {
         if (!this.storage) return;
 
-        const key = (this.config?.STORAGE_KEYS?.GRID_HEATMAP) || 'mp4_grid_heatmap';
-        const value = this._heatmapVisible ? '1' : '0';
-        
-        this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'heatmapDisplay' });
-        
-        if (typeof this.storage.set === 'function') {
-          this.storage.set(key, value);
+        // Check consent FIRST, before emitting any events
+        if (typeof this.storage.hasConsent === 'function') {
+          if (!this.storage.hasConsent()) {
+            return; // No consent — silently return
+          }
         }
-        
-        this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { 
-          entity: 'heatmapDisplay',
-          visible: this._heatmapVisible
-        });
+
+        const key = this.config?.STORAGE_KEYS?.GRID_HEATMAP || 'mp4_grid_heatmap';
+        const value = this._heatmapVisible ? '1' : '0';
+
+        this.eventBus?.emit(EventTypes.STORAGE_SAVE_STARTED, { entity: 'heatmapDisplay' });
+
+        let saved = false;
+        try {
+          if (typeof this.storage.set === 'function') saved = !!this.storage.set(key, value);
+          else if (typeof this.storage.saveSetting === 'function') saved = !!this.storage.saveSetting(key, value);
+        } catch (e) {
+          this.errorHandler && this.errorHandler.logWarning && this.errorHandler.logWarning(e, 'HeatmapDisplayState.saveToStorage.storageCall');
+          saved = false;
+        }
+
+        if (saved) {
+          this.eventBus?.emit(EventTypes.STORAGE_SAVE_COMPLETED, { entity: 'heatmapDisplay', visible: this._heatmapVisible });
+        } else {
+          this.eventBus?.emit(EventTypes.STORAGE_SAVE_FAILED, { entity: 'heatmapDisplay', error: 'storage.save returned false or consent denied' });
+        }
       } catch (e) {
         try { 
           this.errorHandler?.logError?.(e, 'HeatmapDisplayState.saveToStorage');
